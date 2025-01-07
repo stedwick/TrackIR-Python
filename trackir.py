@@ -6,8 +6,8 @@ import struct
 
 class TrackIR:
     # TrackIR vendor and product IDs
-    VENDOR_ID = 0x1784  # NaturalPoint
-    PRODUCT_ID = 0x0030  # TrackIR 5
+    VENDOR_ID = 0x131d  # NaturalPoint
+    PRODUCT_ID = 0x0159  # TrackIR
     
     def __init__(self):
         self.device = None
