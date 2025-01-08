@@ -91,7 +91,7 @@ class TrackIR:
         
     def read_frame(self) -> Optional[dict]:
         """Read the most recent frame of tracking data"""
-        # Flush any old data from the buffer
+        # Flush any old data from the buffer more aggressively
         while True:
             try:
                 self.ep_in.read(64, timeout=1)
@@ -102,12 +102,21 @@ class TrackIR:
                     print(f"Error flushing buffer: {e}")
                     break
         
-        # Now read the latest frame
-        data = self.read_data()
-        if data is None:
-            return None
+        # Wait for the start of a new frame
+        while True:
+            data = self.read_data()
+            if data is None:
+                return None
             
-        return self._parse_frame(data)
+            # Check if this is the start of a frame (frame type 0x1C)
+            if len(data) >= 2 and data[1] == 0x1C:
+                frame_length = data[0]
+                # Verify we have a complete frame
+                if len(data) >= frame_length:
+                    return self._parse_frame(data)
+            
+            # If we didn't get a valid frame, continue reading
+            time.sleep(0.001)  # Small delay to prevent busy-waiting
     
     def _parse_frame(self, data: bytes) -> dict:
         """Parse a frame of data from the device based on LinuxTrack's implementation"""
@@ -387,19 +396,46 @@ def main():
             frame = trackir.read_frame()
             if frame and frame['type'] == 'data_frame' and len(frame['data']) > 0:
                 data_bytes = frame['data']
+                print(f"\nFrame data length: {len(data_bytes)}")
+                print("Points detected:")
+                
+                # Create debug image for raw data
+                debug_img = np.zeros((256, 256), dtype=np.uint8)  # Raw coordinate space
+                
+                points = []
+                for i in range(0, len(data_bytes), 4):
+                    if i + 4 <= len(data_bytes):
+                        row = data_bytes[i]
+                        x = data_bytes[i + 1]
+                        y = data_bytes[i + 2]
+                        delimiter = data_bytes[i + 3]
+                        points.append((x, y))
+                        print(f"Row: {row:3d}, X: {x:3d}, Y: {y:3d}, Delimiter: {delimiter:02x}")
+                        
+                        # Draw point on debug image (raw coordinates)
+                        cv2.circle(debug_img, (x, y), 2, 255, -1)
+                
+                print(f"Total points in frame: {len(points)}")
+                
+                # Show raw data visualization
+                cv2.imshow('Raw Data', debug_img)
+                
                 for i in range(0, len(data_bytes), 4):
                     if i + 4 <= len(data_bytes):
                         row = data_bytes[i]
                         x = data_bytes[i + 1]
                         y = data_bytes[i + 2]
                         
-                        # Scale coordinates to image size
-                        scaled_y = int((x / 255.0) * (sensor_width - 1))
-                        scaled_x = sensor_height - 1 - int((y / 255.0) * (sensor_height - 1))
+                        # Scale coordinates to image size - note the flipped axes
+                        scaled_x = int((y / 255.0) * (sensor_height - 1))  # Y becomes X
+                        scaled_y = int((x / 255.0) * (sensor_width - 1))   # X becomes Y
                         
                         if 0 <= scaled_x < sensor_height and 0 <= scaled_y < sensor_width:
                             # Draw bright point with gaussian blur for better visibility
                             cv2.circle(img, (scaled_y, scaled_x), 2, 255, -1)
+            
+            # Rotate image to match TrackIR's orientation
+            img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
             
             # Apply gaussian blur to make points more visible
             img = cv2.GaussianBlur(img, (5, 5), 0)
