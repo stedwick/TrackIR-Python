@@ -7,7 +7,7 @@ import struct
 class TrackIR:
     # TrackIR vendor and product IDs
     VENDOR_ID = 0x131d  # NaturalPoint
-    PRODUCT_ID = 0x0159  # TrackIR
+    PRODUCT_ID = 0x0155  # TrackIR
     
     def __init__(self):
         self.device = None
@@ -51,6 +51,13 @@ class TrackIR:
         if self.ep_out is None or self.ep_in is None:
             raise ValueError('Could not find endpoints')
 
+        # After setting up endpoints, detach the kernel driver if it's active
+        if self.device.is_kernel_driver_active(0):
+            self.device.detach_kernel_driver(0)
+
+        # Print device information after initialization
+        self.print_device_info()
+
     def send_command(self, data: List[int], timeout: int = 1000) -> None:
         """Send a command to the device and log it"""
         try:
@@ -63,9 +70,12 @@ class TrackIR:
         """Read data from the device and log it"""
         try:
             data = self.ep_in.read(length, timeout=timeout)
-            print(f"Received: {' '.join([hex(x) for x in data])}")
+            if len(data) > 0:  # Only print if we actually got data
+                print(f"Received: {' '.join([hex(x) for x in data])}")
             return data
         except usb.core.USBError as e:
+            if e.errno == 110:  # Operation timed out
+                return None
             print(f"Error reading data: {e}")
             return None
 
@@ -86,12 +96,164 @@ class TrackIR:
     
     def _parse_frame(self, data: bytes) -> dict:
         """Parse a frame of data from the device"""
-        # This is a placeholder - we'll need to implement the actual parsing logic
-        # based on the protocol analysis
-        return {
-            'raw_data': data,
-            'timestamp': time.time()
-        }
+        if len(data) < 6:
+            return None
+            
+        frame_length = data[0]
+        frame_type = data[1]
+        
+        # Regular data frame format appears to be:
+        # Byte 0: Frame length (0x06)
+        # Byte 1: Frame type (0x1C)
+        # Bytes 2-5: Data payload
+        
+        if frame_type == 0x1C:
+            return {
+                'type': 'data_frame',
+                'length': frame_length,
+                'data': [data[i] for i in range(2, 6)],
+                'raw_data': data,
+                'timestamp': time.time()
+            }
+        elif frame_type == 0x10:
+            return {
+                'type': 'info_frame',
+                'length': frame_length,
+                'data': [data[i] for i in range(2, frame_length)],
+                'raw_data': data,
+                'timestamp': time.time()
+            }
+        elif frame_type == 0x40:
+            return {
+                'type': 'config_frame',
+                'length': frame_length,
+                'data': [data[i] for i in range(2, frame_length)],
+                'raw_data': data,
+                'timestamp': time.time()
+            }
+        else:
+            return {
+                'type': f'unknown_frame_0x{frame_type:02x}',
+                'length': frame_length,
+                'data': [data[i] for i in range(2, frame_length)],
+                'raw_data': data,
+                'timestamp': time.time()
+            }
+
+    def send_control(self, request_type, request, value, index, data=None):
+        """Send a control transfer to the device"""
+        try:
+            result = self.device.ctrl_transfer(
+                request_type,
+                request,
+                value,
+                index,
+                data if data else [],
+                timeout=1000
+            )
+            print(f"Control transfer - Type: {hex(request_type)}, Request: {hex(request)}, "
+                  f"Value: {hex(value)}, Index: {hex(index)}, Result: {result}")
+            return result
+        except usb.core.USBError as e:
+            print(f"Control transfer error: {e}")
+            return None
+
+    def init_device(self):
+        """Complete device initialization sequence based on LinuxTrack's implementation"""
+        print("Starting device initialization...")
+        
+        # Initial setup commands from tir4_read_version_string.py
+        init_sequence = [
+            [0x12],           # Request version
+            [0x14, 0x01],     # Unknown command
+            [0x12],           # Request version again
+            [0x13],           # Unknown command
+            [0x17]            # Unknown command
+        ]
+        
+        # Send initial setup commands
+        for i, cmd in enumerate(init_sequence):
+            print(f"\nSending initialization command {i+1}/{len(init_sequence)}...")
+            try:
+                bytes_written = self.ep_out.write(cmd)
+                print(f"Sent: {' '.join([hex(x) for x in cmd])} ({bytes_written} bytes)")
+                time.sleep(0.1)
+                
+                # Try to read any response
+                response = self.read_data(timeout=100)
+                if response:
+                    print(f"Response received: {' '.join([hex(x) for x in response])}")
+            
+            except usb.core.USBError as e:
+                print(f"Command {i+1} failed: {e}")
+                return False
+
+        # LED control constants from tir4.py
+        TIR_LED_MSGID = 0x10
+        TIR_IR_LED_BIT_MASK = 0x80
+        TIR_GREEN_LED_BIT_MASK = 0x20
+        
+        # Turn on IR and Green LEDs
+        led_sequence = [
+            [TIR_LED_MSGID, TIR_IR_LED_BIT_MASK | TIR_GREEN_LED_BIT_MASK, 0xFF]  # Turn on IR and Green LEDs
+        ]
+        
+        # Send LED commands
+        for cmd in led_sequence:
+            try:
+                bytes_written = self.ep_out.write(cmd)
+                print(f"Sent LED command: {' '.join([hex(x) for x in cmd])} ({bytes_written} bytes)")
+                time.sleep(0.1)
+            except usb.core.USBError as e:
+                print(f"LED command failed: {e}")
+                return False
+                
+        return True
+
+    def print_device_info(self):
+        """Print detailed USB device information"""
+        print("\nDevice Information:")
+        print(f"Device ID: {self.device.idVendor:04x}:{self.device.idProduct:04x}")
+        
+        # Get device configuration
+        cfg = self.device.get_active_configuration()
+        print(f"\nConfiguration:")
+        print(f"  bNumInterfaces: {cfg.bNumInterfaces}")
+        
+        # Print interface information
+        for intf in cfg:
+            print(f"\nInterface {intf.bInterfaceNumber}:")
+            print(f"  bInterfaceClass: {intf.bInterfaceClass}")
+            print(f"  bInterfaceSubClass: {intf.bInterfaceSubClass}")
+            print(f"  bInterfaceProtocol: {intf.bInterfaceProtocol}")
+            
+            # Print endpoint information
+            for ep in intf:
+                print(f"\n  Endpoint {ep.bEndpointAddress:02x}:")
+                print(f"    Type: {usb.util.endpoint_type(ep.bmAttributes):02x}")
+                print(f"    Max Packet Size: {ep.wMaxPacketSize}")
+                print(f"    Interval: {ep.bInterval}")
+
+    def start_data_stream(self):
+        """Start the continuous data stream from the device"""
+        # Based on the LinuxTrack code, send the start streaming command
+        try:
+            # Command to start streaming
+            self.send_command([0x14, 0x02])
+            time.sleep(0.1)
+            
+            # Verify we're getting data frames
+            response = self.read_data(timeout=100)
+            if response and response[1] == 0x1C:
+                print("Data stream started successfully")
+                return True
+            else:
+                print("Failed to start data stream")
+                return False
+                
+        except usb.core.USBError as e:
+            print(f"Error starting data stream: {e}")
+            return False
 
 def main():
     """Main function for testing and protocol analysis"""
@@ -99,20 +261,23 @@ def main():
         trackir = TrackIR()
         print("TrackIR device initialized successfully")
         
-        # Turn on LED
-        print("Attempting to turn on LED...")
-        trackir.turn_on_led()
+        if not trackir.init_device():
+            print("Device initialization failed!")
+            return
         
         # Read some frames for analysis
-        print("Reading frames...")
+        print("\nReading frames...")
         for _ in range(10):
             frame = trackir.read_frame()
             if frame:
                 print(f"Frame received: {frame}")
-            time.sleep(0.1)
+            time.sleep(0.033)  # ~30fps
             
     except Exception as e:
         print(f"Error: {e}")
+    finally:
+        if hasattr(trackir, 'device'):
+            usb.util.dispose_resources(trackir.device)
 
 if __name__ == "__main__":
     main()
