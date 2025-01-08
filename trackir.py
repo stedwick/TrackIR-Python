@@ -286,6 +286,34 @@ class TrackIR:
             print(f"Error starting data stream: {e}")
             return False
 
+    def _visualize_pixels(self, pixels: List[Tuple[int, int, int, int]], width: int = 128, height: int = 96) -> str:
+        """Create an ASCII visualization of the pixel data"""
+        if not pixels:
+            return "No data"
+            
+        # Create a 2D grid for visualization
+        grid = [['.'] * width for _ in range(height)]
+        
+        # Plot each pixel with scaling
+        for row, x, y, _ in pixels:
+            # Scale coordinates to fit our grid
+            scaled_x = int((x / 255.0) * (width - 1))
+            scaled_y = int((y / 255.0) * (height - 1))
+            
+            if 0 <= scaled_x < width and 0 <= scaled_y < height:
+                grid[scaled_y][scaled_x] = '█'
+                # Add some neighboring pixels to make it more visible
+                for dx in [-1, 0, 1]:
+                    for dy in [-1, 0, 1]:
+                        nx = scaled_x + dx
+                        ny = scaled_y + dy
+                        if 0 <= nx < width and 0 <= ny < height:
+                            if grid[ny][nx] == '.':
+                                grid[ny][nx] = '▒'
+        
+        # Convert grid to string
+        return '\n'.join(''.join(row) for row in grid)
+
 def main():
     """Main function for testing and protocol analysis"""
     try:
@@ -296,16 +324,47 @@ def main():
             print("Device initialization failed!")
             return
         
-        # Read more frames for analysis
-        print("\nReading frames...")
-        for _ in range(30):  # Read more frames
-            frame = trackir.read_frame()
-            if frame and frame['type'] == 'data_frame':
-                print(f"\nFrame length: {frame['length']}")
-                print("Frame data:", ' '.join(f"{x:02x}" for x in frame['data']))
-                print("\nVisualization:")
-                print(frame['visualization'])
-            time.sleep(0.033)  # ~30fps
+        # Wait for device to stabilize and discard initial frames
+        print("\nWaiting for device to stabilize...")
+        time.sleep(1.0)  # Wait 1 second
+        
+        # Discard a few frames
+        for _ in range(5):
+            trackir.read_frame()
+        
+        # Now read one frame for analysis
+        print("\nReading one frame...")
+        frame = trackir.read_frame()
+        if frame and frame['type'] == 'data_frame':
+            print("\nComplete Frame Analysis:")
+            print(f"Frame length: {frame['length']} bytes")
+            print(f"Frame type: {frame['type']}")
+            
+            # Group data into 4-byte chunks for better readability
+            data_bytes = frame['data']
+            print("\nData (grouped in 4-byte chunks):")
+            for i in range(0, len(data_bytes), 4):
+                chunk = data_bytes[i:i+4]
+                print(f"Bytes {i:2d}-{i+3:2d}: {' '.join(f'{b:02x}' for b in chunk)}")
+            
+            print("\nVisualization (128x96):")
+            # Create a full-size visualization
+            width = 128
+            height = 96
+            grid = [['.' for _ in range(width)] for _ in range(height)]
+            
+            # Process data in 4-byte chunks
+            for i in range(0, len(data_bytes), 4):
+                if i + 4 <= len(data_bytes):
+                    row = data_bytes[i]
+                    x = data_bytes[i + 1]
+                    y = data_bytes[i + 2]
+                    if 0 <= x < width and 0 <= y < height:
+                        grid[y][x] = '█'
+            
+            # Print the grid
+            for row in grid:
+                print(''.join(row))
             
     except Exception as e:
         print(f"Error: {e}")
