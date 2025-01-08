@@ -28,28 +28,28 @@ class TrackIR:
         # Reset the device
         self.device.reset()
         
-        # Set the active configuration
+    # Set the active configuration
         self.device.set_configuration()
-        
-        # Get an endpoint instance
+    
+    # Get an endpoint instance
         cfg = self.device.get_active_configuration()
         intf = cfg[(0,0)]
-        
-        # Get the IN and OUT endpoints
+    
+    # Get the IN and OUT endpoints
         self.ep_out = usb.util.find_descriptor(
-            intf,
-            custom_match = lambda e: \
-                usb.util.endpoint_direction(e.bEndpointAddress) == \
-                usb.util.ENDPOINT_OUT
-        )
-        
+        intf,
+        custom_match = lambda e: \
+            usb.util.endpoint_direction(e.bEndpointAddress) == \
+            usb.util.ENDPOINT_OUT
+    )
+    
         self.ep_in = usb.util.find_descriptor(
-            intf,
-            custom_match = lambda e: \
-                usb.util.endpoint_direction(e.bEndpointAddress) == \
-                usb.util.ENDPOINT_IN
-        )
-        
+        intf,
+        custom_match = lambda e: \
+            usb.util.endpoint_direction(e.bEndpointAddress) == \
+            usb.util.ENDPOINT_IN
+    )
+    
         if self.ep_out is None or self.ep_in is None:
             raise ValueError('Could not find endpoints')
 
@@ -90,33 +90,48 @@ class TrackIR:
         self.send_command(init_sequence)
         
     def read_frame(self) -> Optional[dict]:
-        """Read the most recent frame of tracking data"""
-        # Flush any old data from the buffer more aggressively
-        while True:
-            try:
-                self.ep_in.read(64, timeout=1)
-            except usb.core.USBError as e:
-                if e.errno == 110:  # Timeout means buffer is empty
-                    break
-                else:
-                    print(f"Error flushing buffer: {e}")
-                    break
+        """Read a complete frame of tracking data"""
+        frame_data = []
+        current_line = 0
+        frame_complete = False
         
-        # Wait for the start of a new frame
-        while True:
+        while not frame_complete:
             data = self.read_data()
             if data is None:
                 return None
+                
+            # Process data in 4-byte chunks
+            for i in range(2, len(data), 4):  # Skip 2-byte header
+                if i + 4 > len(data):
+                    break
+                    
+                vline = data[i]  # Vertical line number
+                # Check for extended vline (bit 0x20 in fourth byte)
+                if data[i + 3] & 0x20:
+                    vline |= 0x100
+                
+                # If line number decreases, we've hit a new frame
+                if vline < current_line:
+                    if len(frame_data) > 0:  # Only if we have data
+                        frame_complete = True
+                        break
+                
+                current_line = vline
+                frame_data.extend(data[i:i+4])
             
-            # Check if this is the start of a frame (frame type 0x1C)
-            if len(data) >= 2 and data[1] == 0x1C:
-                frame_length = data[0]
-                # Verify we have a complete frame
-                if len(data) >= frame_length:
-                    return self._parse_frame(data)
-            
-            # If we didn't get a valid frame, continue reading
-            time.sleep(0.001)  # Small delay to prevent busy-waiting
+            if frame_complete:
+                break
+        
+        if frame_data:
+            return {
+                'type': 'data_frame',
+                'length': len(frame_data),
+                'data': frame_data,
+                'raw_data': bytes(frame_data),
+                'timestamp': time.time()
+            }
+        
+        return None
     
     def _parse_frame(self, data: bytes) -> dict:
         """Parse a frame of data from the device based on LinuxTrack's implementation"""
@@ -396,49 +411,23 @@ def main():
             frame = trackir.read_frame()
             if frame and frame['type'] == 'data_frame' and len(frame['data']) > 0:
                 data_bytes = frame['data']
-                print(f"\nFrame data length: {len(data_bytes)}")
-                print("Points detected:")
-                
-                # Create debug image for raw data
-                debug_img = np.zeros((256, 256), dtype=np.uint8)  # Raw coordinate space
-                
-                points = []
                 for i in range(0, len(data_bytes), 4):
                     if i + 4 <= len(data_bytes):
-                        row = data_bytes[i]
-                        x = data_bytes[i + 1]
-                        y = data_bytes[i + 2]
+                        vline = data_bytes[i]      # Vertical line number
+                        hstart = data_bytes[i + 1] # Start pixel in this line
+                        hstop = data_bytes[i + 2]  # End pixel in this line
                         delimiter = data_bytes[i + 3]
-                        points.append((x, y))
-                        print(f"Row: {row:3d}, X: {x:3d}, Y: {y:3d}, Delimiter: {delimiter:02x}")
                         
-                        # Draw point on debug image (raw coordinates)
-                        cv2.circle(debug_img, (x, y), 2, 255, -1)
-                
-                print(f"Total points in frame: {len(points)}")
-                
-                # Show raw data visualization
-                cv2.imshow('Raw Data', debug_img)
-                
-                for i in range(0, len(data_bytes), 4):
-                    if i + 4 <= len(data_bytes):
-                        row = data_bytes[i]
-                        x = data_bytes[i + 1]
-                        y = data_bytes[i + 2]
-                        
-                        # Scale coordinates to image size - note the flipped axes
-                        scaled_x = int((y / 255.0) * (sensor_height - 1))  # Y becomes X
-                        scaled_y = int((x / 255.0) * (sensor_width - 1))   # X becomes Y
-                        
-                        if 0 <= scaled_x < sensor_height and 0 <= scaled_y < sensor_width:
-                            # Draw bright point with gaussian blur for better visibility
-                            cv2.circle(img, (scaled_y, scaled_x), 2, 255, -1)
-            
-            # Rotate image to match TrackIR's orientation
-            img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-            
-            # Apply gaussian blur to make points more visible
-            img = cv2.GaussianBlur(img, (5, 5), 0)
+                        # Draw a line segment for this stripe
+                        if 0 <= vline < sensor_height and hstart <= hstop:
+                            # Draw horizontal line from hstart to hstop at vline
+                            cv2.line(img, 
+                                   (hstart, vline),
+                                   (hstop, vline),
+                                   255, 1)
+
+            # Apply gaussian blur to make lines more visible
+            img = cv2.GaussianBlur(img, (3, 3), 0)
             
             # Scale image to window size while maintaining aspect ratio
             aspect_ratio = sensor_width / sensor_height
