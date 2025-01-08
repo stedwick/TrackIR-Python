@@ -302,9 +302,6 @@ class TrackIR:
 
     def _visualize_pixels(self, pixels: List[Tuple[int, int, int, int]], width: int = 64, height: int = 24) -> str:
         """Create an ASCII visualization of the pixel data at 1/4 size"""
-        if not pixels:
-            return "No data"
-            
         # Create border and grid
         output = []
         output.append('┌' + '─' * width + '┐')
@@ -312,22 +309,23 @@ class TrackIR:
         # Create a 2D grid for visualization (quarter width and height)
         grid = [['.'] * width for _ in range(height)]
         
-        # Plot each pixel with scaling
-        for row, x, y, _ in pixels:
-            # Scale coordinates to fit our smaller grid
-            scaled_x = int((x / 255.0) * (width - 1))
-            scaled_y = int((y / 255.0) * (height - 1))
-            
-            if 0 <= scaled_x < width and 0 <= scaled_y < height:
-                grid[scaled_y][scaled_x] = '█'
-                # Add some neighboring pixels to make it more visible
-                for dx in [-1, 0, 1]:
-                    for dy in [-1, 0, 1]:
-                        nx = scaled_x + dx
-                        ny = scaled_y + dy
-                        if 0 <= nx < width and 0 <= ny < height:
-                            if grid[ny][nx] == '.':
-                                grid[ny][nx] = '▒'
+        # Plot each pixel with scaling if we have data
+        if pixels:
+            for row, x, y, _ in pixels:
+                # Scale coordinates to fit our smaller grid
+                scaled_x = int((x / 255.0) * (width - 1))
+                scaled_y = int((y / 255.0) * (height - 1))
+                
+                if 0 <= scaled_x < width and 0 <= scaled_y < height:
+                    grid[scaled_y][scaled_x] = '█'
+                    # Add some neighboring pixels to make it more visible
+                    for dx in [-1, 0, 1]:
+                        for dy in [-1, 0, 1]:
+                            nx = scaled_x + dx
+                            ny = scaled_y + dy
+                            if 0 <= nx < width and 0 <= ny < height:
+                                if grid[ny][nx] == '.':
+                                    grid[ny][nx] = '▒'
         
         # Add grid lines with borders
         for row in grid:
@@ -371,6 +369,13 @@ def main():
             start_time = time.time()
             frame_count = 0
             
+            # Create border strings once
+            width = 64
+            height = 24
+            top_border = '┌' + '─' * width + '┐'
+            bottom_border = '└' + '─' * width + '┘'
+            empty_line = '│' + '.' * width + '│'
+            
             while time.time() - start_time < 10.0:  # Run for 10 seconds
                 frame_start = time.time()
                 
@@ -381,27 +386,42 @@ def main():
                 # Maintain LED state
                 trackir.send_command([TIR_LED_MSGID, TIR_IR_LED_BIT_MASK | TIR_GREEN_LED_BIT_MASK, 0xFF])
                 
+                # Create empty visualization grid
+                print(top_border)
+                grid = [['.'] * width for _ in range(height)]
+                
+                # Get frame data and update grid if available
                 frame = trackir.read_frame()
-                if frame and frame['type'] == 'data_frame':
+                if frame and frame['type'] == 'data_frame' and len(frame['data']) > 0:
                     data_bytes = frame['data']
-                    
-                    if len(data_bytes) == 0:
-                        print("Warning: No data in frame")
-                        continue
-                    
-                    # Convert data into pixels format
-                    pixels = []
                     for i in range(0, len(data_bytes), 4):
                         if i + 4 <= len(data_bytes):
                             row = data_bytes[i]
                             x = data_bytes[i + 1]
                             y = data_bytes[i + 2]
-                            delimiter = data_bytes[i + 3]
-                            pixels.append((row, x, y, delimiter))
-                    
-                    print(trackir._visualize_pixels(pixels))
-                else:
-                    print("Warning: Invalid or empty frame")
+                            
+                            # Scale and transform coordinates:
+                            # - Flip Y axis (subtract from height-1)
+                            # - Swap X and Y
+                            # - Scale from 0-255 to grid size
+                            scaled_y = int((x / 255.0) * (width - 1))  # X becomes Y
+                            scaled_x = height - 1 - int((y / 255.0) * (height - 1))  # Y becomes X, flipped
+                            
+                            if 0 <= scaled_x < height and 0 <= scaled_y < width:
+                                grid[scaled_x][scaled_y] = '█'
+                                # Add some neighboring pixels
+                                for dx in [-1, 0, 1]:
+                                    for dy in [-1, 0, 1]:
+                                        nx = scaled_x + dx
+                                        ny = scaled_y + dy
+                                        if 0 <= nx < height and 0 <= ny < width:
+                                            if grid[nx][ny] == '.':
+                                                grid[nx][ny] = '▒'
+                
+                # Print grid with borders
+                for row in grid:
+                    print('│' + ''.join(row) + '│')
+                print(bottom_border)
                 
                 # Calculate time to sleep
                 frame_end = time.time()
