@@ -1,0 +1,3 @@
+[submodule "linuxtrack"]
+	path = linuxtrack
+	url = https://github.com/uglyDwarf/linuxtrack.git
