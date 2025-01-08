@@ -289,17 +289,17 @@ class TrackIR:
             print(f"Error starting data stream: {e}")
             return False
 
-    def _visualize_pixels(self, pixels: List[Tuple[int, int, int, int]], width: int = 128, height: int = 96) -> str:
-        """Create an ASCII visualization of the pixel data"""
+    def _visualize_pixels(self, pixels: List[Tuple[int, int, int, int]], width: int = 64, height: int = 48) -> str:
+        """Create an ASCII visualization of the pixel data at 1/4 size"""
         if not pixels:
             return "No data"
             
-        # Create a 2D grid for visualization
+        # Create a 2D grid for visualization (half width and height)
         grid = [['.'] * width for _ in range(height)]
         
         # Plot each pixel with scaling
         for row, x, y, _ in pixels:
-            # Scale coordinates to fit our grid
+            # Scale coordinates to fit our smaller grid
             scaled_x = int((x / 255.0) * (width - 1))
             scaled_y = int((y / 255.0) * (height - 1))
             
@@ -335,38 +335,75 @@ def main():
         for _ in range(5):
             trackir.read_frame()
         
-        # Now read one frame for analysis
-        print("\nReading one frame...")
-        frame = trackir.read_frame()
-        if frame and frame['type'] == 'data_frame':
-            print("\nComplete Frame Analysis:")
-            print(f"Frame length: {frame['length']} bytes")
-            print(f"Frame type: {frame['type']}")
+        # LED control constants
+        TIR_LED_MSGID = 0x10
+        TIR_IR_LED_BIT_MASK = 0x80
+        TIR_GREEN_LED_BIT_MASK = 0x20
+        
+        # Clear screen and hide cursor
+        print("\033[2J\033[?25l", end='')
+        
+        try:
+            # Read frames at 10 FPS for 10 seconds
+            print("\nStarting 10 second capture at 10 FPS...\n")
+            frame_time = 1.0 / 10.0  # 100ms per frame
+            start_time = time.time()
+            frame_count = 0
             
-            # Group data into 4-byte chunks for better readability
-            data_bytes = frame['data']
-            print("\nData (grouped in 4-byte chunks):")
-            for i in range(0, len(data_bytes), 4):
-                chunk = data_bytes[i:i+4]
-                print(f"Bytes {i:2d}-{i+3:2d}: {' '.join(f'{b:02x}' for b in chunk)}")
+            while time.time() - start_time < 10.0:  # Run for 10 seconds
+                frame_start = time.time()
+                
+                # Move cursor to top
+                print("\033[H", end='')
+                print(f"Frame {frame_count} at {time.time():.2f}")
+                
+                # Maintain LED state
+                trackir.send_command([TIR_LED_MSGID, TIR_IR_LED_BIT_MASK | TIR_GREEN_LED_BIT_MASK, 0xFF])
+                
+                frame = trackir.read_frame()
+                if frame and frame['type'] == 'data_frame':
+                    data_bytes = frame['data']
+                    
+                    if len(data_bytes) == 0:
+                        print("Warning: No data in frame")
+                        continue
+                    
+                    # Convert data into pixels format
+                    pixels = []
+                    for i in range(0, len(data_bytes), 4):
+                        if i + 4 <= len(data_bytes):
+                            row = data_bytes[i]
+                            x = data_bytes[i + 1]
+                            y = data_bytes[i + 2]
+                            delimiter = data_bytes[i + 3]
+                            pixels.append((row, x, y, delimiter))
+                    
+                    print("\nVisualization (64x48):")
+                    print(trackir._visualize_pixels(pixels))
+                else:
+                    print("Warning: Invalid or empty frame")
+                
+                # Calculate time to sleep
+                frame_end = time.time()
+                sleep_time = frame_time - (frame_end - frame_start)
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+                
+                frame_count += 1
+                
+        finally:
+            # Show cursor again
+            print("\033[?25h", end='')
             
-            # Convert data into pixels format
-            pixels = []
-            for i in range(0, len(data_bytes), 4):
-                if i + 4 <= len(data_bytes):
-                    row = data_bytes[i]
-                    x = data_bytes[i + 1]
-                    y = data_bytes[i + 2]
-                    delimiter = data_bytes[i + 3]
-                    pixels.append((row, x, y, delimiter))
-            
-            print("\nVisualization (128x96):")
-            print(trackir._visualize_pixels(pixels))
-            
+    except KeyboardInterrupt:
+        print("\nCapture stopped by user")
     except Exception as e:
         print(f"Error: {e}")
     finally:
+        # Turn off LED and restore terminal
         if hasattr(trackir, 'device'):
+            trackir.send_command([TIR_LED_MSGID, 0x00, 0xFF])  # Turn off all LEDs
+            print("\033[?25h", end='')  # Show cursor
             usb.util.dispose_resources(trackir.device)
 
 if __name__ == "__main__":
