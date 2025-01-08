@@ -71,7 +71,9 @@ class TrackIR:
         try:
             data = self.ep_in.read(length, timeout=timeout)
             if len(data) > 0:  # Only print if we actually got data
-                print(f"Received: {' '.join([hex(x) for x in data])}")
+                # Print in hex format for debugging
+                hex_data = ' '.join([f"{x:02x}" for x in data])
+                print(f"Received [{len(data)} bytes]: {hex_data}")
             return data
         except usb.core.USBError as e:
             if e.errno == 110:  # Operation timed out
@@ -95,26 +97,35 @@ class TrackIR:
         return self._parse_frame(data)
     
     def _parse_frame(self, data: bytes) -> dict:
-        """Parse a frame of data from the device"""
+        """Parse a frame of data from the device based on LinuxTrack's implementation"""
         if len(data) < 6:
             return None
             
         frame_length = data[0]
         frame_type = data[1]
         
-        # Regular data frame format appears to be:
-        # Byte 0: Frame length (0x06)
-        # Byte 1: Frame type (0x1C)
-        # Bytes 2-5: Data payload
-        
         if frame_type == 0x1C:
-            return {
+            # Get sensor data bytes
+            sensor_data = data[2:frame_length]
+            
+            # Each byte represents one row of sensor data
+            bits = []
+            for byte in sensor_data:
+                # Convert to binary, preserving all bits
+                row_bits = [(byte >> i) & 1 for i in range(7, -1, -1)]
+                bits.extend(row_bits)
+            
+            frame = {
                 'type': 'data_frame',
                 'length': frame_length,
-                'data': [data[i] for i in range(2, 6)],
+                'data': [data[i] for i in range(2, frame_length)],
+                'bits': bits,
                 'raw_data': data,
                 'timestamp': time.time()
             }
+            
+            frame['visualization'] = self._visualize_frame(bits)
+            return frame
         elif frame_type == 0x10:
             return {
                 'type': 'info_frame',
@@ -140,6 +151,21 @@ class TrackIR:
                 'timestamp': time.time()
             }
 
+    def _visualize_frame(self, bits: List[int], width: int = 8) -> str:
+        """Create an ASCII visualization of the frame data"""
+        if not bits:
+            return "No data"
+            
+        # TrackIR 3 appears to use 8-bit wide data
+        lines = []
+        for i in range(0, len(bits), width):
+            line_bits = bits[i:i + width]
+            # Show intensity values
+            line = ''.join('█' if bit else '.' for bit in line_bits)
+            lines.append(line)
+            
+        return '\n'.join(lines)
+
     def send_control(self, request_type, request, value, index, data=None):
         """Send a control transfer to the device"""
         try:
@@ -162,13 +188,17 @@ class TrackIR:
         """Complete device initialization sequence based on LinuxTrack's implementation"""
         print("Starting device initialization...")
         
-        # Initial setup commands from tir4_read_version_string.py
+        # Initial setup commands from LinuxTrack
         init_sequence = [
             [0x12],           # Request version
-            [0x14, 0x01],     # Unknown command
-            [0x12],           # Request version again
-            [0x13],           # Unknown command
-            [0x17]            # Unknown command
+            [0x14, 0x01],     # Initialize
+            [0x14, 0x02],     # Start streaming
+            [0x10, 0x02],     # Set data format
+            [0x11, 0x80],     # Set exposure
+            [0x11, 0x70],     # Set gain
+            [0x11, 0x81],     # Enable sensor
+            [0x13],           # Get info
+            [0x17],           # Get config
         ]
         
         # Send initial setup commands
@@ -193,9 +223,10 @@ class TrackIR:
         TIR_IR_LED_BIT_MASK = 0x80
         TIR_GREEN_LED_BIT_MASK = 0x20
         
-        # Turn on IR and Green LEDs
+        # Turn on IR and Green LEDs with full intensity
         led_sequence = [
-            [TIR_LED_MSGID, TIR_IR_LED_BIT_MASK | TIR_GREEN_LED_BIT_MASK, 0xFF]  # Turn on IR and Green LEDs
+            [TIR_LED_MSGID, TIR_IR_LED_BIT_MASK | TIR_GREEN_LED_BIT_MASK, 0xFF],  # Turn on IR and Green LEDs
+            [0x11, 0x50],  # Set LED brightness
         ]
         
         # Send LED commands
@@ -207,7 +238,7 @@ class TrackIR:
             except usb.core.USBError as e:
                 print(f"LED command failed: {e}")
                 return False
-                
+
         return True
 
     def print_device_info(self):
@@ -265,12 +296,15 @@ def main():
             print("Device initialization failed!")
             return
         
-        # Read some frames for analysis
+        # Read more frames for analysis
         print("\nReading frames...")
-        for _ in range(10):
+        for _ in range(30):  # Read more frames
             frame = trackir.read_frame()
-            if frame:
-                print(f"Frame received: {frame}")
+            if frame and frame['type'] == 'data_frame':
+                print(f"\nFrame length: {frame['length']}")
+                print("Frame data:", ' '.join(f"{x:02x}" for x in frame['data']))
+                print("\nVisualization:")
+                print(frame['visualization'])
             time.sleep(0.033)  # ~30fps
             
     except Exception as e:
