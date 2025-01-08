@@ -88,12 +88,23 @@ class TrackIR:
         self.send_command(init_sequence)
         
     def read_frame(self) -> Optional[dict]:
-        """Read a frame of tracking data"""
+        """Read the most recent frame of tracking data"""
+        # Flush any old data from the buffer
+        while True:
+            try:
+                self.ep_in.read(64, timeout=1)
+            except usb.core.USBError as e:
+                if e.errno == 110:  # Timeout means buffer is empty
+                    break
+                else:
+                    print(f"Error flushing buffer: {e}")
+                    break
+        
+        # Now read the latest frame
         data = self.read_data()
         if data is None:
             return None
             
-        # We'll need to implement the proper parsing logic once we understand the protocol
         return self._parse_frame(data)
     
     def _parse_frame(self, data: bytes) -> dict:
