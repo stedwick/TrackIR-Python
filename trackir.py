@@ -289,12 +289,16 @@ class TrackIR:
             print(f"Error starting data stream: {e}")
             return False
 
-    def _visualize_pixels(self, pixels: List[Tuple[int, int, int, int]], width: int = 64, height: int = 48) -> str:
+    def _visualize_pixels(self, pixels: List[Tuple[int, int, int, int]], width: int = 64, height: int = 24) -> str:
         """Create an ASCII visualization of the pixel data at 1/4 size"""
         if not pixels:
             return "No data"
             
-        # Create a 2D grid for visualization (half width and height)
+        # Create border and grid
+        output = []
+        output.append('┌' + '─' * width + '┐')
+        
+        # Create a 2D grid for visualization (quarter width and height)
         grid = [['.'] * width for _ in range(height)]
         
         # Plot each pixel with scaling
@@ -314,8 +318,14 @@ class TrackIR:
                             if grid[ny][nx] == '.':
                                 grid[ny][nx] = '▒'
         
-        # Convert grid to string
-        return '\n'.join(''.join(row) for row in grid)
+        # Add grid lines with borders
+        for row in grid:
+            output.append('│' + ''.join(row) + '│')
+        
+        # Add bottom border
+        output.append('└' + '─' * width + '┘')
+        
+        return '\n'.join(output)
 
 def main():
     """Main function for testing and protocol analysis"""
@@ -353,9 +363,9 @@ def main():
             while time.time() - start_time < 10.0:  # Run for 10 seconds
                 frame_start = time.time()
                 
-                # Move cursor to top
-                print("\033[H", end='')
-                print(f"Frame {frame_count} at {time.time():.2f}")
+                # Move cursor to top and clear screen
+                print("\033[H\033[2J", end='')
+                print(f"Frame {frame_count} at {time.time():.2f} ({(time.time() - start_time):.1f}s elapsed)")
                 
                 # Maintain LED state
                 trackir.send_command([TIR_LED_MSGID, TIR_IR_LED_BIT_MASK | TIR_GREEN_LED_BIT_MASK, 0xFF])
@@ -378,7 +388,6 @@ def main():
                             delimiter = data_bytes[i + 3]
                             pixels.append((row, x, y, delimiter))
                     
-                    print("\nVisualization (64x48):")
                     print(trackir._visualize_pixels(pixels))
                 else:
                     print("Warning: Invalid or empty frame")
