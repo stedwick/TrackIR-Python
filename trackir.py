@@ -108,23 +108,26 @@ class TrackIR:
             # Get sensor data bytes
             sensor_data = data[2:frame_length]
             
-            # Each byte represents one row of sensor data
-            bits = []
-            for byte in sensor_data:
-                # Convert to binary, preserving all bits
-                row_bits = [(byte >> i) & 1 for i in range(7, -1, -1)]
-                bits.extend(row_bits)
+            # Process data in 4-byte chunks
+            pixels = []
+            for i in range(0, len(sensor_data), 4):
+                if i + 4 <= len(sensor_data):
+                    row = sensor_data[i]
+                    x = sensor_data[i + 1]
+                    y = sensor_data[i + 2]
+                    delimiter = sensor_data[i + 3]
+                    pixels.append((row, x, y, delimiter))
             
             frame = {
                 'type': 'data_frame',
                 'length': frame_length,
                 'data': [data[i] for i in range(2, frame_length)],
-                'bits': bits,
+                'pixels': pixels,
                 'raw_data': data,
                 'timestamp': time.time()
             }
             
-            frame['visualization'] = self._visualize_frame(bits)
+            frame['visualization'] = self._visualize_pixels(pixels)
             return frame
         elif frame_type == 0x10:
             return {
@@ -347,24 +350,18 @@ def main():
                 chunk = data_bytes[i:i+4]
                 print(f"Bytes {i:2d}-{i+3:2d}: {' '.join(f'{b:02x}' for b in chunk)}")
             
-            print("\nVisualization (128x96):")
-            # Create a full-size visualization
-            width = 128
-            height = 96
-            grid = [['.' for _ in range(width)] for _ in range(height)]
-            
-            # Process data in 4-byte chunks
+            # Convert data into pixels format
+            pixels = []
             for i in range(0, len(data_bytes), 4):
                 if i + 4 <= len(data_bytes):
                     row = data_bytes[i]
                     x = data_bytes[i + 1]
                     y = data_bytes[i + 2]
-                    if 0 <= x < width and 0 <= y < height:
-                        grid[y][x] = '█'
+                    delimiter = data_bytes[i + 3]
+                    pixels.append((row, x, y, delimiter))
             
-            # Print the grid
-            for row in grid:
-                print(''.join(row))
+            print("\nVisualization (128x96):")
+            print(trackir._visualize_pixels(pixels))
             
     except Exception as e:
         print(f"Error: {e}")
