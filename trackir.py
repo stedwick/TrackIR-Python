@@ -3,6 +3,8 @@ import usb.util
 import time
 from typing import Tuple, List, Optional
 import struct
+import cv2
+import numpy as np
 
 class TrackIR:
     # TrackIR vendor and product IDs
@@ -359,92 +361,100 @@ def main():
         TIR_IR_LED_BIT_MASK = 0x80
         TIR_GREEN_LED_BIT_MASK = 0x20
         
-        # Clear screen and hide cursor
-        print("\033[2J\033[?25l", end='')
+        # Create OpenCV window with a larger default size
+        cv2.namedWindow('TrackIR Feed', cv2.WINDOW_NORMAL)
+        window_width = 640
+        window_height = 480
+        cv2.resizeWindow('TrackIR Feed', window_width, window_height)
         
-        try:
-            # Read frames at 10 FPS for 10 seconds
-            print("\nStarting 10 second capture at 10 FPS...\n")
-            frame_time = 1.0 / 10.0  # 100ms per frame
-            start_time = time.time()
-            frame_count = 0
+        # Set up visualization dimensions (original sensor resolution)
+        sensor_width = 128
+        sensor_height = 96
+        
+        start_time = time.time()
+        frame_count = 0
+        
+        while True:  # Run until 'q' is pressed
+            frame_start = time.time()
             
-            # Create border strings once
-            width = 64
-            height = 24
-            top_border = '┌' + '─' * width + '┐'
-            bottom_border = '└' + '─' * width + '┘'
-            empty_line = '│' + '.' * width + '│'
+            # Maintain LED state
+            trackir.send_command([TIR_LED_MSGID, TIR_IR_LED_BIT_MASK | TIR_GREEN_LED_BIT_MASK, 0xFF])
             
-            while time.time() - start_time < 10.0:  # Run for 10 seconds
-                frame_start = time.time()
-                
-                # Move cursor to top and clear screen
-                print("\033[H\033[2J", end='')
-                print(f"Frame {frame_count} at {time.time():.2f} ({(time.time() - start_time):.1f}s elapsed)")
-                
-                # Maintain LED state
-                trackir.send_command([TIR_LED_MSGID, TIR_IR_LED_BIT_MASK | TIR_GREEN_LED_BIT_MASK, 0xFF])
-                
-                # Create empty visualization grid
-                print(top_border)
-                grid = [['.'] * width for _ in range(height)]
-                
-                # Get frame data and update grid if available
-                frame = trackir.read_frame()
-                if frame and frame['type'] == 'data_frame' and len(frame['data']) > 0:
-                    data_bytes = frame['data']
-                    for i in range(0, len(data_bytes), 4):
-                        if i + 4 <= len(data_bytes):
-                            row = data_bytes[i]
-                            x = data_bytes[i + 1]
-                            y = data_bytes[i + 2]
-                            
-                            # Scale and transform coordinates:
-                            # - Flip Y axis (subtract from height-1)
-                            # - Swap X and Y
-                            # - Scale from 0-255 to grid size
-                            scaled_y = int((x / 255.0) * (width - 1))  # X becomes Y
-                            scaled_x = height - 1 - int((y / 255.0) * (height - 1))  # Y becomes X, flipped
-                            
-                            if 0 <= scaled_x < height and 0 <= scaled_y < width:
-                                grid[scaled_x][scaled_y] = '█'
-                                # Add some neighboring pixels
-                                for dx in [-1, 0, 1]:
-                                    for dy in [-1, 0, 1]:
-                                        nx = scaled_x + dx
-                                        ny = scaled_y + dy
-                                        if 0 <= nx < height and 0 <= ny < width:
-                                            if grid[nx][ny] == '.':
-                                                grid[nx][ny] = '▒'
-                
-                # Print grid with borders
-                for row in grid:
-                    print('│' + ''.join(row) + '│')
-                print(bottom_border)
-                
-                # Calculate time to sleep
-                frame_end = time.time()
-                sleep_time = frame_time - (frame_end - frame_start)
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
-                
-                frame_count += 1
-                
-        finally:
-            # Show cursor again
-            print("\033[?25h", end='')
+            # Create black image at sensor resolution
+            img = np.zeros((sensor_height, sensor_width), dtype=np.uint8)
+            
+            # Get frame data and update image
+            frame = trackir.read_frame()
+            if frame and frame['type'] == 'data_frame' and len(frame['data']) > 0:
+                data_bytes = frame['data']
+                for i in range(0, len(data_bytes), 4):
+                    if i + 4 <= len(data_bytes):
+                        row = data_bytes[i]
+                        x = data_bytes[i + 1]
+                        y = data_bytes[i + 2]
+                        
+                        # Scale coordinates to image size
+                        scaled_y = int((x / 255.0) * (sensor_width - 1))
+                        scaled_x = sensor_height - 1 - int((y / 255.0) * (sensor_height - 1))
+                        
+                        if 0 <= scaled_x < sensor_height and 0 <= scaled_y < sensor_width:
+                            # Draw bright point with gaussian blur for better visibility
+                            cv2.circle(img, (scaled_y, scaled_x), 2, 255, -1)
+            
+            # Apply gaussian blur to make points more visible
+            img = cv2.GaussianBlur(img, (5, 5), 0)
+            
+            # Scale image to window size while maintaining aspect ratio
+            aspect_ratio = sensor_width / sensor_height
+            if window_width / window_height > aspect_ratio:
+                # Window is wider than needed
+                new_width = int(window_height * aspect_ratio)
+                new_height = window_height
+            else:
+                # Window is taller than needed
+                new_width = window_width
+                new_height = int(window_width / aspect_ratio)
+            
+            img_resized = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+            
+            # Create black background of window size
+            display_img = np.zeros((window_height, window_width), dtype=np.uint8)
+            
+            # Center the resized image
+            y_offset = (window_height - new_height) // 2
+            x_offset = (window_width - new_width) // 2
+            display_img[y_offset:y_offset+new_height, x_offset:x_offset+new_width] = img_resized
+            
+            # Show FPS
+            fps = frame_count / (time.time() - start_time)
+            cv2.putText(display_img, f"FPS: {fps:.1f}", (20, 40), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.0, 255, 2)
+            
+            # Show the image
+            cv2.imshow('TrackIR Feed', display_img)
+            
+            # Break if 'q' is pressed
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+            
+            # Calculate time to sleep for ~10 FPS
+            frame_end = time.time()
+            sleep_time = 0.1 - (frame_end - frame_start)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            
+            frame_count += 1
             
     except KeyboardInterrupt:
         print("\nCapture stopped by user")
     except Exception as e:
         print(f"Error: {e}")
     finally:
-        # Turn off LED and restore terminal
+        # Cleanup
         if hasattr(trackir, 'device'):
             trackir.send_command([TIR_LED_MSGID, 0x00, 0xFF])  # Turn off all LEDs
-            print("\033[?25h", end='')  # Show cursor
             usb.util.dispose_resources(trackir.device)
+        cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()
