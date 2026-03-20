@@ -1,22 +1,22 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`trackir.py` hosts the `TrackIR` class plus USB helpers and is the entry point for all runs. `pyproject.toml`, `uv.lock`, and `.python-version` pin the environment; update them together when adding dependencies. `WARP.md` holds reverse-engineering notes, while `linuxtrack/` is an optional reference submodule—keep it clean or document how to sync it in your PR. There is no `tests/` tree yet, so place any exploratory scripts next to the main module and mark them clearly.
+`trackir.py` is the main entry point and currently contains the `TrackIR` class, USB protocol logic, and the OpenCV loop. Project metadata lives in `pyproject.toml`, `uv.lock`, and `.python-version`. `linuxtrack/`, `CameraSDK/`, and `TrackIR_SDK_Small_Samples_2.0/` are reference materials for protocol research; avoid casual edits there and explain any updates in your PR. Notes and project context live in `README.md`, `CLAUDE.md`, and `WARP.md`.
 
 ## Build, Test, and Development Commands
-- `uv sync` — install the locked dependency set into a local environment.
-- `uv run python trackir.py` — start the camera session with OpenCV visualization (press `q` to exit).
-- `python trackir.py` — fallback when uv is unavailable; confirm you are on Python 3.12.
-- `system_profiler SPUSBDataType | grep -A5 -i naturalpoint` (macOS) / `lsusb | grep -i naturalpoint` (Linux) — verify the device before debugging USB errors.
+- `uv sync` installs the pinned Python 3.12 environment.
+- `uv run python trackir.py` starts the camera interface and OpenCV visualization.
+- `python trackir.py` is the fallback when `uv` is unavailable.
+- `system_profiler SPUSBDataType | grep -A5 -i naturalpoint` on macOS or `lsusb | grep -i naturalpoint` on Linux confirms the device is visible before debugging.
 
 ## Coding Style & Naming Conventions
-Stick to idiomatic Python: four-space indentation, descriptive lowercase_with_underscores names, and uppercase constants for USB IDs. Continue adding type hints, especially around byte buffers and command tables, so hardware interactions stay readable. Keep logging lightweight—use helper functions if you need to print structured USB traces.
+Follow standard Python style: four-space indentation, `snake_case` for functions and variables, `PascalCase` for classes, and uppercase names for USB constants and bit masks. Keep hardware-facing code explicit and readable; small helper functions are preferred over deeply nested inline parsing. No formatter or linter is committed yet, so keep changes PEP 8-friendly and avoid unrelated style churn.
 
 ## Testing Guidelines
-Hardware runs are the acceptance test: connect a TrackIR unit, execute `uv run python trackir.py`, and confirm init logs, LED activity, and frame counts. Capture a short console excerpt or screenshot when filing issues. For pure parsing helpers, add quick unit-style functions that can run without hardware and document expected byte sequences inline.
+There is no formal automated test suite yet. The primary verification flow is a hardware smoke test: connect a TrackIR unit, run `uv run python trackir.py`, and confirm initialization logs, LED activation, packet flow, and clean shutdown with `q`. If you extract hardware-independent parsing logic, add focused unit tests under a new `tests/` directory and use descriptive names such as `test_parse_packet_handles_extended_vline`.
 
 ## Commit & Pull Request Guidelines
-Recent history favors concise, present-tense subjects (“Update README.md for hardware setup”); follow that format and add focused body bullets when context is needed. Reference issue IDs or hardware variations touched in the change. Pull requests should outline manual test steps, include relevant logs or imagery, and call out dependency or permission adjustments so reviewers can reproduce results.
+Recent commits use short, imperative subjects such as `Enhance frame processing and visualization in TrackIR`. Keep commits focused and atomic. Pull requests should summarize the protocol or visualization change, list manual test steps, note the exact hardware or OS used, and attach logs or screenshots when behavior changes are visible.
 
 ## Hardware & Permissions Notes
-The code detaches kernel drivers when needed; run with adequate permissions (Linux may require `sudo`) and clean up with `usb.util.dispose_resources()` if you add teardown logic. Prefer direct USB connections over hubs during protocol work, and document any alternate vendor/product IDs encountered so detection stays accurate.
+USB access is the main operational risk. Use a direct USB connection, ensure the NaturalPoint software is not holding the device, and call out any permission requirements such as `sudo` on macOS or `plugdev` membership on Linux when documenting repro steps.

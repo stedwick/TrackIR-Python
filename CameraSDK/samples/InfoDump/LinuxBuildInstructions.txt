@@ -1,0 +1,18 @@
+1. Install cmake and libjpeg
+    ubuntu: sudo apt update && sudo apt install -y libjpeg-dev cmake
+    fedora: sudo dnf update && sudo dnf install libjpeg-turbo-devel cmake
+
+2. Run build the executable with the camerasdk path as the first argument
+    (Note, you may have to make the shell script runnable. Example: `chmod +x linuxBuild.sh`)
+    
+    ./linuxBuild.sh <Path-to-camera-sdk-path>
+    
+    Normally this will be a directory two levels up
+    Example: ./linuxBuild.sh ../../
+
+3. Set your network port used for your camera system to use link local only 
+    Settings -> Network -> Wired Settings (port for cameras) -> IPv4 -> Ipv4Method
+        Set to Link-Local Only 
+
+4. Run the executable 
+    ./build/InfoDump
