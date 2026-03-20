@@ -6,7 +6,7 @@ A Python implementation for reverse engineering the TrackIR protocol to read cam
 
 This project aims to provide an open-source alternative to NaturalPoint's TrackIR software by directly interfacing with TrackIR hardware via USB communication. The implementation is based on reverse engineering efforts and references the LinuxTrack open-source project.
 
-**Current Status**: Experimental - Successfully initializes the camera, controls LEDs, and receives binary data streams. Image format decoding and tracking algorithms are in active development.
+**Current Status**: Experimental but working for TrackIR 5 TIR5V3 hardware. The active Python path initializes the camera, turns on the LEDs, decodes the compressed stripe stream, previews the detected blob, and computes its centroid.
 
 ## ✨ Features
 
@@ -33,8 +33,9 @@ This project aims to provide an open-source alternative to NaturalPoint's TrackI
 
 ### Supported Hardware
 
-- **Vendor ID**: 0x131d (NaturalPoint)
-- **Product ID**: 0x0155 (TrackIR)
+- **Verified Vendor ID**: 0x131d (NaturalPoint)
+- **Verified Product ID**: 0x0159 (TrackIR 5 / TIR5V3 path)
+- Older TrackIR experiments are archived under `z_old-v1-research/`
 
 ## 🚀 Quick Start
 
@@ -49,7 +50,7 @@ This project aims to provide an open-source alternative to NaturalPoint's TrackI
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/TrackIR-Python.git
-cd TrackIR-Python
+cd TrackIR-Python/python-v2
 
 # Install dependencies using uv (recommended)
 uv sync
@@ -62,6 +63,7 @@ pip install opencv-python pyusb
 
 ```bash
 # Start the current TIR5V3 preview workflow
+cd python-v2
 uv run python trackir_tir5v3.py preview
 ```
 
@@ -77,29 +79,34 @@ The application will:
 
 ```
 TrackIR-Python/
-├── trackir.py          # Main TrackIR class and protocol implementation
-├── pyproject.toml      # Project configuration and dependencies
-├── uv.lock            # Locked dependency versions
-├── .python-version    # Python version specification (3.12)
+├── python-v2/         # Active TIR5V3 Python implementation
+│   ├── trackir_tir5v3.py
+│   ├── tir5v3.py
+│   ├── tests/
+│   ├── pyproject.toml
+│   ├── uv.lock
+│   └── .python-version
+├── z_old-v1-research/ # Archived v1 experiments, SDKs, notes, and references
 ├── .gitmodules        # Git submodule configuration
-├── linuxtrack/        # LinuxTrack reference implementation (submodule)
-├── WARP.md           # Development documentation for WARP
-└── README.md         # This file
+├── README.md          # Root project documentation
+└── AGENTS.md          # Contributor guidelines
 ```
 
 ## 🔧 Core Architecture
 
-### TrackIR Class
+### Active Modules
 
-The main `TrackIR` class handles all hardware interaction:
+- `python-v2/tir5v3.py` handles USB transport, device initialization, packet extraction, and stripe parsing.
+- `python-v2/trackir_tir5v3.py` provides the interactive `identify`, `dump`, and `preview` workflows.
+- `python-v2/tests/test_tir5v3.py` covers pure parsing helpers and centroid math.
 
-#### Key Components
+#### Packet Flow
 
-- **USB Device Management**: Device discovery, endpoint configuration, kernel driver handling
-- **Protocol Implementation**: Command sequences based on LinuxTrack reverse engineering
-- **Data Streaming**: Real-time frame capture and parsing
-- **LED Control**: IR and status LED management
-- **Visualization**: ASCII art and OpenCV-based display
+- **Device Initialization**: Claim the `131d:0159` device, negotiate the TIR5V3 transport, and enable the LEDs.
+- **Stream Reassembly**: Recover complete packets from arbitrarily split USB bulk reads.
+- **Type-5 Stripe Parsing**: Decode the compressed stripe payload into horizontal hits.
+- **Centroid Calculation**: Convert stripe sums into a weighted blob `x,y` position.
+- **Preview Rendering**: Draw the stripes and centroid overlay in OpenCV.
 
 #### USB Communication Flow
 
@@ -111,12 +118,7 @@ The main `TrackIR` class handles all hardware interaction:
 
 ### Data Format
 
-Based on reverse engineering, the TrackIR uses this data structure:
-
-- **4-byte packets**: `[vline, hstart, hstop, delimiter]`
-- **vline**: Vertical line number (0-95, with extension bit for values > 255)
-- **hstart/hstop**: Horizontal pixel start/end positions for detected features
-- **delimiter**: Control byte with extension flags
+The verified TIR5V3 path does not emit simple grayscale frames. It emits compressed type-5 stripe packets that describe bright hits in the sensor image. The preview reconstructs those stripes into a sparse image and computes the blob centroid from the packet payload.
 
 ## 🔍 Development
 
@@ -124,6 +126,7 @@ Based on reverse engineering, the TrackIR uses this data structure:
 
 ```bash
 # Syntax and import-time compile check
+cd python-v2
 uv run python -m py_compile tir5v3.py trackir_tir5v3.py tests/test_tir5v3.py
 
 # Unit tests for hardware-independent parsing logic
@@ -147,26 +150,22 @@ The implementation includes comprehensive logging:
 
 ### Protocol Reference
 
-Commands are based on LinuxTrack's implementation:
+The active TIR5V3 commands are based on `z_old-v1-research/linuxtrack` and observed device behavior:
 
 ```python
-# Example initialization sequence
-init_sequence = [
-    [0x12],           # Request version
-    [0x14, 0x01],     # Initialize
-    [0x14, 0x02],     # Start streaming
-    [0x10, 0x02],     # Set data format
-    [0x11, 0x80],     # Set exposure
-    # ... more commands
-]
+# High-level stages
+identify_device()
+wait_for_firmware_ready()
+start_streaming()
+decode_type_5_packets()
 ```
 
 ### Visualization Pipeline
 
-1. **Data Collection**: Read 4-byte USB packets in real-time
-2. **Coordinate Mapping**: Convert packet data to pixel coordinates
-3. **Image Generation**: Create OpenCV image with detected features
-4. **Display**: Real-time window with FPS counter and scaling
+1. **Data Collection**: Read USB bulk packets in real-time.
+2. **Packet Recovery**: Resynchronize on valid TIR5V3 packet headers.
+3. **Stripe Rendering**: Convert type-5 stripes into a sparse preview image.
+4. **Display**: Draw the centroid overlay and packet stats in OpenCV.
 
 ## 🐛 Troubleshooting
 
@@ -177,7 +176,7 @@ init_sequence = [
 lsusb                           # Linux
 system_profiler SPUSBDataType  # macOS
 
-# Verify vendor/product ID (should be 131d:0155)
+# Verify vendor/product ID (currently verified path is 131d:0159)
 # Try different USB ports
 # Ensure TrackIR software is not running
 ```
@@ -189,7 +188,7 @@ system_profiler SPUSBDataType  # macOS
 sudo usermod -a -G plugdev $USER  # Then logout/login
 
 # macOS: May require elevated permissions
-sudo python trackir.py
+cd python-v2 && sudo python trackir_tir5v3.py preview
 ```
 
 ### No Data Reception
@@ -203,10 +202,10 @@ sudo python trackir.py
 
 This project is experimental and welcomes contributions:
 
-1. **Protocol Analysis**: Help decode the binary data format
-2. **Tracking Algorithms**: Implement head tracking from raw data
-3. **Cross-platform Support**: Test and fix platform-specific issues
-4. **Documentation**: Improve setup guides and troubleshooting
+1. **Protocol Analysis**: Compare new device behavior against the archived SDK and `linuxtrack` references.
+2. **Tracking Algorithms**: Improve centroid smoothing and higher-level cursor control.
+3. **Cross-platform Support**: Test and fix platform-specific USB behavior.
+4. **Documentation**: Improve setup guides and troubleshooting.
 
 ### Development Workflow
 
@@ -214,6 +213,7 @@ This project is experimental and welcomes contributions:
 # Make changes
 
 # Run the fast compile check
+cd python-v2
 uv run python -m py_compile tir5v3.py trackir_tir5v3.py tests/test_tir5v3.py
 
 # Run unit tests
