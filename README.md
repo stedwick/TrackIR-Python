@@ -61,8 +61,8 @@ pip install opencv-python pyusb
 ### Running the Application
 
 ```bash
-# Start the TrackIR interface
-python trackir.py
+# Start the current TIR5V3 preview workflow
+uv run python trackir_tir5v3.py preview
 ```
 
 The application will:
@@ -119,6 +119,22 @@ Based on reverse engineering, the TrackIR uses this data structure:
 - **delimiter**: Control byte with extension flags
 
 ## 🔍 Development
+
+### Fast Validation Commands
+
+```bash
+# Syntax and import-time compile check
+uv run python -m py_compile tir5v3.py trackir_tir5v3.py tests/test_tir5v3.py
+
+# Unit tests for hardware-independent parsing logic
+uv run python -m unittest discover -s tests
+```
+
+`py_compile` is a quick way to catch syntax and indentation problems without running the hardware workflow.
+
+### uv Workflow Notes
+
+`uv` does not have a direct `package.json`-style arbitrary `scripts` section. The closest built-in option is `[project.scripts]` in `pyproject.toml`, which is good for Python entry points. For development recipes like tests, compile checks, and preview runs, prefer explicit `uv run ...` commands, or add a lightweight task runner such as `make` or `just` if the command list grows.
 
 ### USB Communication Debugging
 
@@ -195,13 +211,19 @@ This project is experimental and welcomes contributions:
 ### Development Workflow
 
 ```bash
-# Make changes to trackir.py
-# Test with hardware
-python trackir.py
+# Make changes
 
-# Monitor USB communication via print statements
-# Adjust protocol commands based on results
+# Run the fast compile check
+uv run python -m py_compile tir5v3.py trackir_tir5v3.py tests/test_tir5v3.py
+
+# Run unit tests
+uv run python -m unittest discover -s tests
+
+# Test with hardware
+uv run python trackir_tir5v3.py preview
 ```
+
+When writing Python, prefer complete type hints for public helpers and new parsing logic: annotate parameters, return values, dataclass fields, collections, and optional values wherever practical.
 
 ## 📚 References
 
@@ -220,32 +242,3 @@ This project is open source. Please check the license file for details.
 ---
 
 **Note**: This project was developed with AI assistance using Cursor. The implementation represents early-stage reverse engineering work and is actively being developed.
-
-# Repository Guidelines
-
-## Project Structure & Module Organization
-
-`trackir.py` hosts the `TrackIR` class plus USB helpers and is the entry point for all runs. `pyproject.toml`, `uv.lock`, and `.python-version` pin the environment; update them together when adding dependencies. `WARP.md` holds reverse-engineering notes, while `linuxtrack/` is an optional reference submodule—keep it clean or document how to sync it in your PR. There is no `tests/` tree yet, so place any exploratory scripts next to the main module and mark them clearly.
-
-## Build, Test, and Development Commands
-
-- `uv sync` — install the locked dependency set into a local environment.
-- `uv run python trackir.py` — start the camera session with OpenCV visualization (press `q` to exit).
-- `python trackir.py` — fallback when uv is unavailable; confirm you are on Python 3.12.
-- `system_profiler SPUSBDataType | grep -A5 -i naturalpoint` (macOS) / `lsusb | grep -i naturalpoint` (Linux) — verify the device before debugging USB errors.
-
-## Coding Style & Naming Conventions
-
-Stick to idiomatic Python: four-space indentation, descriptive lowercase_with_underscores names, and uppercase constants for USB IDs. Continue adding type hints, especially around byte buffers and command tables, so hardware interactions stay readable. Keep logging lightweight—use helper functions if you need to print structured USB traces.
-
-## Testing Guidelines
-
-Hardware runs are the acceptance test: connect a TrackIR unit, execute `uv run python trackir.py`, and confirm init logs, LED activity, and frame counts. Capture a short console excerpt or screenshot when filing issues. For pure parsing helpers, add quick unit-style functions that can run without hardware and document expected byte sequences inline.
-
-## Commit & Pull Request Guidelines
-
-Recent history favors concise, present-tense subjects (“Update README.md for hardware setup”); follow that format and add focused body bullets when context is needed. Reference issue IDs or hardware variations touched in the change. Pull requests should outline manual test steps, include relevant logs or imagery, and call out dependency or permission adjustments so reviewers can reproduce results.
-
-## Hardware & Permissions Notes
-
-The code detaches kernel drivers when needed; run with adequate permissions (Linux may require `sudo`) and clean up with `usb.util.dispose_resources()` if you add teardown logic. Prefer direct USB connections over hubs during protocol work, and document any alternate vendor/product IDs encountered so detection stays accurate.
