@@ -9,6 +9,7 @@ from tir5v3 import (
     decode_tir5v3_stripe,
     extract_tir5v3_packets,
     parse_tir5v3_packet,
+    shutdown_steps,
 )
 from trackir_tir5v3 import empty_frame_stats
 
@@ -120,6 +121,11 @@ class TIR5V3Tests(unittest.TestCase):
         self.assertIsNotNone(centroid)
         self.assertAlmostEqual(centroid[0], 14.8)
         self.assertAlmostEqual(centroid[1], 4.8)
+
+    def test_shutdown_steps_turns_led_off_even_without_streaming(self) -> None:
+        steps = shutdown_steps(is_streaming=False, ir_led_enabled=True)
+
+        self.assertEqual(steps, (("intent_4", (0x19, 0x09, 0x00, 0x00)),))
 
 
 if __name__ == "__main__":

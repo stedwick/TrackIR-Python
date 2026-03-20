@@ -54,6 +54,9 @@ class TIR5V3Packet:
         return not self.stripes
 
 
+ShutdownStep = tuple[str, tuple[int, ...]]
+
+
 def apply_tir5v3_transport(packet: Sequence[int], r1: int) -> bytes:
     if len(packet) != 24:
         raise ValueError("TIR5V3 transport packets must be 24 bytes")
@@ -222,6 +225,18 @@ def compute_weighted_centroid(stripes: Sequence[TIR5V3Stripe]) -> tuple[float, f
     return (sum_x / total_weight, sum_y / total_weight)
 
 
+def shutdown_steps(*, is_streaming: bool, ir_led_enabled: bool) -> tuple[ShutdownStep, ...]:
+    steps: list[ShutdownStep] = []
+    if is_streaming:
+        steps.append(("intent_2", (0x1A, 0x05)))
+    if ir_led_enabled:
+        steps.append(("intent_4", (0x19, 0x09, 0x00, 0x00)))
+    if is_streaming:
+        steps.append(("intent_2", (0x1A, 0x06)))
+        steps.append(("intent_1", (0x13,)))
+    return tuple(steps)
+
+
 def default_log_path(mode: str) -> Path:
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     return Path("tmp/logs") / f"tir5v3-{mode}-{timestamp}.log"
@@ -247,6 +262,8 @@ class TrackIRTIR5V3:
         self.device = None
         self.ep_in = None
         self.ep_out = None
+        self.ir_led_enabled = False
+        self.is_streaming = False
 
     def open(self) -> None:
         self.device = usb.core.find(idVendor=self.vendor_id, idProduct=self.product_id)
@@ -268,13 +285,25 @@ class TrackIRTIR5V3:
 
         if self.ep_out is None or self.ep_in is None:
             raise ValueError("Could not find TrackIR TIR5V3 bulk endpoints")
+        self.ir_led_enabled = False
+        self.is_streaming = False
 
     def close(self) -> None:
         if self.device is not None:
-            usb.util.dispose_resources(self.device)
-            self.device = None
-            self.ep_in = None
-            self.ep_out = None
+            try:
+                self._apply_shutdown_steps(
+                    shutdown_steps(
+                        is_streaming=self.is_streaming,
+                        ir_led_enabled=self.ir_led_enabled,
+                    )
+                )
+            finally:
+                usb.util.dispose_resources(self.device)
+                self.device = None
+                self.ep_in = None
+                self.ep_out = None
+                self.ir_led_enabled = False
+                self.is_streaming = False
 
     def device_summary(self) -> dict[str, int]:
         if self.device is None or self.ep_in is None or self.ep_out is None:
@@ -318,12 +347,16 @@ class TrackIRTIR5V3:
         self._send_intent_4(0x19, 0x03, 0x00, 0x05)
         self._send_intent_2(0x1A, 0x04)
         self.set_ir_led(True)
+        self.is_streaming = True
 
     def stop_streaming(self) -> None:
-        self._send_intent_2(0x1A, 0x05)
-        self.set_ir_led(False)
-        self._send_intent_2(0x1A, 0x06)
-        self._send_intent_1(0x13)
+        self._apply_shutdown_steps(
+            shutdown_steps(
+                is_streaming=self.is_streaming,
+                ir_led_enabled=self.ir_led_enabled,
+            )
+        )
+        self.is_streaming = False
 
     def read_status(self) -> TIR5V3Status:
         self._send_intent_2(0x1A, 0x07)
@@ -359,6 +392,7 @@ class TrackIRTIR5V3:
 
     def set_ir_led(self, enabled: bool) -> None:
         self._send_intent_4(0x19, 0x09, 0x00, 0x01 if enabled else 0x00)
+        self.ir_led_enabled = enabled
 
     def set_ir_brightness_raw(self, brightness: int) -> None:
         self._send_intent_4(0x23, 0x35, 0x02, brightness & 0xFF)
@@ -411,6 +445,19 @@ class TrackIRTIR5V3:
         if high <= low:
             return high
         return low + self.rng.randrange(high - low + 1)
+
+    def _apply_shutdown_steps(self, steps: Sequence[ShutdownStep]) -> None:
+        for action, payload in steps:
+            if action == "intent_1":
+                self._send_intent_1(payload[0])
+            elif action == "intent_2":
+                self._send_intent_2(payload[0], payload[1])
+            elif action == "intent_4":
+                self._send_intent_4(payload[0], payload[1], payload[2], payload[3])
+                if payload[:3] == (0x19, 0x09, 0x00):
+                    self.ir_led_enabled = payload[3] != 0
+            else:
+                raise ValueError(f"Unsupported shutdown action: {action}")
 
 
 def _find_next_packet_start(data: bytes) -> int:

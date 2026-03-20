@@ -89,6 +89,33 @@ Only after the Swift parser matches Python behavior:
 
 This is the highest-risk part and should not be the first milestone.
 
+### Phase 6: Long-Term Cross-Platform Core in C
+
+After the Python and Swift behavior are well understood, the long-term direction is to move the hardware and parsing core into C so it is not tied to Swift or Apple platforms.
+
+Recommended scope for the C layer:
+
+- device open / close
+- LED control
+- stream start / stop
+- packet extraction
+- stripe decoding
+- centroid calculation
+
+Recommended architecture:
+
+- `C core` for hardware and parsing
+- `SwiftUI macOS app` as one frontend
+- optional `Python bindings` for debugging and regression testing
+- optional future Windows / Linux frontends
+
+Important constraint:
+
+- do not rewrite everything in C first
+- keep `python-v2/` as the oracle until the C implementation matches it
+- port pure parsing logic before porting USB transport
+- keep UI concerns out of the C layer
+
 ## Working Principle
 
 Use Xcode where Apple tooling is strongest. Use Codex for most coding, refactoring, testing, and iteration. Keep changes incremental and keep `python-v2/` as the validation reference until the native path fully replaces it.
