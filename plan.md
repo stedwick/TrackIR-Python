@@ -1,44 +1,61 @@
-Goal: Reverse engineer the TrackIR USB data stream well enough to assemble and display grayscale camera frames in real time using Python.
+Goal: get to a reliable single-blob `x,y` signal with the smallest possible amount of reverse engineering.
 
-Acquisition & Protocol Recon
-- Inventory current capture flow in `trackir.py` to document how `read_data` and `read_frame` operate, noting packet size assumptions, timeout handling, and the partial parsing already implemented around 4-byte tuples.
-- Survey `linuxtrack/` (especially any `tir4` or `sensors` sources) plus `WARP.md` for hardcoded resolutions, endpoint IDs, LED commands, and any comments about sensor formats; jot down candidate packet headers, known control messages, and frame dimensions they expect.
-- Capture multiple raw USB payloads (hex dumps already printed by `read_data`) into timestamped logs so we can diff patterns across frames, look for recurring headers, line numbers, and payload lengths.
-- Map out device control flow: order of initialization commands, expected ACKs, and when streaming truly begins; confirm whether extra configuration (exposure/gain) influences payload length.
+What the research says
+- The official TrackIR SDK is not a raw camera SDK. It only exposes processed head-pose data through `NPClient`, so it is useful for validation but not for pulling frames from the camera.
+- `linuxtrack/src/tir_img.c` already supports multiple wire formats:
+  - TIR3/TIR4 style stripe packets, where each record is a bright run on one scanline.
+  - TIR5 style stripe packets, where each record is an 8-byte compressed bright run.
+  - One packet type is commented as “most probably B/W data from camera without any preprocessing”.
+- `trackir.py` currently assumes a TIR4-like stripe format and a `128x96` display. That is almost certainly not ground truth.
+- `trackir.py` hardcodes `0x131d:0x0155`. In `linuxtrack/src/libusb_ifc.c`, `0x0155` maps to a TIR3-era branch, not TIR5. That branch uses output endpoint `0x02` and `Video_on = {0x14, 0x00}`.
 
-Frame Structure Hypothesis
-- Based on collected dumps, propose the sensor resolution (e.g., 320×240 vs. 160×120) and pixel depth (likely 8-bit grayscale); align this with Linuxtrack constants if available.
-- Identify packet header bytes (first 2 bytes currently skipped), meaning of vertical line counter (`vline`), and any bit flags (e.g., 0x20 for high bit) to determine per-line packet sequencing.
-- Determine how many packets constitute a full frame by tracking when `vline` resets or monotonically increases; record expected line count range and per-line payload length.
-- Investigate remaining bytes in each 4-byte tuple: infer whether they represent intensity values, x/y coordinates, or raw pixel run data; catalog multiple hypotheses to validate experimentally.
-- Check for frame-level markers (frame ID, checksum) by inspecting bytes preceding reset of `vline`; prepare to validate once decoding loop runs.
+Working hypothesis
+- The bytes you are already receiving may not be “bad image data”. They may already be the device’s thresholded stripe/blob stream.
+- If that is true, raw grayscale frames are optional. For a single reflective sticker, stripe data is enough to compute centroid `x,y`.
+- Before doing any new decoding work, we need to verify the actual hardware identity, endpoint layout, and packet type on your Mac.
 
-Parsing Strategy
-- Define a buffer manager that accumulates incoming USB transfers (`ep_in.read`) into a deque or bytearray, tagging each packet with arrival timestamp for debugging.
-- Construct a state machine: `SEARCH_HEADER` (scan for recognizable frame start), `ACCUMULATE_LINES` (append per-line payloads), `FRAME_COMPLETE` (trigger downstream processing), and `DESYNC` (if unexpected header/line jump).
-- Establish rules for packet acceptance: verify ascending `vline`, enforce max gap tolerance, and discard or log packets that violate sequence.
-- Plan logic to reconstruct the full 2D array: map each line’s payload to a row in a NumPy array, applying any necessary bit unpacking if pixels are packed (e.g., 1-bit monochrome).
-- Include resilience features: timeout handler that resets to `SEARCH_HEADER`, counters for dropped frames, and structured logs summarizing anomalies for later review.
+Phase 1: establish ground truth
+1. Verify the device identity from macOS and from the existing Python script output.
+2. Capture one logged run of the current script while intentionally moving a single reflector left, right, up, and down.
+3. Decide whether the current stream is:
+   - stripe data we can use now, or
+   - raw-ish grayscale data that needs a different parser, or
+   - garbage caused by using the wrong endpoint / wrong model family.
 
-Data Interpretation Experiments
-- After first pass assembly, run diagnostic transforms on the image buffer: compute min/max/mean intensity, histogram of pixel values, and visualize binary masks to confirm dynamic range.
-- If raw bytes appear packed bits, implement a test routine to unpack each byte into 8 pixels and visualize; likewise test for 5- or 6-bit values if histogram suggests limited range.
-- Compare reconstructed frames to expected patterns (e.g., LED blob) and adjust mapping (endianess, row order, column stride) until alignment matches manual observations.
-- Cross-reference with Linuxtrack functions to verify scaling factors, coordinate systems, or calibration constants.
+Run this first
+```bash
+system_profiler SPUSBDataType | sed -n '/NaturalPoint/,+20p'
+mkdir -p tmp/logs
+uv run python trackir.py 2>&1 | tee "tmp/logs/trackir-$(date +%Y%m%d-%H%M%S).log"
+```
 
-Real-Time Loop Design
-- Outline main acquisition loop: initialize device, start streaming, discard warm-up frames, then continuously call packet assembler to fetch complete frames.
-- Insert periodic status prints (frame rate, dropped packet count, current exposure) throttled to once per second to avoid log spam.
-- Implement graceful shutdown triggered by keyboard input (`q` via OpenCV window or terminal) ensuring USB resources released (`usb.util.dispose_resources`).
-- Provide hooks for optional recording: e.g., press `s` to save current frame as PNG for offline analysis.
+While it is running:
+- Use only one reflective point in view.
+- Move it slowly left/right, then up/down.
+- Note whether the OpenCV window follows the motion, looks mirrored, looks vertically scrambled, or shows unrelated static.
+- Tell me the printed endpoints and the log filename.
 
-Visualization Plan
-- Use OpenCV for display: convert assembled NumPy frame to `uint8`, apply `cv2.normalize` or CLAHE if contrast needs stretching, and show via `cv2.imshow` in resizable window (`cv2.WINDOW_NORMAL`).
-- Overlay debug HUD using `cv2.putText` (frame ID, timestamp, FPS, packet stats) for quick instrumentation.
-- Allow toggling visualization modes (raw, thresholded, edge-detected) through keyboard shortcuts to help inspection without code changes.
-- Ensure GUI loop respects USB read rate: use `cv2.waitKey(1)` and decouple processing so display can keep pace with capture.
+Phase 2: classify the wire format
+- If the stream is mostly 4-byte runs with rising line numbers and frame breaks on line reset, treat it as stripe data first.
+- If packets are large and contain a different type marker, compare them against the “raw B/W” candidate path in `linuxtrack/src/tir_img.c`.
+- If the device reports `0x0155`, stop using TIR5 assumptions until proven otherwise.
 
-Verification & Iteration
-- After first working run, log several consecutive frames to disk and inspect manually to confirm stability.
-- Update plan with insights about protocol gaps, and schedule deeper reverse-engineering tasks (e.g., decoding metadata frames 0x10/0x40).
-- Document findings in `WARP.md` (packet structure tables, command meanings) so future work builds on confirmed knowledge before expanding to multi-LED tracking.
+Phase 3: build the minimum useful tool
+- Write one interactive probe script with modes:
+  - `identify`: print VID/PID, endpoints, and guessed model family.
+  - `init`: apply only the minimal model-correct startup sequence.
+  - `dump`: save raw packets to `tmp/logs/`.
+  - `stripe-view`: render stripe data into a debug image.
+  - `raw-view`: attempt grayscale reconstruction if a raw packet type is found.
+  - `centroid`: compute and overlay blob `x,y`.
+
+Phase 4: choose the shortest path to success
+- Fast path: if stripe mode is real, skip raw-image reverse engineering and go straight to centroid extraction.
+- Slow path: only chase raw grayscale if stripe data is unstable, missing, or insufficient for your use case.
+
+Success criteria
+1. LEDs can be turned on repeatably.
+2. Camera streaming can be started repeatably.
+3. One run produces a saved log and a visible response to reflector motion.
+4. We can classify the stream format with confidence.
+5. We can compute one stable blob centroid from that format.
