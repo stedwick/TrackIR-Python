@@ -4,7 +4,7 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 ## Project Overview
 
-TrackIR-Python is a reverse engineering project that attempts to read data directly from TrackIR hardware using Python, bypassing the need for NaturalPoint's proprietary drivers. The project uses USB communication to interface with the TrackIR camera and decode binary image data.
+OpenTrackIR is a reverse engineering project that attempts to read data directly from TrackIR hardware using Python, bypassing the need for NaturalPoint's proprietary drivers. The project uses USB communication to interface with the TrackIR camera and decode binary image data.
 
 **Current Status**: Experimental - Can turn on the camera and receive binary data, but image format decoding is still in progress.
 
@@ -68,7 +68,7 @@ python trackir.py  # Primary testing method
 ## Project Structure
 
 ```
-TrackIR-Python/
+OpenTrackIR/
 ├── trackir.py          # Main module with TrackIR class and protocol implementation
 ├── pyproject.toml      # Project configuration and dependencies
 ├── uv.lock            # Locked dependency versions (uv package manager)

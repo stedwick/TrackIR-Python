@@ -1,4 +1,4 @@
-# TrackIR-Python
+# OpenTrackIR
 
 A Python implementation for reverse engineering the TrackIR protocol to read camera data directly from TrackIR hardware without requiring NaturalPoint's proprietary drivers.
 
@@ -49,8 +49,8 @@ This project aims to provide an open-source alternative to NaturalPoint's TrackI
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/TrackIR-Python.git
-cd TrackIR-Python/python-v2
+git clone git@github.com:stedwick/OpenTrackIR.git
+cd OpenTrackIR/python-v2
 
 # Install dependencies using uv (recommended)
 uv sync
@@ -78,7 +78,7 @@ The application will:
 ## 📁 Project Structure
 
 ```
-TrackIR-Python/
+OpenTrackIR/
 ├── python-v2/         # Active TIR5V3 Python implementation
 │   ├── trackir_tir5v3.py
 │   ├── tir5v3.py

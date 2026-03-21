@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TrackIR-Python is a reverse engineering project that interfaces directly with TrackIR hardware via USB, bypassing NaturalPoint's proprietary drivers. The project reads binary data streams from the camera and visualizes tracking information using OpenCV.
+OpenTrackIR is a reverse engineering project that interfaces directly with TrackIR hardware via USB, bypassing NaturalPoint's proprietary drivers. The project reads binary data streams from the camera and visualizes tracking information using OpenCV.
 
 **Status**: Experimental - Camera initialization, LED control, and data streaming work; image decoding and tracking algorithms are in active development.
 
