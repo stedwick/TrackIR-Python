@@ -1,0 +1,239 @@
+#include "opentrackir/tir5.h"
+
+#include <assert.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+
+static void make_type5_packet(uint8_t packet_no, const uint8_t *payload, size_t payload_size, uint8_t *out_packet, size_t *out_length);
+static void encode_tir5v3_stripe(
+    int hstart,
+    int vline,
+    int points,
+    int sum_x,
+    int stripe_sum,
+    uint8_t encoded[8]
+);
+
+static void test_apply_transport_obfuscates_header_and_nonce(void);
+static void test_parse_status_reads_stage_fields(void);
+static void test_stream_parser_recovers_split_packets(void);
+static void test_stream_parser_resyncs_after_bad_leading_header(void);
+static void test_parse_packet_handles_empty_type5_packet(void);
+static void test_parse_packet_decodes_type5_stripe(void);
+static void test_compute_weighted_centroid_matches_linuxtrack_formula(void);
+static void test_shutdown_steps_turns_led_off_even_without_streaming(void);
+static void test_build_frame_marks_stripes_and_stats(void);
+
+int main(void) {
+    test_apply_transport_obfuscates_header_and_nonce();
+    test_parse_status_reads_stage_fields();
+    test_stream_parser_recovers_split_packets();
+    test_stream_parser_resyncs_after_bad_leading_header();
+    test_parse_packet_handles_empty_type5_packet();
+    test_parse_packet_decodes_type5_stripe();
+    test_compute_weighted_centroid_matches_linuxtrack_formula();
+    test_shutdown_steps_turns_led_off_even_without_streaming();
+    test_build_frame_marks_stripes_and_stats();
+    puts("c/tests/test_tir5: all tests passed");
+    return 0;
+}
+
+static void make_type5_packet(uint8_t packet_no, const uint8_t *payload, size_t payload_size, uint8_t *out_packet, size_t *out_length) {
+    out_packet[0] = packet_no;
+    out_packet[1] = 0x10;
+    out_packet[2] = 0x05;
+    out_packet[3] = (uint8_t)(packet_no ^ 0x10U ^ 0x05U ^ 0xAAU);
+    if (payload_size > 0) {
+        memcpy(out_packet + 4, payload, payload_size);
+    }
+    out_packet[4 + payload_size] = (uint8_t)((payload_size >> 24) & 0xFFU);
+    out_packet[5 + payload_size] = (uint8_t)((payload_size >> 16) & 0xFFU);
+    out_packet[6 + payload_size] = (uint8_t)((payload_size >> 8) & 0xFFU);
+    out_packet[7 + payload_size] = (uint8_t)(payload_size & 0xFFU);
+    *out_length = payload_size + 8;
+}
+
+static void encode_tir5v3_stripe(
+    int hstart,
+    int vline,
+    int points,
+    int sum_x,
+    int stripe_sum,
+    uint8_t encoded[8]
+) {
+    encoded[0] = (uint8_t)((hstart >> 2) & 0xFF);
+    encoded[1] = (uint8_t)(((hstart & 0x03) << 6) | ((vline >> 3) & 0x3F));
+    encoded[2] = (uint8_t)(((vline & 0x07) << 5) | ((points >> 5) & 0x1F));
+    encoded[3] = (uint8_t)(((points & 0x1F) << 3) | ((sum_x >> 17) & 0x07));
+    encoded[4] = (uint8_t)((sum_x >> 9) & 0xFF);
+    encoded[5] = (uint8_t)((sum_x >> 1) & 0xFF);
+    encoded[6] = (uint8_t)(((sum_x & 0x01) << 7) | ((stripe_sum >> 8) & 0x7F));
+    encoded[7] = (uint8_t)(stripe_sum & 0xFF);
+}
+
+static void test_apply_transport_obfuscates_header_and_nonce(void) {
+    uint8_t packet[24];
+    uint8_t encoded[24];
+    size_t index;
+
+    for (index = 0; index < sizeof(packet); ++index) {
+        packet[index] = (uint8_t)index;
+    }
+
+    assert(otir_tir5v3_apply_transport(packet, 0xAB, encoded) == OTIR_STATUS_OK);
+    assert(encoded[0] == (uint8_t)(packet[0] ^ 0x69U ^ packet[0x0A] ^ packet[0x0B]));
+    assert(encoded[17] == 0xAB);
+    assert(memcmp(encoded + 1, packet + 1, 16) == 0);
+    assert(memcmp(encoded + 18, packet + 18, 6) == 0);
+}
+
+static void test_parse_status_reads_stage_fields(void) {
+    uint8_t packet[] = {0x07, 0x20, 0x02, 0x01, 0x7F, 0xAA, 0x55};
+    otir_tir5v3_status status;
+
+    assert(otir_tir5v3_parse_status(packet, sizeof(packet), &status) == OTIR_STATUS_OK);
+    assert(status.length == 0x07);
+    assert(status.message_id == 0x20);
+    assert(status.stage == 0x02);
+    assert(status.firmware_loaded);
+    assert(status.status_flag == 0x7F);
+    assert(status.checksum_hi == 0xAA);
+    assert(status.checksum_lo == 0x55);
+}
+
+static void test_stream_parser_recovers_split_packets(void) {
+    uint8_t packet_one[8];
+    uint8_t packet_two[8];
+    uint8_t raw_packet[16];
+    size_t packet_one_length = 0;
+    size_t packet_two_length = 0;
+    size_t raw_length = 0;
+    size_t packet_length = 0;
+    otir_tir5v3_stream_parser parser;
+
+    make_type5_packet(0x11, NULL, 0, packet_one, &packet_one_length);
+    make_type5_packet(0x12, NULL, 0, packet_two, &packet_two_length);
+
+    otir_tir5v3_stream_parser_init(&parser);
+    raw_packet[0] = 0xFF;
+    raw_packet[1] = 0x00;
+    memcpy(raw_packet + 2, packet_one, packet_one_length);
+    memcpy(raw_packet + 2 + packet_one_length, packet_two, 3);
+    raw_length = 2 + packet_one_length + 3;
+
+    assert(otir_tir5v3_stream_parser_push(&parser, raw_packet, raw_length) == OTIR_STATUS_OK);
+    assert(otir_tir5v3_stream_parser_next_packet(&parser, raw_packet, sizeof(raw_packet), &packet_length) == OTIR_STATUS_OK);
+    assert(packet_length == packet_one_length);
+    assert(memcmp(raw_packet, packet_one, packet_one_length) == 0);
+
+    assert(otir_tir5v3_stream_parser_push(&parser, packet_two + 3, packet_two_length - 3) == OTIR_STATUS_OK);
+    assert(otir_tir5v3_stream_parser_next_packet(&parser, raw_packet, sizeof(raw_packet), &packet_length) == OTIR_STATUS_OK);
+    assert(packet_length == packet_two_length);
+    assert(memcmp(raw_packet, packet_two, packet_two_length) == 0);
+}
+
+static void test_stream_parser_resyncs_after_bad_leading_header(void) {
+    const uint8_t corrupted[] = {0x11, 0x10, 0x05, 0xAE, 0x40, 0x4D, 0xE0, 0x58};
+    uint8_t packet[8];
+    uint8_t raw_stream[16];
+    size_t packet_length = 0;
+    size_t raw_length = 0;
+    otir_tir5v3_stream_parser parser;
+
+    make_type5_packet(0x12, NULL, 0, packet, &packet_length);
+    memcpy(raw_stream, corrupted, sizeof(corrupted));
+    memcpy(raw_stream + sizeof(corrupted), packet, packet_length);
+    raw_length = sizeof(corrupted) + packet_length;
+
+    otir_tir5v3_stream_parser_init(&parser);
+    assert(otir_tir5v3_stream_parser_push(&parser, raw_stream, raw_length) == OTIR_STATUS_OK);
+    assert(otir_tir5v3_stream_parser_next_packet(&parser, raw_stream, sizeof(raw_stream), &raw_length) == OTIR_STATUS_OK);
+    assert(raw_length == packet_length);
+    assert(memcmp(raw_stream, packet, packet_length) == 0);
+}
+
+static void test_parse_packet_handles_empty_type5_packet(void) {
+    uint8_t packet[8];
+    size_t packet_length = 0;
+    otir_tir5v3_packet parsed;
+
+    make_type5_packet(0x24, NULL, 0, packet, &packet_length);
+    assert(otir_tir5v3_parse_packet(packet, packet_length, &parsed) == OTIR_STATUS_OK);
+    assert(parsed.packet_no == 0x24);
+    assert(parsed.packet_type == 0x05);
+    assert(parsed.payload_size == 0);
+    assert(parsed.stripe_count == 0);
+}
+
+static void test_parse_packet_decodes_type5_stripe(void) {
+    uint8_t payload[8];
+    uint8_t packet[16];
+    size_t packet_length = 0;
+    otir_tir5v3_packet parsed;
+
+    encode_tir5v3_stripe(321, 245, 6, 15, 700, payload);
+    make_type5_packet(0x33, payload, sizeof(payload), packet, &packet_length);
+
+    assert(otir_tir5v3_parse_packet(packet, packet_length, &parsed) == OTIR_STATUS_OK);
+    assert(parsed.stripe_count == 1);
+    assert(parsed.stripes[0].hstart == 321);
+    assert(parsed.stripes[0].hstop == 326);
+    assert(parsed.stripes[0].vline == 245);
+    assert(parsed.stripes[0].points == 6);
+    assert(parsed.stripes[0].sum_x == 15);
+    assert(parsed.stripes[0].sum == 700);
+}
+
+static void test_compute_weighted_centroid_matches_linuxtrack_formula(void) {
+    otir_tir5v3_stripe stripes[] = {
+        {.hstart = 10, .hstop = 12, .vline = 4, .points = 3, .sum_x = 3, .sum = 3},
+        {.hstart = 20, .hstop = 21, .vline = 6, .points = 2, .sum_x = 1, .sum = 2},
+    };
+    double centroid_x = 0.0;
+    double centroid_y = 0.0;
+
+    assert(otir_tir5v3_compute_weighted_centroid(stripes, 2, &centroid_x, &centroid_y));
+    assert(fabs(centroid_x - 14.8) < 0.0001);
+    assert(fabs(centroid_y - 4.8) < 0.0001);
+}
+
+static void test_shutdown_steps_turns_led_off_even_without_streaming(void) {
+    otir_tir5v3_shutdown_step steps[4];
+    size_t count;
+
+    count = otir_tir5v3_shutdown_steps(false, true, steps, 4);
+    assert(count == 1);
+    assert(steps[0].action == OTIR_TIR5V3_SHUTDOWN_INTENT_4);
+    assert(steps[0].value_count == 4);
+    assert(steps[0].values[0] == 0x19);
+    assert(steps[0].values[1] == 0x09);
+    assert(steps[0].values[2] == 0x00);
+    assert(steps[0].values[3] == 0x00);
+}
+
+static void test_build_frame_marks_stripes_and_stats(void) {
+    otir_tir5v3_packet packet;
+    otir_tir5v3_frame_stats stats;
+    uint8_t frame[OTIR_TIR5V3_FRAME_HEIGHT][OTIR_TIR5V3_FRAME_WIDTH];
+
+    memset(&packet, 0, sizeof(packet));
+    packet.packet_type = 0x05;
+    packet.packet_no = 0x44;
+    packet.stripe_count = 2;
+    packet.stripes[0] = (otir_tir5v3_stripe){.hstart = 2, .hstop = 4, .vline = 1, .points = 3, .sum_x = 3, .sum = 300};
+    packet.stripes[1] = (otir_tir5v3_stripe){.hstart = 10, .hstop = 11, .vline = 3, .points = 2, .sum_x = 1, .sum = 200};
+
+    otir_tir5v3_build_frame(&packet, &frame[0][0], OTIR_TIR5V3_FRAME_WIDTH);
+    assert(frame[1][2] == 100);
+    assert(frame[1][3] == 100);
+    assert(frame[1][4] == 100);
+    assert(frame[0][0] == 0);
+
+    otir_tir5v3_packet_stats(&packet, 7, &stats);
+    assert(stats.frame_index == 7);
+    assert(stats.packet_type == 0x05);
+    assert(stats.stripe_count == 2);
+    assert(stats.packet_no == 0x44);
+    assert(stats.has_centroid);
+}

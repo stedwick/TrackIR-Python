@@ -1,0 +1,122 @@
+#include <opentrackir/tir5.h>
+
+#include <signal.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+static volatile sig_atomic_t g_stop_requested = 0;
+
+static void handle_signal(int signal_number) {
+    (void)signal_number;
+    g_stop_requested = 1;
+}
+
+static void fail(otir_status status, const char *message) {
+    fprintf(stderr, "%s: %s\n", message, otir_status_string(status));
+    exit(1);
+}
+
+int main(void) {
+    otir_tir5v3_device *device = NULL;
+    otir_tir5v3_status statuses[OTIR_TIR5V3_INIT_STATUS_COUNT];
+    otir_tir5v3_device_summary summary;
+    size_t status_count = 0;
+    uint64_t frame_index = 0;
+    otir_status status;
+
+    signal(SIGINT, handle_signal);
+
+    status = otir_tir5v3_open(&device);
+    if (status != OTIR_STATUS_OK) {
+        fail(status, "Failed to open TrackIR device");
+    }
+
+    status = otir_tir5v3_get_device_summary(device, &summary);
+    if (status != OTIR_STATUS_OK) {
+        otir_tir5v3_close(device);
+        fail(status, "Failed to read device summary");
+    }
+
+    printf(
+        "device %04x:%04x in=0x%02x out=0x%02x max_packet=%u\n",
+        summary.vendor_id,
+        summary.product_id,
+        summary.endpoint_in,
+        summary.endpoint_out,
+        summary.max_packet_size
+    );
+
+    status = otir_tir5v3_initialize(device, statuses, OTIR_TIR5V3_INIT_STATUS_COUNT, &status_count);
+    if (status != OTIR_STATUS_OK) {
+        otir_tir5v3_close(device);
+        fail(status, "Initialization failed");
+    }
+
+    for (size_t index = 0; index < status_count; ++index) {
+        printf(
+            "status[%zu] stage=0x%02x firmware_loaded=%d flag=0x%02x\n",
+            index + 1,
+            statuses[index].stage,
+            statuses[index].firmware_loaded ? 1 : 0,
+            statuses[index].status_flag
+        );
+    }
+
+    status = otir_tir5v3_start_streaming(device);
+    if (status != OTIR_STATUS_OK) {
+        otir_tir5v3_close(device);
+        fail(status, "Failed to start streaming");
+    }
+
+    puts("Streaming. Press Ctrl+C to quit.");
+    while (!g_stop_requested) {
+        otir_tir5v3_packet packet;
+        otir_tir5v3_frame_stats stats;
+
+        status = otir_tir5v3_read_packet(device, 50, &packet);
+        if (status == OTIR_STATUS_TIMEOUT) {
+            continue;
+        }
+        if (status != OTIR_STATUS_OK) {
+            otir_tir5v3_close(device);
+            fail(status, "Failed to read packet");
+        }
+        if (packet.packet_type != 0x00 && packet.packet_type != 0x05) {
+            continue;
+        }
+
+        frame_index += 1;
+        otir_tir5v3_packet_stats(&packet, frame_index, &stats);
+        if (stats.has_centroid) {
+            printf(
+                "frame=%llu packet=%d type=0x%02x stripes=%zu x=%.1f y=%.1f\n",
+                (unsigned long long)stats.frame_index,
+                stats.packet_no,
+                stats.packet_type,
+                stats.stripe_count,
+                stats.centroid_x,
+                stats.centroid_y
+            );
+        } else {
+            printf(
+                "frame=%llu packet=%d type=0x%02x stripes=%zu x=- y=-\n",
+                (unsigned long long)stats.frame_index,
+                stats.packet_no,
+                stats.packet_type,
+                stats.stripe_count
+            );
+        }
+        fflush(stdout);
+    }
+
+    status = otir_tir5v3_stop_streaming(device);
+    if (status != OTIR_STATUS_OK) {
+        otir_tir5v3_close(device);
+        fail(status, "Failed to stop streaming");
+    }
+
+    otir_tir5v3_close(device);
+    return 0;
+}
