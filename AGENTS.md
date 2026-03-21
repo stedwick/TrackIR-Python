@@ -32,6 +32,7 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - Avoid baking OS-specific assumptions into shared protocol code.
 - Keep hardware communication, parsing, and visualization separated.
 - If platform-specific behavior is required, isolate it in the platform directory or a clearly named adapter layer.
+- Keep OpenCV, windowing, and app event-loop concerns out of shared C protocol code.
 
 ## Validation
 
@@ -41,5 +42,22 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 ## Directory guide
 
 - `python/`: fastest place to iterate on USB transport, logging, decoding, and tests.
-- `c/`, `cpp/`: native implementations and performance-sensitive experiments.
+- `c/`: reusable C library for protocol logic, frame helpers, and device transport.
+- `cpp/`: native consumers of the C library, including the OpenCV preview harness.
 - `mac/`, `win/`, `nix/`: platform-specific integration layers and notes.
+
+## Native build layout
+
+- Keep the root `CMakeLists.txt` as the native build entrypoint.
+- Keep native targets split into `c/CMakeLists.txt` and `cpp/CMakeLists.txt`.
+- Prefer native build directories under `c/` or `cpp/`, with `c/build` as the default documented location.
+- Treat `libusb-1.0` as required for the native C hardware library.
+- Treat OpenCV as optional and scoped only to the C++ preview harness.
+
+## Native direction
+
+- Treat `python/` as the reference workbench for rapid reverse-engineering and behavior discovery.
+- Move stable protocol behavior into `c/` once it is understood and testable.
+- Keep `c/` responsible for protocol parsing, centroid math, frame reconstruction, and transport.
+- Keep `cpp/` responsible for consuming the C API and validating it in native desktop flows.
+- If protocol logic appears in C++ app code, that is usually a sign it belongs back in `c/`.
