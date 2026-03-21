@@ -33,17 +33,21 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - Keep hardware communication, parsing, and visualization separated.
 - If platform-specific behavior is required, isolate it in the platform directory or a clearly named adapter layer.
 - Keep OpenCV, windowing, and app event-loop concerns out of shared C protocol code.
+- Keep the macOS app on native Apple UI/media APIs rather than introducing OpenCV into `mac/`.
 
 ## Validation
 
 - For large changes, run the relevant linter, build, and tests.
 - For small doc-only changes, no extra validation is required.
+- For the macOS app, prefer `xcodebuild` from the shell when full Xcode is selected so Swift build/test failures can be checked directly.
+- For the macOS app, default to build plus unit-test coverage. Only run UI tests when the user explicitly asks for them, because they visibly relaunch the app.
 
 ## Directory guide
 
 - `python/`: fastest place to iterate on USB transport, logging, decoding, and tests.
 - `c/`: reusable C library for protocol logic, frame helpers, and device transport.
 - `cpp/`: native consumers of the C library, including the OpenCV preview harness.
+- `mac/`: SwiftUI macOS app shell and future native platform integration for the shared library.
 - `mac/`, `win/`, `nix/`: platform-specific integration layers and notes.
 
 ## Native build layout
@@ -60,6 +64,7 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - Move stable protocol behavior into `c/` once it is understood and testable.
 - Keep `c/` responsible for protocol parsing, centroid math, frame reconstruction, and transport.
 - Keep `cpp/` responsible for consuming the C API and validating it in native desktop flows.
+- Keep `mac/` responsible for native app presentation and Apple-platform integration on top of the shared C layer.
 - If protocol logic appears in C++ app code, that is usually a sign it belongs back in `c/`.
 
 @README.md

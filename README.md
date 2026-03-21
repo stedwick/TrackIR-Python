@@ -7,7 +7,8 @@ The repo is organized by implementation target:
 - `python/`: active protocol exploration, USB transport work, packet decoding, logging, and preview tooling.
 - `c/`: reusable cross-platform C library for TrackIR protocol, frame reconstruction, and device control.
 - `cpp/`: native C++ consumers and harnesses for the C library, including the OpenCV preview app.
-- `mac/`, `win/`, `nix/`: platform-specific notes, adapters, or future integration work.
+- `mac/`: SwiftUI macOS app shell and future native Apple-platform integration.
+- `win/`, `nix/`: platform-specific notes, adapters, or future integration work.
 - `tmp/`: scratch output and temporary artifacts.
 
 ## Project goals
@@ -52,12 +53,14 @@ The native port now lives in:
 - `c/examples/stream_dump.c`: simple C-only stream dumper that prints frame, packet, and centroid data.
 - `c/tests/test_tir5.c`: unit tests for the pure parsing and centroid/frame logic.
 - `cpp/opencv_preview/main.cpp`: simple C++ OpenCV preview app that consumes the C API and serves as the first native hardware test harness.
+- `mac/OpenTrackIR/ContentView.swift`: SwiftUI macOS shell with a responsive preview panel placeholder and UI-only controls for future TrackIR integration.
 
 The intended native split is:
 
 - The C library owns protocol parsing, centroid math, frame reconstruction, and hardware transport.
 - The C++ app owns preview rendering and native test-harness concerns.
-- OpenCV stays out of the C library.
+- The macOS app owns native Apple UI and desktop integration on top of the shared library.
+- OpenCV stays out of the C library and out of the macOS app.
 
 The intended build flow is:
 
@@ -74,6 +77,42 @@ This is one native project with C and C++ subprojects under a shared top-level b
 - `libusb-1.0` is required for the native C library and device layer.
 - OpenCV is required only for the C++ preview app.
 - CMake is the supported native build entrypoint.
+
+## macOS app status
+
+The macOS project is currently a UI-only SwiftUI shell. It includes:
+
+- a native preview panel placeholder for the future camera feed
+- a toggle to show or hide video
+- a toggle to enable or disable TrackIR
+- a toggle to enable or disable future mouse movement
+
+It does not yet talk to the C library, move the mouse, or stream real video frames. When that integration work starts, use native Apple image/video APIs in the macOS app rather than OpenCV.
+
+## macOS app build and run
+
+Open the app in Xcode:
+
+```sh
+open mac/OpenTrackIR.xcodeproj
+```
+
+Then select the `OpenTrackIR` scheme and press Run.
+
+To build from the terminal:
+
+```sh
+cd /Users/philip/src/OpenTrackIR
+xcodebuild -project mac/OpenTrackIR.xcodeproj -scheme OpenTrackIR -destination 'platform=macOS' build
+```
+
+To run the built app from Finder, use Xcode's Product > Show Build Folder, then open `OpenTrackIR.app`.
+
+If you want to launch it from the terminal after building:
+
+```sh
+open ~/Library/Developer/Xcode/DerivedData/OpenTrackIR-*/Build/Products/Debug/OpenTrackIR.app
+```
 
 If `libusb-1.0` and OpenCV are available, the preview target is built alongside the C library and tests.
 
