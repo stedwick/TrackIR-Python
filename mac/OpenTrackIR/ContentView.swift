@@ -10,10 +10,14 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var cameraController = TrackIRCameraController()
     @AppStorage(ControlPreferenceKey.videoEnabled.rawValue) private var isVideoEnabled = true
     @AppStorage(ControlPreferenceKey.trackIREnabled.rawValue) private var isTrackIREnabled = true
     @AppStorage(ControlPreferenceKey.mouseMovementEnabled.rawValue) private var isMouseMovementEnabled = true
     @AppStorage(ControlPreferenceKey.mouseMovementSpeed.rawValue) private var mouseMovementSpeed = 1.0
+    @AppStorage(ControlPreferenceKey.videoFlipHorizontal.rawValue) private var isVideoFlipHorizontalEnabled = true
+    @AppStorage(ControlPreferenceKey.videoFlipVertical.rawValue) private var isVideoFlipVerticalEnabled = false
+    @AppStorage(ControlPreferenceKey.videoRotationDegrees.rawValue) private var videoRotationDegrees = 0.0
 
     var body: some View {
         GeometryReader { geometry in
@@ -39,6 +43,18 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 760, minHeight: 560)
+        .onAppear {
+            syncTrackIRCamera()
+        }
+        .onChange(of: isTrackIREnabled) { _, _ in
+            syncTrackIRCamera()
+        }
+        .onChange(of: isVideoEnabled) { _, _ in
+            syncTrackIRCamera()
+        }
+        .onDisappear {
+            cameraController.shutdown()
+        }
     }
 
     private var isDarkMode: Bool {
@@ -47,12 +63,24 @@ struct ContentView: View {
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("OpenTrackIR")
-                .font(.system(size: 30, weight: .semibold, design: .rounded))
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Open · TrackIR")
+                        .font(.system(size: 30, weight: .semibold, design: .rounded))
 
-            Text("macOS preview shell for TrackIR video and controls")
-                .font(.headline)
-                .foregroundStyle(.secondary)
+                    Text("macOS TrackIR preview and controls")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 16)
+
+                Button(action: refreshTrackIRCamera) {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+            }
 
             HStack(spacing: 10) {
                 statusChip(
@@ -72,48 +100,65 @@ struct ContentView: View {
     }
 
     private var videoPreview: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.10, green: 0.12, blue: 0.18),
-                            Color(red: 0.04, green: 0.05, blue: 0.08),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+        let videoTransform = previewVideoTransform(
+            flipHorizontal: isVideoFlipHorizontalEnabled,
+            flipVertical: isVideoFlipVerticalEnabled,
+            rotationDegrees: videoRotationDegrees
+        )
+
+        return VStack(spacing: 12) {
+            VStack(spacing: 6) {
+                Text(previewTitle)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text(previewMessage)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.10, green: 0.12, blue: 0.18),
+                                Color(red: 0.04, green: 0.05, blue: 0.08),
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                )
 
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(previewBorderColor, lineWidth: 1)
-
-            VStack(spacing: 18) {
-                Image(systemName: isVideoEnabled ? "video.fill" : "video.slash.fill")
-                    .font(.system(size: 54, weight: .light))
-                    .foregroundStyle(isVideoEnabled ? Color.green.opacity(0.9) : Color.secondary)
-
-                VStack(spacing: 6) {
-                    Text(isVideoEnabled ? "Video Preview Ready" : "Video Preview Hidden")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.white)
-
-                    Text(previewMessage)
-                        .font(.body)
-                        .foregroundStyle(.white.opacity(0.68))
-                        .multilineTextAlignment(.center)
+                if isVideoEnabled, let previewImage = cameraController.previewImage {
+                    Image(decorative: previewImage, scale: 1.0, orientation: .up)
+                        .resizable()
+                        .interpolation(.none)
+                        .scaledToFill()
+                        .scaleEffect(x: videoTransform.scaleX, y: videoTransform.scaleY)
+                        .rotationEffect(.degrees(videoTransform.rotationDegrees))
+                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 }
 
-                HStack(spacing: 12) {
-                    previewMetric(title: "Source", value: "Native macOS view")
-                    previewMetric(title: "Target Feed", value: "640×480")
-                    previewMetric(title: "Backend", value: "Not connected yet")
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(previewBorderColor, lineWidth: 1)
+
+                if cameraController.previewImage == nil {
+                    Image(systemName: isVideoEnabled ? "video.fill" : "video.slash.fill")
+                        .font(.system(size: 54, weight: .light))
+                        .foregroundStyle(isVideoEnabled ? Color.green.opacity(0.9) : Color.secondary)
                 }
             }
-            .padding(28)
+            .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 10)
+
+            HStack(spacing: 12) {
+                previewMetric(title: "Source", value: cameraController.sourceLabel)
+                previewMetric(title: "Rate", value: cameraController.frameRateLabel)
+                previewMetric(title: "Backend", value: cameraController.backendLabel)
+            }
         }
-        .aspectRatio(4.0 / 3.0, contentMode: .fit)
-        .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 10)
     }
 
     private func controlSection(columnCount: Int) -> some View {
@@ -121,7 +166,7 @@ struct ContentView: View {
             Text("Controls")
                 .font(.title2.weight(.semibold))
 
-            Text("UI-only controls for the first macOS shell. These toggles do not talk to the device yet.")
+            Text("Live controls for the TrackIR preview and desktop shell.")
                 .font(.body)
                 .foregroundStyle(.secondary)
 
@@ -151,6 +196,9 @@ struct ContentView: View {
 
                 mouseHotkeyControlRow
                     .gridCellColumns(columnCount == 1 ? 1 : 2)
+
+                videoControlsRow
+                    .gridCellColumns(columnCount == 1 ? 1 : 2)
             }
 
             Divider()
@@ -159,7 +207,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Next Steps")
                     .font(.headline)
-                Text("Wire this shell to the shared C library, then replace the placeholder preview with a native frame source.")
+                Text("Use this live preview to validate the current libusb path before swapping the Mac transport later.")
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
@@ -195,15 +243,31 @@ struct ContentView: View {
     }
 
     private var previewMessage: String {
+        trackIRPreviewMessage(
+            isTrackIREnabled: isTrackIREnabled,
+            isVideoEnabled: isVideoEnabled,
+            phase: cameraController.phase,
+            errorDescription: cameraController.lastErrorDescription
+        )
+    }
+
+    private var previewTitle: String {
         if !isVideoEnabled {
-            return "Turn video back on to show the future camera feed in this native preview surface."
+            return "Video Preview Hidden"
         }
 
-        if isTrackIREnabled {
-            return "The layout is ready for a live native frame source once the device bridge is connected."
+        switch cameraController.phase {
+            case .streaming:
+                return "Live TrackIR Camera"
+            case .starting:
+                return "Starting TrackIR Camera"
+            case .unavailable:
+                return "TrackIR Not Found"
+            case .failed:
+                return "TrackIR Camera Error"
+            case .idle:
+                return isTrackIREnabled ? "Video Preview Ready" : "TrackIR Off"
         }
-
-        return "TrackIR is still off. This panel is the placeholder for the eventual live camera preview."
     }
 
     private var appBackground: some View {
@@ -247,10 +311,17 @@ struct ContentView: View {
     }
 
     private func statusChip(title: String, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
-            .font(.subheadline.weight(.medium))
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.medium))
+                .frame(width: 16, height: 16)
+
+            Text(title)
+                .font(.subheadline.weight(.medium))
+        }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
+            .frame(height: 34)
             .background(
                 Capsule(style: .continuous)
                     .fill(chipFillColor)
@@ -347,6 +418,54 @@ struct ContentView: View {
         }
     }
 
+    private var videoControlsRow: some View {
+        controlCard {
+            VStack(alignment: .leading, spacing: 16) {
+                controlCopy(
+                    title: "Video Controls",
+                    detail: "Adjust the preview.",
+                    systemImage: "camera.filters"
+                )
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Toggle("Flip Horizontal", isOn: $isVideoFlipHorizontalEnabled)
+                        .toggleStyle(.checkbox)
+
+                    Toggle("Flip Vertical", isOn: $isVideoFlipVerticalEnabled)
+                        .toggleStyle(.checkbox)
+                }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top, spacing: 14) {
+                        controlCopy(
+                            title: "Rotate",
+                            detail: "Rotate the preview.",
+                            systemImage: "rotate.right"
+                        )
+
+                        Spacer(minLength: 16)
+
+                        Text(videoRotationValueLabel(for: videoRotationDegrees))
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Slider(value: $videoRotationDegrees, in: 0 ... 360, step: 1)
+
+                        HStack {
+                            Text("0°")
+                            Spacer()
+                            Text("360°")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
     private func controlCopy(title: String, detail: String, systemImage: String) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: systemImage)
@@ -378,6 +497,20 @@ struct ContentView: View {
                     .strokeBorder(cardBorderColor, lineWidth: 1)
             )
     }
+
+    private func syncTrackIRCamera() {
+        cameraController.syncStreaming(
+            isTrackIREnabled: isTrackIREnabled,
+            isVideoEnabled: isVideoEnabled
+        )
+    }
+
+    private func refreshTrackIRCamera() {
+        cameraController.refresh(
+            isTrackIREnabled: isTrackIREnabled,
+            isVideoEnabled: isVideoEnabled
+        )
+    }
 }
 
 enum DashboardLayoutMode: Equatable {
@@ -390,6 +523,15 @@ enum ControlPreferenceKey: String {
     case trackIREnabled = "contentView.trackIREnabled"
     case mouseMovementEnabled = "contentView.mouseMovementEnabled"
     case mouseMovementSpeed = "contentView.mouseMovementSpeed"
+    case videoFlipHorizontal = "contentView.videoFlipHorizontal"
+    case videoFlipVertical = "contentView.videoFlipVertical"
+    case videoRotationDegrees = "contentView.videoRotationDegrees"
+}
+
+struct VideoPreviewTransform: Equatable {
+    let scaleX: CGFloat
+    let scaleY: CGFloat
+    let rotationDegrees: Double
 }
 
 func defaultMouseMovementShortcut() -> KeyboardShortcuts.Shortcut {
@@ -402,6 +544,27 @@ func toggledMouseMovementState(isEnabled: Bool) -> Bool {
 
 func mouseSpeedValueLabel(for speed: Double) -> String {
     "\(speed.formatted(.number.precision(.fractionLength(0 ... 2))))x"
+}
+
+func previewVideoTransform(
+    flipHorizontal: Bool,
+    flipVertical: Bool,
+    rotationDegrees: Double
+) -> VideoPreviewTransform {
+    VideoPreviewTransform(
+        scaleX: flipHorizontal ? -1 : 1,
+        scaleY: flipVertical ? -1 : 1,
+        rotationDegrees: normalizedRotationDegrees(rotationDegrees)
+    )
+}
+
+func normalizedRotationDegrees(_ rotationDegrees: Double) -> Double {
+    let normalized = rotationDegrees.truncatingRemainder(dividingBy: 360)
+    return normalized >= 0 ? normalized : normalized + 360
+}
+
+func videoRotationValueLabel(for rotationDegrees: Double) -> String {
+    "\(Int(normalizedRotationDegrees(rotationDegrees).rounded()))°"
 }
 
 extension KeyboardShortcuts.Name {
