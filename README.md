@@ -62,10 +62,12 @@ The intended native split is:
 The intended build flow is:
 
 ```sh
-cmake -S . -B c/build
-cmake --build c/build
-ctest --test-dir c/build
+cmake -S . -B build
+cmake --build build
+ctest --test-dir build
 ```
+
+This is one native project with C and C++ subprojects under a shared top-level build tree.
 
 ## Native dependencies
 
@@ -81,25 +83,25 @@ Run the C unit tests:
 
 ```sh
 cd /Users/philip/src/OpenTrackIR
-cmake -S . -B c/build
-cmake --build c/build --target test_tir5
-./c/build/c/test_tir5
+cmake -S . -B build
+cmake --build build --target test_tir5
+./build/c/test_tir5
 ```
 
 Run the C text streaming harness:
 
 ```sh
 cd /Users/philip/src/OpenTrackIR
-cmake -S . -B c/build
-cmake --build c/build --target opentrackir_stream_dump
-./c/build/c/opentrackir_stream_dump
+cmake -S . -B build
+cmake --build build --target opentrackir_stream_dump
+./build/c/opentrackir_stream_dump
 ```
 
 Run the C++ OpenCV preview harness:
 
 ```sh
 cd /Users/philip/src/OpenTrackIR
-cmake -S . -B c/build
-cmake --build c/build --target opentrackir_preview
-./c/build/cpp/opentrackir_preview
+cmake -S . -B build
+cmake --build build --target opentrackir_preview
+./build/cpp/opentrackir_preview
 ```
