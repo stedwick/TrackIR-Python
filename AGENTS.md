@@ -61,3 +61,5 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - Keep `c/` responsible for protocol parsing, centroid math, frame reconstruction, and transport.
 - Keep `cpp/` responsible for consuming the C API and validating it in native desktop flows.
 - If protocol logic appears in C++ app code, that is usually a sign it belongs back in `c/`.
+
+@README.md
