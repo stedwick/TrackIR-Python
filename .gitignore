@@ -11,3 +11,4 @@ cpp/build/
 **/xcuserdata/
 *.xcuserstate
 DerivedData/
+*.profraw
