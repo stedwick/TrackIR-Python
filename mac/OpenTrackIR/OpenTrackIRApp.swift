@@ -6,16 +6,31 @@
 //
 
 import KeyboardShortcuts
+import AppKit
 import SwiftUI
 
 @main
 struct OpenTrackIRApp: App {
+    @NSApplicationDelegateAdaptor(AppLifecycleController.self) private var appLifecycleController
+    @StateObject private var cameraController = TrackIRCameraController()
     @State private var mouseMovementHotkeyController = MouseMovementHotkeyController()
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(cameraController: cameraController)
+                .onAppear {
+                    appLifecycleController.cameraController = cameraController
+                }
         }
+    }
+}
+
+@MainActor
+final class AppLifecycleController: NSObject, NSApplicationDelegate {
+    weak var cameraController: TrackIRCameraController?
+
+    func applicationWillTerminate(_ notification: Notification) {
+        cameraController?.shutdownAndWait()
     }
 }
 

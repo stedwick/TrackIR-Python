@@ -10,7 +10,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @StateObject private var cameraController = TrackIRCameraController()
+    @ObservedObject private var cameraController: TrackIRCameraController
     @AppStorage(ControlPreferenceKey.videoEnabled.rawValue) private var isVideoEnabled = true
     @AppStorage(ControlPreferenceKey.trackIREnabled.rawValue) private var isTrackIREnabled = true
     @AppStorage(ControlPreferenceKey.mouseMovementEnabled.rawValue) private var isMouseMovementEnabled = true
@@ -18,6 +18,15 @@ struct ContentView: View {
     @AppStorage(ControlPreferenceKey.videoFlipHorizontal.rawValue) private var isVideoFlipHorizontalEnabled = true
     @AppStorage(ControlPreferenceKey.videoFlipVertical.rawValue) private var isVideoFlipVerticalEnabled = false
     @AppStorage(ControlPreferenceKey.videoRotationDegrees.rawValue) private var videoRotationDegrees = 0.0
+
+    @MainActor
+    init() {
+        _cameraController = ObservedObject(wrappedValue: TrackIRCameraController())
+    }
+
+    init(cameraController: TrackIRCameraController) {
+        _cameraController = ObservedObject(wrappedValue: cameraController)
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -28,8 +37,7 @@ struct ContentView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     headerSection
-                    videoPreview
-                        .frame(width: previewWidth)
+                    videoPreview(previewWidth: previewWidth)
                         .frame(maxWidth: .infinity, alignment: .center)
                     controlSection(columnCount: controlColumns)
                 }
@@ -99,12 +107,14 @@ struct ContentView: View {
         }
     }
 
-    private var videoPreview: some View {
+    private func videoPreview(previewWidth: CGFloat) -> some View {
         let videoTransform = previewVideoTransform(
             flipHorizontal: isVideoFlipHorizontalEnabled,
             flipVertical: isVideoFlipVerticalEnabled,
             rotationDegrees: videoRotationDegrees
         )
+        let previewHeight = videoPreviewHeight(for: previewWidth)
+        let telemetryWidth = previewTelemetryWidth(for: previewWidth)
 
         return VStack(spacing: 12) {
             VStack(spacing: 6) {
@@ -150,14 +160,16 @@ struct ContentView: View {
                         .foregroundStyle(isVideoEnabled ? Color.green.opacity(0.9) : Color.secondary)
                 }
             }
-            .aspectRatio(4.0 / 3.0, contentMode: .fit)
+            .frame(width: previewWidth, height: previewHeight)
             .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 10)
 
             HStack(spacing: 12) {
                 previewMetric(title: "Source", value: cameraController.sourceLabel)
                 previewMetric(title: "Rate", value: cameraController.frameRateLabel)
+                previewMetric(title: "Position", value: cameraController.centroidPairLabel)
                 previewMetric(title: "Backend", value: cameraController.backendLabel)
             }
+            .frame(width: telemetryWidth)
         }
     }
 
@@ -582,6 +594,14 @@ func videoPreviewWidth(for layout: DashboardLayoutMode, width: CGFloat) -> CGFlo
         case .stacked:
             return min(340, max(240, width * 0.38))
     }
+}
+
+func videoPreviewHeight(for width: CGFloat) -> CGFloat {
+    width * 0.75
+}
+
+func previewTelemetryWidth(for previewWidth: CGFloat) -> CGFloat {
+    max(previewWidth, 620)
 }
 
 func controlColumnCount(for layout: DashboardLayoutMode, width: CGFloat) -> Int {

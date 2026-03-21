@@ -19,6 +19,8 @@ final class TrackIRCameraController: ObservableObject {
     @Published private(set) var lastErrorDescription: String?
     @Published private(set) var frameIndex: UInt64 = 0
     @Published private(set) var frameRate: Double?
+    @Published private(set) var centroidX: Double?
+    @Published private(set) var centroidY: Double?
     @Published private(set) var lastPacketType: UInt8?
 
     let backendLabel = "C + libusb"
@@ -50,6 +52,10 @@ final class TrackIRCameraController: ObservableObject {
         trackIRFrameRateLabel(for: frameRate)
     }
 
+    var centroidPairLabel: String {
+        trackIRCoordinatePairLabel(x: centroidX, y: centroidY)
+    }
+
     var packetTypeLabel: String {
         guard let lastPacketType else {
             return "-"
@@ -73,7 +79,7 @@ final class TrackIRCameraController: ObservableObject {
                isRunningInXcodePreview(environment: ProcessInfo.processInfo.environment) {
                 trackIRLogger.info("Skipping TrackIR hardware access in Xcode preview mode")
             }
-            stopStreaming(clearPreview: true)
+            stopStreaming(clearPreview: true, waitForRunnerExit: false)
         }
     }
 
@@ -90,7 +96,7 @@ final class TrackIRCameraController: ObservableObject {
 
         restartTask?.cancel()
         restartTask = nil
-        stopStreaming(clearPreview: true)
+        stopStreaming(clearPreview: true, waitForRunnerExit: false)
 
         guard shouldRestart else {
             return
@@ -113,7 +119,13 @@ final class TrackIRCameraController: ObservableObject {
     func shutdown() {
         restartTask?.cancel()
         restartTask = nil
-        stopStreaming(clearPreview: true)
+        stopStreaming(clearPreview: true, waitForRunnerExit: false)
+    }
+
+    func shutdownAndWait() {
+        restartTask?.cancel()
+        restartTask = nil
+        stopStreaming(clearPreview: true, waitForRunnerExit: true)
     }
 
     private func startStreamingIfNeeded() {
@@ -133,6 +145,8 @@ final class TrackIRCameraController: ObservableObject {
         lastErrorDescription = nil
         frameIndex = 0
         frameRate = nil
+        centroidX = nil
+        centroidY = nil
         lastPacketType = nil
         previewImage = nil
 
@@ -146,18 +160,38 @@ final class TrackIRCameraController: ObservableObject {
         runner.start()
     }
 
-    private func stopStreaming(clearPreview: Bool) {
-        if runner != nil {
+    private func stopStreaming(clearPreview: Bool, waitForRunnerExit: Bool) {
+        let activeRunner = runner
+
+        if activeRunner != nil {
             trackIRLogger.info("Stopping TrackIR session \(self.activeSessionToken, privacy: .public)")
         }
 
         activeSessionToken += 1
-        runner?.requestStop()
         runner = nil
+        activeRunner?.requestStop()
+
+        if waitForRunnerExit, let activeRunner {
+            let waitMilliseconds = trackIRShutdownWaitMilliseconds(
+                readTimeoutMilliseconds: TrackIRStreamRunner.readTimeoutMilliseconds
+            )
+            let didStopInTime = activeRunner.waitUntilStopped(
+                timeout: .now() + .milliseconds(waitMilliseconds)
+            )
+
+            if !didStopInTime {
+                trackIRLogger.error(
+                    "TrackIR session shutdown timed out after \(waitMilliseconds, privacy: .public) ms"
+                )
+            }
+        }
+
         phase = .idle
         lastErrorDescription = nil
         frameIndex = 0
         frameRate = nil
+        centroidX = nil
+        centroidY = nil
         lastPacketType = nil
 
         if clearPreview {
@@ -176,11 +210,13 @@ final class TrackIRCameraController: ObservableObject {
                 phase = .streaming
                 lastErrorDescription = nil
 
-            case let .didRenderFrame(image, frameIndex, frameRate, packetType):
+            case let .didRenderFrame(image, frameIndex, frameRate, centroidX, centroidY, packetType):
                 phase = .streaming
                 previewImage = image
                 self.frameIndex = frameIndex
                 self.frameRate = frameRate
+                self.centroidX = centroidX
+                self.centroidY = centroidY
                 lastPacketType = packetType
 
             case let .didBecomeUnavailable(message):
@@ -191,6 +227,8 @@ final class TrackIRCameraController: ObservableObject {
                 lastErrorDescription = message
                 frameIndex = 0
                 frameRate = nil
+                centroidX = nil
+                centroidY = nil
                 lastPacketType = nil
 
             case let .didFail(message):
@@ -201,6 +239,8 @@ final class TrackIRCameraController: ObservableObject {
                 lastErrorDescription = message
                 frameIndex = 0
                 frameRate = nil
+                centroidX = nil
+                centroidY = nil
                 lastPacketType = nil
         }
     }
@@ -218,15 +258,18 @@ private struct TrackIRCameraEvent: @unchecked Sendable {
 
 private enum TrackIRCameraEventKind: @unchecked Sendable {
     case didStartStreaming
-    case didRenderFrame(CGImage, UInt64, Double?, UInt8)
+    case didRenderFrame(CGImage, UInt64, Double?, Double?, Double?, UInt8)
     case didBecomeUnavailable(String)
     case didFail(String)
 }
 
 private final class TrackIRStreamRunner: @unchecked Sendable {
+    static let readTimeoutMilliseconds = 50
+
     private let sessionToken: Int
     private let onEvent: @Sendable (TrackIRCameraEvent) -> Void
     private let lock = NSLock()
+    private let stoppedSemaphore = DispatchSemaphore(value: 0)
 
     private var isStopRequested = false
 
@@ -250,7 +293,15 @@ private final class TrackIRStreamRunner: @unchecked Sendable {
         lock.unlock()
     }
 
+    func waitUntilStopped(timeout: DispatchTime) -> Bool {
+        stoppedSemaphore.wait(timeout: timeout) == .success
+    }
+
     private func run() {
+        defer {
+            stoppedSemaphore.signal()
+        }
+
         trackIRLogger.info("Opening TrackIR device for session \(self.sessionToken, privacy: .public)")
 
         var device: OpaquePointer?
@@ -302,7 +353,7 @@ private final class TrackIRStreamRunner: @unchecked Sendable {
         }
 
         while !stopRequested() {
-            let readStatus = otir_tir5v3_read_packet(device, 50, packetStorage)
+            let readStatus = otir_tir5v3_read_packet(device, Int32(Self.readTimeoutMilliseconds), packetStorage)
 
             if readStatus == OTIR_STATUS_TIMEOUT {
                 continue
@@ -335,9 +386,11 @@ private final class TrackIRStreamRunner: @unchecked Sendable {
             }
 
             var frameBytes = [UInt8](repeating: 0, count: frameWidth * frameHeight)
+            var frameStats = otir_tir5v3_frame_stats()
             frameBytes.withUnsafeMutableBufferPointer { buffer in
                 otir_tir5v3_build_frame(packetStorage, buffer.baseAddress, frameWidth)
             }
+            otir_tir5v3_packet_stats(packetStorage, frameIndex, &frameStats)
 
             guard let image = trackIRPreviewImage(
                 frameBytes: frameBytes,
@@ -347,7 +400,9 @@ private final class TrackIRStreamRunner: @unchecked Sendable {
                 continue
             }
 
-            send(.didRenderFrame(image, frameIndex, measuredFrameRate, packetStorage.pointee.packet_type))
+            let centroidX = frameStats.has_centroid ? frameStats.centroid_x : nil
+            let centroidY = frameStats.has_centroid ? frameStats.centroid_y : nil
+            send(.didRenderFrame(image, frameIndex, measuredFrameRate, centroidX, centroidY, packetStorage.pointee.packet_type))
         }
 
         trackIRLogger.info("TrackIR read loop stopped for session \(self.sessionToken, privacy: .public)")
@@ -418,6 +473,29 @@ func trackIRFrameRateLabel(for frameRate: Double?) -> String {
     }
 
     return "\(frameRate.formatted(.number.precision(.fractionLength(1)))) fps"
+}
+
+func trackIRCoordinateLabel(for coordinate: Double?) -> String {
+    guard let coordinate else {
+        return "-"
+    }
+
+    return String(Int(coordinate))
+}
+
+func trackIRCoordinatePairLabel(x: Double?, y: Double?) -> String {
+    let xLabel = trackIRCoordinateLabel(for: x)
+    let yLabel = trackIRCoordinateLabel(for: y)
+
+    guard xLabel != "-", yLabel != "-" else {
+        return "-"
+    }
+
+    return "\(xLabel), \(yLabel)"
+}
+
+func trackIRShutdownWaitMilliseconds(readTimeoutMilliseconds: Int) -> Int {
+    max(250, readTimeoutMilliseconds * 4)
 }
 
 func trackIRPreviewImage(frameBytes: [UInt8], width: Int, height: Int) -> CGImage? {

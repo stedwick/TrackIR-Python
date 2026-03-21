@@ -23,6 +23,16 @@ struct ContentViewTests {
         #expect(videoPreviewWidth(for: .stacked, width: 760) == 288.8)
     }
 
+    @Test func videoPreviewHeightPreservesFourByThreeAspectRatio() {
+        #expect(videoPreviewHeight(for: 320) == 240)
+        #expect(abs(videoPreviewHeight(for: 288.8) - 216.6) < 0.0001)
+    }
+
+    @Test func previewTelemetryWidthCanExceedVideoWidth() {
+        #expect(previewTelemetryWidth(for: 288.8) == 620)
+        #expect(previewTelemetryWidth(for: 700) == 700)
+    }
+
     @Test func controlColumnCountUsesTwoColumnsOnSmallerWindows() {
         #expect(controlColumnCount(for: .stacked, width: 719) == 1)
         #expect(controlColumnCount(for: .stacked, width: 720) == 2)
@@ -126,6 +136,24 @@ struct ContentViewTests {
     @Test func trackIRFrameRateLabelUsesCompactFpsText() {
         #expect(trackIRFrameRateLabel(for: 123.44) == "123.4 fps")
         #expect(trackIRFrameRateLabel(for: nil) == "-")
+    }
+
+    @Test func trackIRCoordinateLabelTruncatesToIntegers() {
+        #expect(trackIRCoordinateLabel(for: 123.9) == "123")
+        #expect(trackIRCoordinateLabel(for: -45.8) == "-45")
+        #expect(trackIRCoordinateLabel(for: nil) == "-")
+    }
+
+    @Test func trackIRCoordinatePairLabelUsesCommaSeparatedIntegers() {
+        #expect(trackIRCoordinatePairLabel(x: 123.9, y: 45.2) == "123, 45")
+        #expect(trackIRCoordinatePairLabel(x: nil, y: 45.2) == "-")
+        #expect(trackIRCoordinatePairLabel(x: 123.9, y: nil) == "-")
+    }
+
+    @Test func trackIRShutdownWaitUsesReadTimeoutBudget() {
+        #expect(trackIRShutdownWaitMilliseconds(readTimeoutMilliseconds: 50) == 250)
+        #expect(trackIRShutdownWaitMilliseconds(readTimeoutMilliseconds: 75) == 300)
+        #expect(trackIRShutdownWaitMilliseconds(readTimeoutMilliseconds: 0) == 250)
     }
 
     @Test func trackIRPreviewImageUsesProvidedDimensions() {
