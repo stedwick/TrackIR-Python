@@ -1,5 +1,13 @@
 **/.DS_Store
 tmp/
+build/
+c/build/
+cpp/build/
 **/.venv/
 **/__pycache__/
 *.pyc
+
+# Xcode user-specific state
+**/xcuserdata/
+*.xcuserstate
+DerivedData/
