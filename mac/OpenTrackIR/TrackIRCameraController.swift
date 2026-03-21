@@ -73,7 +73,7 @@ final class TrackIRCameraController: ObservableObject {
             isVideoEnabled: isVideoEnabled,
             environment: ProcessInfo.processInfo.environment
         ) {
-            startStreamingIfNeeded()
+            startStreamingIfNeeded(isVideoEnabled: isVideoEnabled)
         } else {
             if shouldStreamTrackIRSession(isTrackIREnabled: isTrackIREnabled, isVideoEnabled: isVideoEnabled),
                isRunningInXcodePreview(environment: ProcessInfo.processInfo.environment) {
@@ -112,7 +112,7 @@ final class TrackIRCameraController: ObservableObject {
             }
 
             self.restartTask = nil
-            self.startStreamingIfNeeded()
+            self.startStreamingIfNeeded(isVideoEnabled: isVideoEnabled)
         }
     }
 
@@ -128,11 +128,15 @@ final class TrackIRCameraController: ObservableObject {
         stopStreaming(clearPreview: true, waitForRunnerExit: true)
     }
 
-    private func startStreamingIfNeeded() {
+    private func startStreamingIfNeeded(isVideoEnabled: Bool) {
         restartTask?.cancel()
         restartTask = nil
 
         guard runner == nil else {
+            runner?.setVideoPreviewEnabled(isVideoEnabled)
+            if !isVideoEnabled {
+                previewImage = nil
+            }
             return
         }
 
@@ -150,7 +154,10 @@ final class TrackIRCameraController: ObservableObject {
         lastPacketType = nil
         previewImage = nil
 
-        let runner = TrackIRStreamRunner(sessionToken: sessionToken) { [weak self] event in
+        let runner = TrackIRStreamRunner(
+            sessionToken: sessionToken,
+            isVideoPreviewEnabled: isVideoEnabled
+        ) { [weak self] event in
             Task { @MainActor [weak self] in
                 self?.apply(event)
             }
@@ -219,6 +226,14 @@ final class TrackIRCameraController: ObservableObject {
                 self.centroidY = centroidY
                 lastPacketType = packetType
 
+            case let .didUpdateTelemetry(frameIndex, frameRate, centroidX, centroidY, packetType):
+                phase = .streaming
+                self.frameIndex = frameIndex
+                self.frameRate = frameRate
+                self.centroidX = centroidX
+                self.centroidY = centroidY
+                lastPacketType = packetType
+
             case let .didBecomeUnavailable(message):
                 trackIRLogger.notice("TrackIR unavailable for session \(event.sessionToken, privacy: .public): \(message, privacy: .public)")
                 runner = nil
@@ -259,6 +274,7 @@ private struct TrackIRCameraEvent: @unchecked Sendable {
 private enum TrackIRCameraEventKind: @unchecked Sendable {
     case didStartStreaming
     case didRenderFrame(CGImage, UInt64, Double?, Double?, Double?, UInt8)
+    case didUpdateTelemetry(UInt64, Double?, Double?, Double?, UInt8)
     case didBecomeUnavailable(String)
     case didFail(String)
 }
@@ -272,12 +288,15 @@ private final class TrackIRStreamRunner: @unchecked Sendable {
     private let stoppedSemaphore = DispatchSemaphore(value: 0)
 
     private var isStopRequested = false
+    private var isVideoPreviewEnabled: Bool
 
     init(
         sessionToken: Int,
+        isVideoPreviewEnabled: Bool,
         onEvent: @escaping @Sendable (TrackIRCameraEvent) -> Void
     ) {
         self.sessionToken = sessionToken
+        self.isVideoPreviewEnabled = isVideoPreviewEnabled
         self.onEvent = onEvent
     }
 
@@ -290,6 +309,12 @@ private final class TrackIRStreamRunner: @unchecked Sendable {
     func requestStop() {
         lock.lock()
         isStopRequested = true
+        lock.unlock()
+    }
+
+    func setVideoPreviewEnabled(_ isEnabled: Bool) {
+        lock.lock()
+        isVideoPreviewEnabled = isEnabled
         lock.unlock()
     }
 
@@ -344,6 +369,8 @@ private final class TrackIRStreamRunner: @unchecked Sendable {
         var measuredFrameRate: Double?
         var sampledFrameCount = 0
         var sampleStartTime = CFAbsoluteTimeGetCurrent()
+        var lastTelemetryPublishTime: CFAbsoluteTime?
+        var lastPreviewPublishTime: CFAbsoluteTime?
         let frameWidth = Int(OTIR_TIR5V3_FRAME_WIDTH)
         let frameHeight = Int(OTIR_TIR5V3_FRAME_HEIGHT)
         let packetStorage = UnsafeMutablePointer<otir_tir5v3_packet>.allocate(capacity: 1)
@@ -385,24 +412,46 @@ private final class TrackIRStreamRunner: @unchecked Sendable {
                 sampleStartTime = now
             }
 
-            var frameBytes = [UInt8](repeating: 0, count: frameWidth * frameHeight)
             var frameStats = otir_tir5v3_frame_stats()
-            frameBytes.withUnsafeMutableBufferPointer { buffer in
-                otir_tir5v3_build_frame(packetStorage, buffer.baseAddress, frameWidth)
-            }
             otir_tir5v3_packet_stats(packetStorage, frameIndex, &frameStats)
-
-            guard let image = trackIRPreviewImage(
-                frameBytes: frameBytes,
-                width: frameWidth,
-                height: frameHeight
-            ) else {
-                continue
-            }
 
             let centroidX = frameStats.has_centroid ? frameStats.centroid_x : nil
             let centroidY = frameStats.has_centroid ? frameStats.centroid_y : nil
-            send(.didRenderFrame(image, frameIndex, measuredFrameRate, centroidX, centroidY, packetStorage.pointee.packet_type))
+            let isVideoPreviewEnabled = videoPreviewEnabled()
+
+            if isVideoPreviewEnabled {
+                guard shouldPublishTrackIRTelemetry(
+                    elapsedSinceLastPublish: lastPreviewPublishTime.map { now - $0 },
+                    minimumInterval: trackIRPreviewFrameInterval(maximumFramesPerSecond: 30)
+                ) else {
+                    continue
+                }
+
+                var frameBytes = [UInt8](repeating: 0, count: frameWidth * frameHeight)
+                frameBytes.withUnsafeMutableBufferPointer { buffer in
+                    otir_tir5v3_build_frame(packetStorage, buffer.baseAddress, frameWidth)
+                }
+
+                guard let image = trackIRPreviewImage(
+                    frameBytes: frameBytes,
+                    width: frameWidth,
+                    height: frameHeight
+                ) else {
+                    continue
+                }
+
+                send(.didRenderFrame(image, frameIndex, measuredFrameRate, centroidX, centroidY, packetStorage.pointee.packet_type))
+                lastPreviewPublishTime = now
+                continue
+            }
+
+            if shouldPublishTrackIRTelemetry(
+                elapsedSinceLastPublish: lastTelemetryPublishTime.map { now - $0 },
+                minimumInterval: trackIRTelemetryPublishInterval(isVideoEnabled: false)
+            ) {
+                send(.didUpdateTelemetry(frameIndex, measuredFrameRate, centroidX, centroidY, packetStorage.pointee.packet_type))
+                lastTelemetryPublishTime = now
+            }
         }
 
         trackIRLogger.info("TrackIR read loop stopped for session \(self.sessionToken, privacy: .public)")
@@ -413,6 +462,13 @@ private final class TrackIRStreamRunner: @unchecked Sendable {
         let isStopRequested = isStopRequested
         lock.unlock()
         return isStopRequested
+    }
+
+    private func videoPreviewEnabled() -> Bool {
+        lock.lock()
+        let isVideoPreviewEnabled = isVideoPreviewEnabled
+        lock.unlock()
+        return isVideoPreviewEnabled
     }
 
     private func send(_ kind: TrackIRCameraEventKind) {
@@ -465,6 +521,29 @@ func trackIRFrameRate(frameCount: Int, elapsedSeconds: TimeInterval) -> Double? 
     }
 
     return Double(frameCount) / elapsedSeconds
+}
+
+func trackIRTelemetryPublishInterval(isVideoEnabled: Bool) -> TimeInterval {
+    isVideoEnabled ? 0 : 0.05
+}
+
+func trackIRPreviewFrameInterval(maximumFramesPerSecond: Double) -> TimeInterval {
+    guard maximumFramesPerSecond > 0 else {
+        return 0
+    }
+
+    return 1.0 / maximumFramesPerSecond
+}
+
+func shouldPublishTrackIRTelemetry(
+    elapsedSinceLastPublish: TimeInterval?,
+    minimumInterval: TimeInterval
+) -> Bool {
+    guard let elapsedSinceLastPublish else {
+        return true
+    }
+
+    return elapsedSinceLastPublish >= minimumInterval
 }
 
 func trackIRFrameRateLabel(for frameRate: Double?) -> String {

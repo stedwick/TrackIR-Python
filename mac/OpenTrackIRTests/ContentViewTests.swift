@@ -133,6 +133,22 @@ struct ContentViewTests {
         #expect(trackIRFrameRate(frameCount: 30, elapsedSeconds: 0) == nil)
     }
 
+    @Test func trackIRTelemetryPublishIntervalSkipsFrameFloodWhenVideoIsOff() {
+        #expect(trackIRTelemetryPublishInterval(isVideoEnabled: true) == 0)
+        #expect(trackIRTelemetryPublishInterval(isVideoEnabled: false) == 0.05)
+    }
+
+    @Test func trackIRPreviewFrameIntervalSupportsFifteenFpsCap() {
+        #expect(abs(trackIRPreviewFrameInterval(maximumFramesPerSecond: 15) - (1.0 / 15.0)) < 0.0001)
+        #expect(trackIRPreviewFrameInterval(maximumFramesPerSecond: 0) == 0)
+    }
+
+    @Test func shouldPublishTrackIRTelemetryUsesMinimumInterval() {
+        #expect(shouldPublishTrackIRTelemetry(elapsedSinceLastPublish: nil, minimumInterval: 0.05))
+        #expect(!shouldPublishTrackIRTelemetry(elapsedSinceLastPublish: 0.02, minimumInterval: 0.05))
+        #expect(shouldPublishTrackIRTelemetry(elapsedSinceLastPublish: 0.05, minimumInterval: 0.05))
+    }
+
     @Test func trackIRFrameRateLabelUsesCompactFpsText() {
         #expect(trackIRFrameRateLabel(for: 123.44) == "123.4 fps")
         #expect(trackIRFrameRateLabel(for: nil) == "-")
