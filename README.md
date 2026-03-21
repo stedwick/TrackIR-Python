@@ -29,6 +29,17 @@ The Python implementation currently contains:
 
 The Python workbench remains the fastest place to validate protocol ideas before porting stable behavior into the native library.
 
+Useful Python CLI paths:
+
+```sh
+cd python
+uv run python trackir_tir5v3.py opencv --log tmp/logs/opencv-manual.log
+uv run python trackir_tir5v3.py log --log tmp/logs/log-manual.log
+```
+
+- `opencv`: live OpenCV preview window with centroid overlay.
+- `log`: no OpenCV window; prints `x` and `y` once per second to the terminal.
+
 ## Working principles
 
 - Prefer small, reversible changes over broad rewrites.

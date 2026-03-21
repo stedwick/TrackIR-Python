@@ -1,5 +1,6 @@
 #include "opentrackir/tir5.h"
 
+#include <math.h>
 #include <string.h>
 
 static int clamp_int(int value, int low, int high) {
@@ -51,6 +52,31 @@ void otir_tir5v3_build_frame(
             frame[(size_t)stripe->vline * stride + (size_t)x] = (uint8_t)brightness;
         }
     }
+}
+
+double otir_tir5v3_normalize_maximum_frames_per_second(double maximum_frames_per_second) {
+    if (!isfinite(maximum_frames_per_second) || maximum_frames_per_second <= 0.0) {
+        return 0.0;
+    }
+
+    return maximum_frames_per_second;
+}
+
+bool otir_tir5v3_should_publish_frame(
+    double elapsed_since_last_frame,
+    double maximum_frames_per_second
+) {
+    double minimum_interval;
+
+    maximum_frames_per_second = otir_tir5v3_normalize_maximum_frames_per_second(
+        maximum_frames_per_second
+    );
+    if (maximum_frames_per_second <= 0.0) {
+        return false;
+    }
+
+    minimum_interval = 1.0 / maximum_frames_per_second;
+    return elapsed_since_last_frame >= minimum_interval;
 }
 
 void otir_tir5v3_packet_stats(

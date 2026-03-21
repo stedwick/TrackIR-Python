@@ -25,6 +25,8 @@ static void test_parse_packet_decodes_type5_stripe(void);
 static void test_compute_weighted_centroid_matches_linuxtrack_formula(void);
 static void test_shutdown_steps_turns_led_off_even_without_streaming(void);
 static void test_build_frame_marks_stripes_and_stats(void);
+static void test_normalize_maximum_frames_per_second_rejects_invalid_values(void);
+static void test_should_publish_frame_respects_maximum_rate(void);
 
 int main(void) {
     test_apply_transport_obfuscates_header_and_nonce();
@@ -37,6 +39,8 @@ int main(void) {
     test_compute_weighted_centroid_matches_linuxtrack_formula();
     test_shutdown_steps_turns_led_off_even_without_streaming();
     test_build_frame_marks_stripes_and_stats();
+    test_normalize_maximum_frames_per_second_rejects_invalid_values();
+    test_should_publish_frame_respects_maximum_rate();
     puts("c/tests/test_tir5: all tests passed");
     return 0;
 }
@@ -260,4 +264,19 @@ static void test_build_frame_marks_stripes_and_stats(void) {
     assert(stats.stripe_count == 2);
     assert(stats.packet_no == 0x44);
     assert(stats.has_centroid);
+}
+
+static void test_should_publish_frame_respects_maximum_rate(void) {
+    assert(!otir_tir5v3_should_publish_frame(0.0, 60.0));
+    assert(!otir_tir5v3_should_publish_frame(0.01, 60.0));
+    assert(otir_tir5v3_should_publish_frame(1.0 / 60.0, 60.0));
+    assert(otir_tir5v3_should_publish_frame(0.05, 60.0));
+    assert(!otir_tir5v3_should_publish_frame(0.05, 0.0));
+}
+
+static void test_normalize_maximum_frames_per_second_rejects_invalid_values(void) {
+    assert(otir_tir5v3_normalize_maximum_frames_per_second(60.0) == 60.0);
+    assert(otir_tir5v3_normalize_maximum_frames_per_second(0.0) == 0.0);
+    assert(otir_tir5v3_normalize_maximum_frames_per_second(-15.0) == 0.0);
+    assert(otir_tir5v3_normalize_maximum_frames_per_second(NAN) == 0.0);
 }

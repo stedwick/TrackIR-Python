@@ -165,6 +165,11 @@ void otir_tir5v3_build_frame(
     uint8_t *frame,
     size_t stride
 );
+double otir_tir5v3_normalize_maximum_frames_per_second(double maximum_frames_per_second);
+bool otir_tir5v3_should_publish_frame(
+    double elapsed_since_last_frame,
+    double maximum_frames_per_second
+);
 void otir_tir5v3_packet_stats(
     const otir_tir5v3_packet *packet,
     uint64_t frame_index,

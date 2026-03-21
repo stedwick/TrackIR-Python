@@ -130,6 +130,13 @@ def packet_stats(packet: TIR5V3Packet, frame_index: int) -> FrameStats:
     )
 
 
+def should_print_coordinate_sample(
+    elapsed_since_last_sample: float | None,
+    interval_seconds: float = 1.0,
+) -> bool:
+    return elapsed_since_last_sample is None or elapsed_since_last_sample >= interval_seconds
+
+
 def print_statuses(statuses) -> None:
     for index, status in enumerate(statuses, start=1):
         print(
@@ -139,19 +146,31 @@ def print_statuses(statuses) -> None:
         )
 
 
-def preview_packets(trackir: TrackIRTIR5V3, logger: SessionLogger, scale: int, seconds: float | None) -> None:
-    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+def preview_packets(
+    trackir: TrackIRTIR5V3,
+    logger: SessionLogger,
+    scale: int,
+    seconds: float | None,
+    show_opencv_preview: bool,
+) -> None:
     pending = b""
     frame_index = 0
     deadline = time.monotonic() + seconds if seconds is not None else None
+    last_coordinate_sample_time: float | None = None
     empty_packet = TIR5V3Packet(raw=b"", packet_no=None, packet_type=0x05, payload_size=0, stripes=())
 
-    print("Controls: q to quit")
+    if show_opencv_preview:
+        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+        print("Controls: q to quit")
+        cv2.imshow(WINDOW_NAME, build_preview_frame(empty_packet, empty_frame_stats(), scale))
+    else:
+        print("Preview disabled. Printing x/y once per second. Press Ctrl+C to quit.")
+
     logger.log_event("preview_started")
-    cv2.imshow(WINDOW_NAME, build_preview_frame(empty_packet, empty_frame_stats(), scale))
 
     while True:
-        if deadline is not None and time.monotonic() >= deadline:
+        now = time.monotonic()
+        if deadline is not None and now >= deadline:
             break
 
         chunk = trackir.read_chunk(timeout_ms=50)
@@ -165,8 +184,22 @@ def preview_packets(trackir: TrackIRTIR5V3, logger: SessionLogger, scale: int, s
 
                 frame_index += 1
                 stats = packet_stats(packet, frame_index)
-                image = build_preview_frame(packet, stats, scale)
-                cv2.imshow(WINDOW_NAME, image)
+
+                if show_opencv_preview:
+                    image = build_preview_frame(packet, stats, scale)
+                    cv2.imshow(WINDOW_NAME, image)
+                elif should_print_coordinate_sample(
+                    None if last_coordinate_sample_time is None else now - last_coordinate_sample_time
+                ):
+                    if stats.centroid is None:
+                        print(f"frame={stats.frame_index} x=- y=-")
+                    else:
+                        print(
+                            f"frame={stats.frame_index} "
+                            f"x={int(stats.centroid[0])} y={int(stats.centroid[1])}"
+                        )
+                    last_coordinate_sample_time = now
+
                 if not packet.is_empty:
                     logger.log_event(
                         f"frame={frame_index} packet={stats.packet_no} "
@@ -174,11 +207,13 @@ def preview_packets(trackir: TrackIRTIR5V3, logger: SessionLogger, scale: int, s
                         f"centroid={stats.centroid}"
                     )
 
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord("q"):
-            break
+        if show_opencv_preview:
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
+                break
 
-    cv2.destroyAllWindows()
+    if show_opencv_preview:
+        cv2.destroyAllWindows()
 
 
 def dump_packets(trackir: TrackIRTIR5V3, logger: SessionLogger, seconds: float, include_empty: bool) -> None:
@@ -254,8 +289,16 @@ def run_streaming_session(args: argparse.Namespace) -> None:
         started = True
         print(f"log={logger.path}")
 
-        if args.mode == "preview":
-            preview_packets(trackir, logger, args.scale, args.seconds)
+        if args.mode == "opencv":
+            preview_packets(
+                trackir,
+                logger,
+                args.scale,
+                args.seconds,
+                True,
+            )
+        elif args.mode == "log":
+            preview_packets(trackir, logger, scale=1, seconds=args.seconds, show_opencv_preview=False)
         else:
             dump_packets(trackir, logger, args.seconds, args.include_empty)
     finally:
@@ -266,7 +309,7 @@ def run_streaming_session(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="TrackIR TIR5V3 probe and preview tool")
+    parser = argparse.ArgumentParser(description="TrackIR TIR5V3 probe, preview, and logging tool")
     subparsers = parser.add_subparsers(dest="mode", required=True)
 
     identify = subparsers.add_parser("identify", help="Open the device and print init/status info")
@@ -277,10 +320,14 @@ def build_parser() -> argparse.ArgumentParser:
     dump.add_argument("--include-empty", action="store_true", help="Show empty packets too")
     dump.add_argument("--log", type=Path, default=None, help="Write session log to this file")
 
-    preview = subparsers.add_parser("preview", help="Show parsed stripes and centroid in an OpenCV window")
-    preview.add_argument("--seconds", type=float, default=None, help="Optional auto-exit timeout")
-    preview.add_argument("--scale", type=int, default=2, help="Nearest-neighbor display scale")
-    preview.add_argument("--log", type=Path, default=None, help="Write session log to this file")
+    opencv = subparsers.add_parser("opencv", help="Show parsed stripes and centroid in an OpenCV window")
+    opencv.add_argument("--seconds", type=float, default=None, help="Optional auto-exit timeout")
+    opencv.add_argument("--scale", type=int, default=2, help="Nearest-neighbor display scale")
+    opencv.add_argument("--log", type=Path, default=None, help="Write session log to this file")
+
+    log = subparsers.add_parser("log", help="Print centroid x/y once per second without OpenCV")
+    log.add_argument("--seconds", type=float, default=None, help="Optional auto-exit timeout")
+    log.add_argument("--log", type=Path, default=None, help="Write session log to this file")
 
     return parser
 
@@ -289,7 +336,7 @@ def main() -> None:
     parser = build_parser()
     argv = sys.argv[1:]
     if not argv or argv[0].startswith("-"):
-        argv = ["preview", *argv]
+        argv = ["opencv", *argv]
     args = parser.parse_args(argv)
 
     if args.mode == "identify":

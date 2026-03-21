@@ -48,6 +48,20 @@ struct ContentViewTests {
         #expect(ControlPreferenceKey.videoFlipHorizontal.rawValue == "contentView.videoFlipHorizontal")
         #expect(ControlPreferenceKey.videoFlipVertical.rawValue == "contentView.videoFlipVertical")
         #expect(ControlPreferenceKey.videoRotationDegrees.rawValue == "contentView.videoRotationDegrees")
+        #expect(ControlPreferenceKey.videoFramesPerSecond.rawValue == "contentView.videoFramesPerSecond")
+    }
+
+    @Test func controlDefaultValuesMatchExpectedStartupState() {
+        #expect(controlDefaultValues() == ControlDefaultValues(
+            videoEnabled: false,
+            trackIREnabled: false,
+            mouseMovementEnabled: false,
+            mouseMovementSpeed: 1.0,
+            videoFlipHorizontalEnabled: true,
+            videoFlipVerticalEnabled: false,
+            videoRotationDegrees: 0.0,
+            videoFramesPerSecond: 60.0
+        ))
     }
 
     @Test func defaultMouseMovementShortcutUsesShiftF7() {
@@ -86,6 +100,12 @@ struct ContentViewTests {
         #expect(videoRotationValueLabel(for: 450) == "90°")
     }
 
+    @Test func trackIRFramesPerSecondValueLabelHandlesUncappedAndWholeNumbers() {
+        #expect(trackIRFramesPerSecondValueLabel(for: 0) == "Uncapped")
+        #expect(trackIRFramesPerSecondValueLabel(for: 60) == "60 fps")
+        #expect(trackIRFramesPerSecondValueLabel(for: 124.6) == "125 fps")
+    }
+
     @Test func trackIRStreamingDependsOnTrackIREnableOnly() {
         #expect(shouldStreamTrackIRSession(isTrackIREnabled: true, isVideoEnabled: true))
         #expect(shouldStreamTrackIRSession(isTrackIREnabled: true, isVideoEnabled: false))
@@ -121,32 +141,17 @@ struct ContentViewTests {
         ))
     }
 
-    @Test func trackIRFramePacketFilterMatchesImageBearingPackets() {
-        #expect(packetTypeSupportsTrackIRFrame(0x00))
-        #expect(packetTypeSupportsTrackIRFrame(0x05))
-        #expect(!packetTypeSupportsTrackIRFrame(0x03))
+    @Test func trackIRUIUpdateIntervalUsesThrottledPolling() {
+        #expect(abs(trackIRUIUpdateInterval(isVideoEnabled: true) - (1.0 / 30.0)) < 0.0001)
+        #expect(trackIRUIUpdateInterval(isVideoEnabled: false) == 0.2)
     }
 
-    @Test func trackIRFrameRateUsesFramesPerElapsedSecond() {
-        #expect(trackIRFrameRate(frameCount: 30, elapsedSeconds: 0.25) == 120.0)
-        #expect(trackIRFrameRate(frameCount: 0, elapsedSeconds: 0.25) == nil)
-        #expect(trackIRFrameRate(frameCount: 30, elapsedSeconds: 0) == nil)
-    }
-
-    @Test func trackIRTelemetryPublishIntervalSkipsFrameFloodWhenVideoIsOff() {
-        #expect(trackIRTelemetryPublishInterval(isVideoEnabled: true) == 0)
-        #expect(trackIRTelemetryPublishInterval(isVideoEnabled: false) == 0.05)
-    }
-
-    @Test func trackIRPreviewFrameIntervalSupportsFifteenFpsCap() {
-        #expect(abs(trackIRPreviewFrameInterval(maximumFramesPerSecond: 15) - (1.0 / 15.0)) < 0.0001)
-        #expect(trackIRPreviewFrameInterval(maximumFramesPerSecond: 0) == 0)
-    }
-
-    @Test func shouldPublishTrackIRTelemetryUsesMinimumInterval() {
-        #expect(shouldPublishTrackIRTelemetry(elapsedSinceLastPublish: nil, minimumInterval: 0.05))
-        #expect(!shouldPublishTrackIRTelemetry(elapsedSinceLastPublish: 0.02, minimumInterval: 0.05))
-        #expect(shouldPublishTrackIRTelemetry(elapsedSinceLastPublish: 0.05, minimumInterval: 0.05))
+    @Test func trackIRCameraPhaseMapsNativeSessionStates() {
+        #expect(trackIRCameraPhase(sessionPhase: OTIR_TRACKIR_SESSION_PHASE_IDLE) == .idle)
+        #expect(trackIRCameraPhase(sessionPhase: OTIR_TRACKIR_SESSION_PHASE_STARTING) == .starting)
+        #expect(trackIRCameraPhase(sessionPhase: OTIR_TRACKIR_SESSION_PHASE_STREAMING) == .streaming)
+        #expect(trackIRCameraPhase(sessionPhase: OTIR_TRACKIR_SESSION_PHASE_UNAVAILABLE) == .unavailable)
+        #expect(trackIRCameraPhase(sessionPhase: OTIR_TRACKIR_SESSION_PHASE_FAILED) == .failed)
     }
 
     @Test func trackIRFrameRateLabelUsesCompactFpsText() {
@@ -166,10 +171,16 @@ struct ContentViewTests {
         #expect(trackIRCoordinatePairLabel(x: 123.9, y: nil) == "-")
     }
 
-    @Test func trackIRShutdownWaitUsesReadTimeoutBudget() {
-        #expect(trackIRShutdownWaitMilliseconds(readTimeoutMilliseconds: 50) == 250)
-        #expect(trackIRShutdownWaitMilliseconds(readTimeoutMilliseconds: 75) == 300)
-        #expect(trackIRShutdownWaitMilliseconds(readTimeoutMilliseconds: 0) == 250)
+    @Test func trackIRSessionErrorDescriptionReadsUtf8Message() {
+        var snapshot = otir_trackir_session_snapshot()
+        let message = Array("TrackIR busy".utf8)
+
+        snapshot.has_error_message = true
+        withUnsafeMutableBytes(of: &snapshot.error_message) { buffer in
+            _ = buffer.copyBytes(from: message)
+        }
+
+        #expect(trackIRSessionErrorDescription(snapshot: snapshot) == "TrackIR busy")
     }
 
     @Test func trackIRPreviewImageUsesProvidedDimensions() {

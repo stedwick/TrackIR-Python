@@ -1,0 +1,38 @@
+{
+  "configurations" : [
+    {
+      "id" : "E8E3AD83-330F-461C-B87A-7833BEDA9080",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "performanceAntipatternCheckerEnabled" : true,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:OpenTrackIR.xcodeproj",
+      "identifier" : "D499E6EA2F6F11C500DE98E6",
+      "name" : "OpenTrackIR"
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:OpenTrackIR.xcodeproj",
+        "identifier" : "D499E6F72F6F11C500DE98E6",
+        "name" : "OpenTrackIRTests"
+      }
+    },
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:OpenTrackIR.xcodeproj",
+        "identifier" : "D499E7012F6F11C500DE98E6",
+        "name" : "OpenTrackIRUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

@@ -11,7 +11,7 @@ from tir5v3 import (
     parse_tir5v3_packet,
     shutdown_steps,
 )
-from trackir_tir5v3 import empty_frame_stats
+from trackir_tir5v3 import empty_frame_stats, should_print_coordinate_sample
 
 
 def make_type5_packet(packet_no: int, payload: bytes = b"") -> bytes:
@@ -51,6 +51,12 @@ class TIR5V3Tests(unittest.TestCase):
         self.assertEqual(stats.stripe_count, 0)
         self.assertIsNone(stats.centroid)
         self.assertEqual(stats.packet_no, 0x77)
+
+    def test_should_print_coordinate_sample_uses_one_second_interval(self) -> None:
+        self.assertTrue(should_print_coordinate_sample(None))
+        self.assertFalse(should_print_coordinate_sample(0.5))
+        self.assertTrue(should_print_coordinate_sample(1.0))
+        self.assertTrue(should_print_coordinate_sample(1.5))
 
     def test_apply_tir5v3_transport_obfuscates_header_and_nonce(self) -> None:
         packet = bytes(range(24))

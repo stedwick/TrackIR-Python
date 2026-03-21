@@ -2,7 +2,6 @@ import Combine
 import CoreGraphics
 import Foundation
 import OSLog
-import SwiftUI
 
 enum TrackIRCameraPhase: Equatable {
     case idle
@@ -25,9 +24,9 @@ final class TrackIRCameraController: ObservableObject {
 
     let backendLabel = "C + libusb"
 
-    private var activeSessionToken = 0
-    private var restartTask: Task<Void, Never>?
-    private var runner: TrackIRStreamRunner?
+    private var pollTask: Task<Void, Never>?
+    private var session: OpaquePointer?
+    private var polledVideoEnabled = true
 
     var sourceLabel: String {
         switch phase {
@@ -64,26 +63,36 @@ final class TrackIRCameraController: ObservableObject {
         return String(format: "0x%02X", lastPacketType)
     }
 
-    func syncStreaming(isTrackIREnabled: Bool, isVideoEnabled: Bool) {
-        restartTask?.cancel()
-        restartTask = nil
-
+    func syncStreaming(
+        isTrackIREnabled: Bool,
+        isVideoEnabled: Bool,
+        maximumTrackingFramesPerSecond: Double
+    ) {
         if shouldAccessTrackIRHardware(
             isTrackIREnabled: isTrackIREnabled,
             isVideoEnabled: isVideoEnabled,
             environment: ProcessInfo.processInfo.environment
         ) {
-            startStreamingIfNeeded(isVideoEnabled: isVideoEnabled)
+            startStreamingIfNeeded(
+                isVideoEnabled: isVideoEnabled,
+                maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond
+            )
         } else {
-            if shouldStreamTrackIRSession(isTrackIREnabled: isTrackIREnabled, isVideoEnabled: isVideoEnabled),
-               isRunningInXcodePreview(environment: ProcessInfo.processInfo.environment) {
+            if shouldStreamTrackIRSession(
+                isTrackIREnabled: isTrackIREnabled,
+                isVideoEnabled: isVideoEnabled
+            ), isRunningInXcodePreview(environment: ProcessInfo.processInfo.environment) {
                 trackIRLogger.info("Skipping TrackIR hardware access in Xcode preview mode")
             }
-            stopStreaming(clearPreview: true, waitForRunnerExit: false)
+            stopStreaming(clearPreview: true, waitForShutdown: false)
         }
     }
 
-    func refresh(isTrackIREnabled: Bool, isVideoEnabled: Bool) {
+    func refresh(
+        isTrackIREnabled: Bool,
+        isVideoEnabled: Bool,
+        maximumTrackingFramesPerSecond: Double
+    ) {
         let shouldRestart = shouldAccessTrackIRHardware(
             isTrackIREnabled: isTrackIREnabled,
             isVideoEnabled: isVideoEnabled,
@@ -94,103 +103,77 @@ final class TrackIRCameraController: ObservableObject {
             "Refresh requested. trackIREnabled=\(isTrackIREnabled, privacy: .public) videoEnabled=\(isVideoEnabled, privacy: .public) shouldRestart=\(shouldRestart, privacy: .public)"
         )
 
-        restartTask?.cancel()
-        restartTask = nil
-        stopStreaming(clearPreview: true, waitForRunnerExit: false)
+        stopStreaming(clearPreview: true, waitForShutdown: true)
 
         guard shouldRestart else {
             return
         }
 
-        phase = .starting
-        lastErrorDescription = nil
-
-        restartTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(125))
-            guard let self else {
-                return
-            }
-
-            self.restartTask = nil
-            self.startStreamingIfNeeded(isVideoEnabled: isVideoEnabled)
-        }
+        startStreamingIfNeeded(
+            isVideoEnabled: isVideoEnabled,
+            maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond
+        )
     }
 
     func shutdown() {
-        restartTask?.cancel()
-        restartTask = nil
-        stopStreaming(clearPreview: true, waitForRunnerExit: false)
+        stopStreaming(clearPreview: true, waitForShutdown: false)
     }
 
     func shutdownAndWait() {
-        restartTask?.cancel()
-        restartTask = nil
-        stopStreaming(clearPreview: true, waitForRunnerExit: true)
+        stopStreaming(clearPreview: true, waitForShutdown: true)
     }
 
-    private func startStreamingIfNeeded(isVideoEnabled: Bool) {
-        restartTask?.cancel()
-        restartTask = nil
-
-        guard runner == nil else {
-            runner?.setVideoPreviewEnabled(isVideoEnabled)
-            if !isVideoEnabled {
-                previewImage = nil
-            }
+    private func startStreamingIfNeeded(
+        isVideoEnabled: Bool,
+        maximumTrackingFramesPerSecond: Double
+    ) {
+        guard let session = ensureSession() else {
+            phase = .failed
+            lastErrorDescription = "Failed to create TrackIR session."
             return
         }
 
-        activeSessionToken += 1
-        let sessionToken = activeSessionToken
+        otir_trackir_session_set_maximum_tracking_frames_per_second(
+            session,
+            maximumTrackingFramesPerSecond
+        )
+        otir_trackir_session_set_video_enabled(session, isVideoEnabled)
 
-        trackIRLogger.info("Starting TrackIR session \(sessionToken, privacy: .public)")
-
-        phase = .starting
-        lastErrorDescription = nil
-        frameIndex = 0
-        frameRate = nil
-        centroidX = nil
-        centroidY = nil
-        lastPacketType = nil
-        previewImage = nil
-
-        let runner = TrackIRStreamRunner(
-            sessionToken: sessionToken,
-            isVideoPreviewEnabled: isVideoEnabled
-        ) { [weak self] event in
-            Task { @MainActor [weak self] in
-                self?.apply(event)
-            }
+        let startStatus = otir_trackir_session_start(session)
+        guard startStatus == OTIR_STATUS_OK else {
+            phase = .failed
+            lastErrorDescription = trackIRFailureMessage(for: startStatus, operation: "Start session")
+            return
         }
 
-        self.runner = runner
-        runner.start()
+        if pollTask == nil {
+            phase = .starting
+            lastErrorDescription = nil
+            frameIndex = 0
+            frameRate = nil
+            centroidX = nil
+            centroidY = nil
+            lastPacketType = nil
+            previewImage = nil
+        }
+
+        if !isVideoEnabled {
+            previewImage = nil
+        }
+
+        if pollTask == nil || polledVideoEnabled != isVideoEnabled {
+            polledVideoEnabled = isVideoEnabled
+            startPolling(session: session, isVideoEnabled: isVideoEnabled)
+        }
     }
 
-    private func stopStreaming(clearPreview: Bool, waitForRunnerExit: Bool) {
-        let activeRunner = runner
+    private func stopStreaming(clearPreview: Bool, waitForShutdown: Bool) {
+        pollTask?.cancel()
+        pollTask = nil
 
-        if activeRunner != nil {
-            trackIRLogger.info("Stopping TrackIR session \(self.activeSessionToken, privacy: .public)")
-        }
-
-        activeSessionToken += 1
-        runner = nil
-        activeRunner?.requestStop()
-
-        if waitForRunnerExit, let activeRunner {
-            let waitMilliseconds = trackIRShutdownWaitMilliseconds(
-                readTimeoutMilliseconds: TrackIRStreamRunner.readTimeoutMilliseconds
-            )
-            let didStopInTime = activeRunner.waitUntilStopped(
-                timeout: .now() + .milliseconds(waitMilliseconds)
-            )
-
-            if !didStopInTime {
-                trackIRLogger.error(
-                    "TrackIR session shutdown timed out after \(waitMilliseconds, privacy: .public) ms"
-                )
-            }
+        if let session {
+            trackIRLogger.info("Stopping TrackIR session")
+            otir_trackir_session_stop(session, waitForShutdown)
         }
 
         phase = .idle
@@ -200,63 +183,106 @@ final class TrackIRCameraController: ObservableObject {
         centroidX = nil
         centroidY = nil
         lastPacketType = nil
+        polledVideoEnabled = true
 
         if clearPreview {
             previewImage = nil
         }
     }
 
-    private func apply(_ event: TrackIRCameraEvent) {
-        guard event.sessionToken == activeSessionToken else {
-            return
+    private func ensureSession() -> OpaquePointer? {
+        if session == nil {
+            session = otir_trackir_session_create()
         }
 
-        switch event.kind {
-            case .didStartStreaming:
-                trackIRLogger.info("TrackIR session \(event.sessionToken, privacy: .public) is streaming")
-                phase = .streaming
-                lastErrorDescription = nil
+        return session
+    }
 
-            case let .didRenderFrame(image, frameIndex, frameRate, centroidX, centroidY, packetType):
-                phase = .streaming
-                previewImage = image
-                self.frameIndex = frameIndex
-                self.frameRate = frameRate
-                self.centroidX = centroidX
-                self.centroidY = centroidY
-                lastPacketType = packetType
+    private func startPolling(session: OpaquePointer, isVideoEnabled: Bool) {
+        pollTask?.cancel()
 
-            case let .didUpdateTelemetry(frameIndex, frameRate, centroidX, centroidY, packetType):
-                phase = .streaming
-                self.frameIndex = frameIndex
-                self.frameRate = frameRate
-                self.centroidX = centroidX
-                self.centroidY = centroidY
-                lastPacketType = packetType
+        let updateInterval = trackIRUIUpdateInterval(isVideoEnabled: isVideoEnabled)
 
-            case let .didBecomeUnavailable(message):
-                trackIRLogger.notice("TrackIR unavailable for session \(event.sessionToken, privacy: .public): \(message, privacy: .public)")
-                runner = nil
-                previewImage = nil
-                phase = .unavailable
-                lastErrorDescription = message
-                frameIndex = 0
-                frameRate = nil
-                centroidX = nil
-                centroidY = nil
-                lastPacketType = nil
+        pollTask = Task.detached(priority: .utility) { [weak self] in
+            var lastPreviewFrameGeneration: UInt64 = 0
 
-            case let .didFail(message):
-                trackIRLogger.error("TrackIR failure for session \(event.sessionToken, privacy: .public): \(message, privacy: .public)")
-                runner = nil
-                previewImage = nil
-                phase = .failed
-                lastErrorDescription = message
-                frameIndex = 0
-                frameRate = nil
-                centroidX = nil
-                centroidY = nil
-                lastPacketType = nil
+            while !Task.isCancelled {
+                var snapshot = otir_trackir_session_snapshot()
+                var latestPreviewImage: CGImage?
+
+                otir_trackir_session_copy_snapshot(session, &snapshot)
+
+                if isVideoEnabled,
+                   snapshot.has_preview_frame,
+                   snapshot.preview_frame_generation != lastPreviewFrameGeneration {
+                    var frameBytes = [UInt8](
+                        repeating: 0,
+                        count: Int(OTIR_TRACKIR_SESSION_FRAME_BYTES)
+                    )
+                    var frameGeneration: UInt64 = 0
+
+                    let didCopyPreviewFrame = frameBytes.withUnsafeMutableBufferPointer { buffer in
+                        otir_trackir_session_copy_preview_frame(
+                            session,
+                            buffer.baseAddress,
+                            buffer.count,
+                            &frameGeneration
+                        )
+                    }
+
+                    if didCopyPreviewFrame {
+                        latestPreviewImage = trackIRPreviewImage(
+                            frameBytes: frameBytes,
+                            width: Int(snapshot.preview_width),
+                            height: Int(snapshot.preview_height)
+                        )
+                        lastPreviewFrameGeneration = frameGeneration
+                    }
+                }
+
+                let snapshotCopy = snapshot
+                let previewImageCopy = latestPreviewImage
+
+                await MainActor.run { [weak self, snapshotCopy, previewImageCopy] in
+                    self?.apply(
+                        snapshotCopy,
+                        previewImage: previewImageCopy,
+                        isVideoEnabled: isVideoEnabled
+                    )
+                }
+
+                let nanoseconds = UInt64(updateInterval * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanoseconds)
+            }
+        }
+    }
+
+    private func apply(
+        _ snapshot: otir_trackir_session_snapshot,
+        previewImage: CGImage?,
+        isVideoEnabled: Bool
+    ) {
+        phase = trackIRCameraPhase(sessionPhase: snapshot.phase)
+        lastErrorDescription = trackIRSessionErrorDescription(snapshot: snapshot)
+        frameIndex = snapshot.frame_index
+        frameRate = snapshot.has_frame_rate ? snapshot.frame_rate : nil
+        centroidX = snapshot.has_centroid ? snapshot.centroid_x : nil
+        centroidY = snapshot.has_centroid ? snapshot.centroid_y : nil
+        lastPacketType = snapshot.has_packet_type ? snapshot.packet_type : nil
+
+        if let previewImage {
+            self.previewImage = previewImage
+        } else if !isVideoEnabled || !snapshot.has_preview_frame || phase != .streaming {
+            self.previewImage = nil
+        }
+    }
+
+    deinit {
+        pollTask?.cancel()
+
+        if let session {
+            otir_trackir_session_stop(session, true)
+            otir_trackir_session_destroy(session)
         }
     }
 }
@@ -266,241 +292,16 @@ private let trackIRLogger = Logger(
     category: "TrackIRCamera"
 )
 
-private struct TrackIRCameraEvent: @unchecked Sendable {
-    let sessionToken: Int
-    let kind: TrackIRCameraEventKind
-}
-
-private enum TrackIRCameraEventKind: @unchecked Sendable {
-    case didStartStreaming
-    case didRenderFrame(CGImage, UInt64, Double?, Double?, Double?, UInt8)
-    case didUpdateTelemetry(UInt64, Double?, Double?, Double?, UInt8)
-    case didBecomeUnavailable(String)
-    case didFail(String)
-}
-
-private final class TrackIRStreamRunner: @unchecked Sendable {
-    static let readTimeoutMilliseconds = 50
-
-    private let sessionToken: Int
-    private let onEvent: @Sendable (TrackIRCameraEvent) -> Void
-    private let lock = NSLock()
-    private let stoppedSemaphore = DispatchSemaphore(value: 0)
-
-    private var isStopRequested = false
-    private var isVideoPreviewEnabled: Bool
-
-    init(
-        sessionToken: Int,
-        isVideoPreviewEnabled: Bool,
-        onEvent: @escaping @Sendable (TrackIRCameraEvent) -> Void
-    ) {
-        self.sessionToken = sessionToken
-        self.isVideoPreviewEnabled = isVideoPreviewEnabled
-        self.onEvent = onEvent
-    }
-
-    func start() {
-        DispatchQueue.global(qos: .userInitiated).async { [self] in
-            run()
-        }
-    }
-
-    func requestStop() {
-        lock.lock()
-        isStopRequested = true
-        lock.unlock()
-    }
-
-    func setVideoPreviewEnabled(_ isEnabled: Bool) {
-        lock.lock()
-        isVideoPreviewEnabled = isEnabled
-        lock.unlock()
-    }
-
-    func waitUntilStopped(timeout: DispatchTime) -> Bool {
-        stoppedSemaphore.wait(timeout: timeout) == .success
-    }
-
-    private func run() {
-        defer {
-            stoppedSemaphore.signal()
-        }
-
-        trackIRLogger.info("Opening TrackIR device for session \(self.sessionToken, privacy: .public)")
-
-        var device: OpaquePointer?
-        let openStatus = otir_tir5v3_open(&device)
-
-        guard openStatus == OTIR_STATUS_OK, let device else {
-            sendFailure(for: openStatus, operation: "Open")
-            return
-        }
-
-        defer {
-            trackIRLogger.info("Closing TrackIR device for session \(self.sessionToken, privacy: .public)")
-            _ = otir_tir5v3_stop_streaming(device)
-            otir_tir5v3_close(device)
-        }
-
-        var statuses = Array(
-            repeating: otir_tir5v3_status(),
-            count: Int(OTIR_TIR5V3_INIT_STATUS_COUNT)
-        )
-        var statusCount = 0
-
-        let initializeStatus = statuses.withUnsafeMutableBufferPointer { buffer in
-            otir_tir5v3_initialize(device, buffer.baseAddress, buffer.count, &statusCount)
-        }
-        guard initializeStatus == OTIR_STATUS_OK else {
-            sendFailure(for: initializeStatus, operation: "Initialize")
-            return
-        }
-
-        let startStatus = otir_tir5v3_start_streaming(device)
-        guard startStatus == OTIR_STATUS_OK else {
-            sendFailure(for: startStatus, operation: "Start streaming")
-            return
-        }
-
-        send(.didStartStreaming)
-
-        var frameIndex: UInt64 = 0
-        var measuredFrameRate: Double?
-        var sampledFrameCount = 0
-        var sampleStartTime = CFAbsoluteTimeGetCurrent()
-        var lastTelemetryPublishTime: CFAbsoluteTime?
-        var lastPreviewPublishTime: CFAbsoluteTime?
-        let frameWidth = Int(OTIR_TIR5V3_FRAME_WIDTH)
-        let frameHeight = Int(OTIR_TIR5V3_FRAME_HEIGHT)
-        let packetStorage = UnsafeMutablePointer<otir_tir5v3_packet>.allocate(capacity: 1)
-
-        defer {
-            packetStorage.deallocate()
-        }
-
-        while !stopRequested() {
-            let readStatus = otir_tir5v3_read_packet(device, Int32(Self.readTimeoutMilliseconds), packetStorage)
-
-            if readStatus == OTIR_STATUS_TIMEOUT {
-                continue
-            }
-
-            guard readStatus == OTIR_STATUS_OK else {
-                if !stopRequested() {
-                    sendFailure(for: readStatus, operation: "Read packet")
-                }
-                return
-            }
-
-            guard packetTypeSupportsTrackIRFrame(packetStorage.pointee.packet_type) else {
-                continue
-            }
-
-            frameIndex += 1
-            sampledFrameCount += 1
-
-            let now = CFAbsoluteTimeGetCurrent()
-            let sampleDuration = now - sampleStartTime
-
-            if sampleDuration >= 0.25 {
-                measuredFrameRate = trackIRFrameRate(
-                    frameCount: sampledFrameCount,
-                    elapsedSeconds: sampleDuration
-                )
-                sampledFrameCount = 0
-                sampleStartTime = now
-            }
-
-            var frameStats = otir_tir5v3_frame_stats()
-            otir_tir5v3_packet_stats(packetStorage, frameIndex, &frameStats)
-
-            let centroidX = frameStats.has_centroid ? frameStats.centroid_x : nil
-            let centroidY = frameStats.has_centroid ? frameStats.centroid_y : nil
-            let isVideoPreviewEnabled = videoPreviewEnabled()
-
-            if isVideoPreviewEnabled {
-                guard shouldPublishTrackIRTelemetry(
-                    elapsedSinceLastPublish: lastPreviewPublishTime.map { now - $0 },
-                    minimumInterval: trackIRPreviewFrameInterval(maximumFramesPerSecond: 30)
-                ) else {
-                    continue
-                }
-
-                var frameBytes = [UInt8](repeating: 0, count: frameWidth * frameHeight)
-                frameBytes.withUnsafeMutableBufferPointer { buffer in
-                    otir_tir5v3_build_frame(packetStorage, buffer.baseAddress, frameWidth)
-                }
-
-                guard let image = trackIRPreviewImage(
-                    frameBytes: frameBytes,
-                    width: frameWidth,
-                    height: frameHeight
-                ) else {
-                    continue
-                }
-
-                send(.didRenderFrame(image, frameIndex, measuredFrameRate, centroidX, centroidY, packetStorage.pointee.packet_type))
-                lastPreviewPublishTime = now
-                continue
-            }
-
-            if shouldPublishTrackIRTelemetry(
-                elapsedSinceLastPublish: lastTelemetryPublishTime.map { now - $0 },
-                minimumInterval: trackIRTelemetryPublishInterval(isVideoEnabled: false)
-            ) {
-                send(.didUpdateTelemetry(frameIndex, measuredFrameRate, centroidX, centroidY, packetStorage.pointee.packet_type))
-                lastTelemetryPublishTime = now
-            }
-        }
-
-        trackIRLogger.info("TrackIR read loop stopped for session \(self.sessionToken, privacy: .public)")
-    }
-
-    private func stopRequested() -> Bool {
-        lock.lock()
-        let isStopRequested = isStopRequested
-        lock.unlock()
-        return isStopRequested
-    }
-
-    private func videoPreviewEnabled() -> Bool {
-        lock.lock()
-        let isVideoPreviewEnabled = isVideoPreviewEnabled
-        lock.unlock()
-        return isVideoPreviewEnabled
-    }
-
-    private func send(_ kind: TrackIRCameraEventKind) {
-        guard !stopRequested() else {
-            return
-        }
-
-        onEvent(TrackIRCameraEvent(sessionToken: sessionToken, kind: kind))
-    }
-
-    private func sendFailure(for status: otir_status, operation: String) {
-        let message = trackIRFailureMessage(for: status, operation: operation)
-        trackIRLogger.error("TrackIR \(operation, privacy: .public) failure for session \(self.sessionToken, privacy: .public): \(message, privacy: .public)")
-
-        if status == OTIR_STATUS_NOT_FOUND {
-            send(.didBecomeUnavailable(message))
-            return
-        }
-
-        send(.didFail(message))
-    }
-}
-
-func shouldStreamTrackIRSession(isTrackIREnabled: Bool, isVideoEnabled: Bool) -> Bool {
+nonisolated func shouldStreamTrackIRSession(isTrackIREnabled: Bool, isVideoEnabled: Bool) -> Bool {
     isTrackIREnabled
 }
 
-func isRunningInXcodePreview(environment: [String: String]) -> Bool {
-    environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" || environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1"
+nonisolated func isRunningInXcodePreview(environment: [String: String]) -> Bool {
+    environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" ||
+        environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1"
 }
 
-func shouldAccessTrackIRHardware(
+nonisolated func shouldAccessTrackIRHardware(
     isTrackIREnabled: Bool,
     isVideoEnabled: Bool,
     environment: [String: String]
@@ -511,42 +312,42 @@ func shouldAccessTrackIRHardware(
     ) && !isRunningInXcodePreview(environment: environment)
 }
 
-func packetTypeSupportsTrackIRFrame(_ packetType: UInt8) -> Bool {
-    packetType == 0x00 || packetType == 0x05
+nonisolated func trackIRUIUpdateInterval(isVideoEnabled: Bool) -> TimeInterval {
+    isVideoEnabled ? (1.0 / 30.0) : 0.2
 }
 
-func trackIRFrameRate(frameCount: Int, elapsedSeconds: TimeInterval) -> Double? {
-    guard frameCount > 0, elapsedSeconds > 0 else {
+nonisolated func trackIRCameraPhase(sessionPhase: otir_trackir_session_phase) -> TrackIRCameraPhase {
+    switch sessionPhase {
+        case OTIR_TRACKIR_SESSION_PHASE_STARTING:
+            return .starting
+        case OTIR_TRACKIR_SESSION_PHASE_STREAMING:
+            return .streaming
+        case OTIR_TRACKIR_SESSION_PHASE_UNAVAILABLE:
+            return .unavailable
+        case OTIR_TRACKIR_SESSION_PHASE_FAILED:
+            return .failed
+        default:
+            return .idle
+    }
+}
+
+nonisolated func trackIRSessionErrorDescription(snapshot: otir_trackir_session_snapshot) -> String? {
+    guard snapshot.has_error_message else {
         return nil
     }
 
-    return Double(frameCount) / elapsedSeconds
-}
-
-func trackIRTelemetryPublishInterval(isVideoEnabled: Bool) -> TimeInterval {
-    isVideoEnabled ? 0 : 0.05
-}
-
-func trackIRPreviewFrameInterval(maximumFramesPerSecond: Double) -> TimeInterval {
-    guard maximumFramesPerSecond > 0 else {
-        return 0
+    let bytes = withUnsafeBytes(of: snapshot.error_message) { buffer in
+        Array(buffer.prefix { $0 != 0 })
     }
 
-    return 1.0 / maximumFramesPerSecond
-}
-
-func shouldPublishTrackIRTelemetry(
-    elapsedSinceLastPublish: TimeInterval?,
-    minimumInterval: TimeInterval
-) -> Bool {
-    guard let elapsedSinceLastPublish else {
-        return true
+    guard !bytes.isEmpty else {
+        return nil
     }
 
-    return elapsedSinceLastPublish >= minimumInterval
+    return String(bytes: bytes, encoding: .utf8)
 }
 
-func trackIRFrameRateLabel(for frameRate: Double?) -> String {
+nonisolated func trackIRFrameRateLabel(for frameRate: Double?) -> String {
     guard let frameRate else {
         return "-"
     }
@@ -554,7 +355,7 @@ func trackIRFrameRateLabel(for frameRate: Double?) -> String {
     return "\(frameRate.formatted(.number.precision(.fractionLength(1)))) fps"
 }
 
-func trackIRCoordinateLabel(for coordinate: Double?) -> String {
+nonisolated func trackIRCoordinateLabel(for coordinate: Double?) -> String {
     guard let coordinate else {
         return "-"
     }
@@ -562,7 +363,7 @@ func trackIRCoordinateLabel(for coordinate: Double?) -> String {
     return String(Int(coordinate))
 }
 
-func trackIRCoordinatePairLabel(x: Double?, y: Double?) -> String {
+nonisolated func trackIRCoordinatePairLabel(x: Double?, y: Double?) -> String {
     let xLabel = trackIRCoordinateLabel(for: x)
     let yLabel = trackIRCoordinateLabel(for: y)
 
@@ -573,11 +374,7 @@ func trackIRCoordinatePairLabel(x: Double?, y: Double?) -> String {
     return "\(xLabel), \(yLabel)"
 }
 
-func trackIRShutdownWaitMilliseconds(readTimeoutMilliseconds: Int) -> Int {
-    max(250, readTimeoutMilliseconds * 4)
-}
-
-func trackIRPreviewImage(frameBytes: [UInt8], width: Int, height: Int) -> CGImage? {
+nonisolated func trackIRPreviewImage(frameBytes: [UInt8], width: Int, height: Int) -> CGImage? {
     guard width > 0, height > 0, frameBytes.count == width * height else {
         return nil
     }
@@ -602,7 +399,7 @@ func trackIRPreviewImage(frameBytes: [UInt8], width: Int, height: Int) -> CGImag
     )
 }
 
-func trackIRFailureMessage(for status: otir_status, operation: String) -> String {
+nonisolated func trackIRFailureMessage(for status: otir_status, operation: String) -> String {
     if status == OTIR_STATUS_NOT_FOUND {
         return "TrackIR not found. Connect the device and try again."
     }
@@ -618,7 +415,7 @@ func trackIRFailureMessage(for status: otir_status, operation: String) -> String
     return "\(operation) failed: \(String(cString: statusDescription))."
 }
 
-func trackIRPreviewMessage(
+nonisolated func trackIRPreviewMessage(
     isTrackIREnabled: Bool,
     isVideoEnabled: Bool,
     phase: TrackIRCameraPhase,

@@ -8,16 +8,19 @@
 import KeyboardShortcuts
 import SwiftUI
 
+private let defaultControlValues = controlDefaultValues()
+
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var cameraController: TrackIRCameraController
-    @AppStorage(ControlPreferenceKey.videoEnabled.rawValue) private var isVideoEnabled = true
-    @AppStorage(ControlPreferenceKey.trackIREnabled.rawValue) private var isTrackIREnabled = true
-    @AppStorage(ControlPreferenceKey.mouseMovementEnabled.rawValue) private var isMouseMovementEnabled = true
-    @AppStorage(ControlPreferenceKey.mouseMovementSpeed.rawValue) private var mouseMovementSpeed = 1.0
-    @AppStorage(ControlPreferenceKey.videoFlipHorizontal.rawValue) private var isVideoFlipHorizontalEnabled = true
-    @AppStorage(ControlPreferenceKey.videoFlipVertical.rawValue) private var isVideoFlipVerticalEnabled = false
-    @AppStorage(ControlPreferenceKey.videoRotationDegrees.rawValue) private var videoRotationDegrees = 0.0
+    @AppStorage(ControlPreferenceKey.videoEnabled.rawValue) private var isVideoEnabled = defaultControlValues.videoEnabled
+    @AppStorage(ControlPreferenceKey.trackIREnabled.rawValue) private var isTrackIREnabled = defaultControlValues.trackIREnabled
+    @AppStorage(ControlPreferenceKey.mouseMovementEnabled.rawValue) private var isMouseMovementEnabled = defaultControlValues.mouseMovementEnabled
+    @AppStorage(ControlPreferenceKey.mouseMovementSpeed.rawValue) private var mouseMovementSpeed = defaultControlValues.mouseMovementSpeed
+    @AppStorage(ControlPreferenceKey.videoFlipHorizontal.rawValue) private var isVideoFlipHorizontalEnabled = defaultControlValues.videoFlipHorizontalEnabled
+    @AppStorage(ControlPreferenceKey.videoFlipVertical.rawValue) private var isVideoFlipVerticalEnabled = defaultControlValues.videoFlipVerticalEnabled
+    @AppStorage(ControlPreferenceKey.videoRotationDegrees.rawValue) private var videoRotationDegrees = defaultControlValues.videoRotationDegrees
+    @AppStorage(ControlPreferenceKey.videoFramesPerSecond.rawValue) private var videoFramesPerSecond = defaultControlValues.videoFramesPerSecond
 
     @MainActor
     init() {
@@ -58,6 +61,9 @@ struct ContentView: View {
             syncTrackIRCamera()
         }
         .onChange(of: isVideoEnabled) { _, _ in
+            syncTrackIRCamera()
+        }
+        .onChange(of: videoFramesPerSecond) { _, _ in
             syncTrackIRCamera()
         }
         .onDisappear {
@@ -474,6 +480,34 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                     }
                 }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top, spacing: 14) {
+                        controlCopy(
+                            title: "TrackIR FPS",
+                            detail: "Cap TrackIR telemetry.",
+                            systemImage: "gauge.with.dots.needle.33percent"
+                        )
+
+                        Spacer(minLength: 16)
+
+                        Text(trackIRFramesPerSecondValueLabel(for: videoFramesPerSecond))
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Slider(value: $videoFramesPerSecond, in: 0 ... 125, step: 1)
+
+                        HStack {
+                            Text("0")
+                            Spacer()
+                            Text("125")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
     }
@@ -513,14 +547,16 @@ struct ContentView: View {
     private func syncTrackIRCamera() {
         cameraController.syncStreaming(
             isTrackIREnabled: isTrackIREnabled,
-            isVideoEnabled: isVideoEnabled
+            isVideoEnabled: isVideoEnabled,
+            maximumTrackingFramesPerSecond: videoFramesPerSecond
         )
     }
 
     private func refreshTrackIRCamera() {
         cameraController.refresh(
             isTrackIREnabled: isTrackIREnabled,
-            isVideoEnabled: isVideoEnabled
+            isVideoEnabled: isVideoEnabled,
+            maximumTrackingFramesPerSecond: videoFramesPerSecond
         )
     }
 }
@@ -538,6 +574,18 @@ enum ControlPreferenceKey: String {
     case videoFlipHorizontal = "contentView.videoFlipHorizontal"
     case videoFlipVertical = "contentView.videoFlipVertical"
     case videoRotationDegrees = "contentView.videoRotationDegrees"
+    case videoFramesPerSecond = "contentView.videoFramesPerSecond"
+}
+
+struct ControlDefaultValues: Equatable {
+    let videoEnabled: Bool
+    let trackIREnabled: Bool
+    let mouseMovementEnabled: Bool
+    let mouseMovementSpeed: Double
+    let videoFlipHorizontalEnabled: Bool
+    let videoFlipVerticalEnabled: Bool
+    let videoRotationDegrees: Double
+    let videoFramesPerSecond: Double
 }
 
 struct VideoPreviewTransform: Equatable {
@@ -548,6 +596,19 @@ struct VideoPreviewTransform: Equatable {
 
 func defaultMouseMovementShortcut() -> KeyboardShortcuts.Shortcut {
     .init(.f7, modifiers: [.shift])
+}
+
+func controlDefaultValues() -> ControlDefaultValues {
+    ControlDefaultValues(
+        videoEnabled: false,
+        trackIREnabled: false,
+        mouseMovementEnabled: false,
+        mouseMovementSpeed: 1.0,
+        videoFlipHorizontalEnabled: true,
+        videoFlipVerticalEnabled: false,
+        videoRotationDegrees: 0.0,
+        videoFramesPerSecond: 60.0
+    )
 }
 
 func toggledMouseMovementState(isEnabled: Bool) -> Bool {
@@ -577,6 +638,14 @@ func normalizedRotationDegrees(_ rotationDegrees: Double) -> Double {
 
 func videoRotationValueLabel(for rotationDegrees: Double) -> String {
     "\(Int(normalizedRotationDegrees(rotationDegrees).rounded()))°"
+}
+
+func trackIRFramesPerSecondValueLabel(for framesPerSecond: Double) -> String {
+    guard framesPerSecond > 0 else {
+        return "Uncapped"
+    }
+
+    return "\(Int(framesPerSecond.rounded())) fps"
 }
 
 extension KeyboardShortcuts.Name {
