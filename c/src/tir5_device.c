@@ -34,6 +34,9 @@ static uint32_t random_next(otir_tir5v3_device *device);
 static uint8_t random_byte(otir_tir5v3_device *device);
 static int random_range(otir_tir5v3_device *device, int low, int high);
 
+static void log_libusb_failure(const char *operation, int error_code);
+static void log_device_status(const char *message);
+static void log_parser_status(const char *message, size_t bytes_read);
 static otir_status map_libusb_error(int error_code);
 static otir_status discover_endpoints(otir_tir5v3_device *device);
 static otir_status send_packet(
@@ -76,6 +79,7 @@ otir_status otir_tir5v3_open(otir_tir5v3_device **out_device) {
     device->interface_number = 0;
 
     if (libusb_init(&device->context) != 0) {
+        log_device_status("libusb_init failed");
         free(device);
         return OTIR_STATUS_IO;
     }
@@ -86,23 +90,31 @@ otir_status otir_tir5v3_open(otir_tir5v3_device **out_device) {
         OTIR_TIR5V3_PRODUCT_ID
     );
     if (device->handle == NULL) {
+        log_device_status("TrackIR device not found during open");
         libusb_exit(device->context);
         free(device);
         return OTIR_STATUS_NOT_FOUND;
     }
 
     libusb_set_auto_detach_kernel_driver(device->handle, 1);
-    if (libusb_set_configuration(device->handle, 1) != 0) {
-        /* The active configuration may already be set. */
+    {
+        const int configuration_result = libusb_set_configuration(device->handle, 1);
+        if (configuration_result != 0) {
+            log_libusb_failure("set_configuration", configuration_result);
+        }
     }
-    if (libusb_claim_interface(device->handle, device->interface_number) != 0) {
-        libusb_close(device->handle);
-        libusb_exit(device->context);
-        free(device);
-        return OTIR_STATUS_IO;
+    {
+        const int claim_result = libusb_claim_interface(device->handle, device->interface_number);
+        if (claim_result != 0) {
+            log_libusb_failure("claim_interface", claim_result);
+            libusb_close(device->handle);
+            libusb_exit(device->context);
+            free(device);
+            return OTIR_STATUS_IO;
+        }
     }
-
     if (discover_endpoints(device) != OTIR_STATUS_OK) {
+        log_device_status("TrackIR endpoint discovery failed");
         libusb_release_interface(device->handle, device->interface_number);
         libusb_close(device->handle);
         libusb_exit(device->context);
@@ -129,6 +141,24 @@ void otir_tir5v3_close(otir_tir5v3_device *device) {
     }
 
     free(device);
+}
+
+static void log_libusb_failure(const char *operation, int error_code) {
+    fprintf(
+        stderr,
+        "TrackIR libusb %s failed: %s (%d)\n",
+        operation,
+        libusb_error_name(error_code),
+        error_code
+    );
+}
+
+static void log_device_status(const char *message) {
+    fprintf(stderr, "TrackIR device: %s\n", message);
+}
+
+static void log_parser_status(const char *message, size_t bytes_read) {
+    fprintf(stderr, "TrackIR parser: %s (bytes=%zu)\n", message, bytes_read);
 }
 
 otir_status otir_tir5v3_get_device_summary(
@@ -422,7 +452,19 @@ otir_status otir_tir5v3_read_packet(
             continue;
         }
 
-        status = otir_tir5v3_stream_parser_push(&device->parser, chunk, bytes_read);
+        {
+            bool did_resync = false;
+
+            status = otir_tir5v3_stream_parser_push_resync(
+                &device->parser,
+                chunk,
+                bytes_read,
+                &did_resync
+            );
+            if (did_resync) {
+                log_parser_status("overflow while pushing stream chunk; parser state reset", bytes_read);
+            }
+        }
         if (status != OTIR_STATUS_OK) {
             return status;
         }

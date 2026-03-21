@@ -19,6 +19,7 @@ static void test_apply_transport_obfuscates_header_and_nonce(void);
 static void test_parse_status_reads_stage_fields(void);
 static void test_stream_parser_recovers_split_packets(void);
 static void test_stream_parser_resyncs_after_bad_leading_header(void);
+static void test_stream_parser_push_resync_recovers_after_overflow(void);
 static void test_parse_packet_handles_empty_type5_packet(void);
 static void test_parse_packet_decodes_type5_stripe(void);
 static void test_compute_weighted_centroid_matches_linuxtrack_formula(void);
@@ -30,6 +31,7 @@ int main(void) {
     test_parse_status_reads_stage_fields();
     test_stream_parser_recovers_split_packets();
     test_stream_parser_resyncs_after_bad_leading_header();
+    test_stream_parser_push_resync_recovers_after_overflow();
     test_parse_packet_handles_empty_type5_packet();
     test_parse_packet_decodes_type5_stripe();
     test_compute_weighted_centroid_matches_linuxtrack_formula();
@@ -151,6 +153,28 @@ static void test_stream_parser_resyncs_after_bad_leading_header(void) {
     assert(otir_tir5v3_stream_parser_next_packet(&parser, raw_stream, sizeof(raw_stream), &raw_length) == OTIR_STATUS_OK);
     assert(raw_length == packet_length);
     assert(memcmp(raw_stream, packet, packet_length) == 0);
+}
+
+static void test_stream_parser_push_resync_recovers_after_overflow(void) {
+    uint8_t nearly_full[OTIR_TIR5V3_PENDING_CAPACITY - 8];
+    uint8_t next_chunk[16];
+    otir_tir5v3_stream_parser parser;
+    bool did_resync = false;
+    size_t index;
+
+    memset(nearly_full, 0xFF, sizeof(nearly_full));
+    for (index = 0; index < sizeof(next_chunk); ++index) {
+        next_chunk[index] = (uint8_t)index;
+    }
+
+    otir_tir5v3_stream_parser_init(&parser);
+    assert(otir_tir5v3_stream_parser_push(&parser, nearly_full, sizeof(nearly_full)) == OTIR_STATUS_OK);
+    assert(parser.pending_length == sizeof(nearly_full));
+
+    assert(otir_tir5v3_stream_parser_push_resync(&parser, next_chunk, sizeof(next_chunk), &did_resync) == OTIR_STATUS_OK);
+    assert(did_resync);
+    assert(parser.pending_length == sizeof(next_chunk));
+    assert(memcmp(parser.pending, next_chunk, sizeof(next_chunk)) == 0);
 }
 
 static void test_parse_packet_handles_empty_type5_packet(void) {

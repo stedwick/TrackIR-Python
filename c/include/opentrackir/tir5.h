@@ -122,6 +122,12 @@ otir_status otir_tir5v3_stream_parser_push(
     const uint8_t *data,
     size_t length
 );
+otir_status otir_tir5v3_stream_parser_push_resync(
+    otir_tir5v3_stream_parser *parser,
+    const uint8_t *data,
+    size_t length,
+    bool *did_resync
+);
 otir_status otir_tir5v3_stream_parser_next_packet(
     otir_tir5v3_stream_parser *parser,
     uint8_t *packet_buffer,

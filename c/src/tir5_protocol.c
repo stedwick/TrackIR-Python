@@ -105,6 +105,31 @@ otir_status otir_tir5v3_stream_parser_push(
     return OTIR_STATUS_OK;
 }
 
+otir_status otir_tir5v3_stream_parser_push_resync(
+    otir_tir5v3_stream_parser *parser,
+    const uint8_t *data,
+    size_t length,
+    bool *did_resync
+) {
+    otir_status status;
+
+    if (did_resync != NULL) {
+        *did_resync = false;
+    }
+
+    status = otir_tir5v3_stream_parser_push(parser, data, length);
+    if (status != OTIR_STATUS_OVERFLOW) {
+        return status;
+    }
+
+    otir_tir5v3_stream_parser_init(parser);
+    if (did_resync != NULL) {
+        *did_resync = true;
+    }
+
+    return otir_tir5v3_stream_parser_push(parser, data, length);
+}
+
 otir_status otir_tir5v3_stream_parser_next_packet(
     otir_tir5v3_stream_parser *parser,
     uint8_t *packet_buffer,
