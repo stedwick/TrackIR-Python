@@ -5,13 +5,15 @@
 //  Created by Philip Brocoum on 3/21/26.
 //
 
+import KeyboardShortcuts
 import SwiftUI
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @State private var isVideoEnabled = true
-    @State private var isTrackIREnabled = true
-    @State private var isMouseMovementEnabled = true
+    @AppStorage(ControlPreferenceKey.videoEnabled.rawValue) private var isVideoEnabled = true
+    @AppStorage(ControlPreferenceKey.trackIREnabled.rawValue) private var isTrackIREnabled = true
+    @AppStorage(ControlPreferenceKey.mouseMovementEnabled.rawValue) private var isMouseMovementEnabled = true
+    @AppStorage(ControlPreferenceKey.mouseMovementSpeed.rawValue) private var mouseMovementSpeed = 1.0
 
     var body: some View {
         GeometryReader { geometry in
@@ -126,25 +128,29 @@ struct ContentView: View {
             LazyVGrid(columns: gridColumns(count: columnCount), alignment: .leading, spacing: 14) {
                 controlRow(
                     title: "Enable TrackIR",
-                    detail: "Turn the future device session on or off from the macOS app.",
+                    detail: "Toggle TrackIR.",
                     systemImage: "dot.radiowaves.left.and.right",
                     isOn: $isTrackIREnabled
                 )
 
                 controlRow(
                     title: "Show Video",
-                    detail: "Display the future camera preview inside the native macOS panel.",
+                    detail: "Show the camera preview.",
                     systemImage: "video",
                     isOn: $isVideoEnabled
                 )
 
                 controlRow(
                     title: "Enable Mouse Movement",
-                    detail: "Allow future mouse output to follow head tracking when the backend is connected.",
+                    detail: "Toggle mouse movement.",
                     systemImage: "cursorarrow.motionlines",
                     isOn: $isMouseMovementEnabled
                 )
-                .gridCellColumns(columnCount == 1 ? 1 : 2)
+
+                mouseSpeedControlRow
+
+                mouseHotkeyControlRow
+                    .gridCellColumns(columnCount == 1 ? 1 : 2)
             }
 
             Divider()
@@ -277,6 +283,71 @@ struct ContentView: View {
         systemImage: String,
         isOn: Binding<Bool>
     ) -> some View {
+        controlCard {
+            HStack(alignment: .top, spacing: 14) {
+                controlCopy(title: title, detail: detail, systemImage: systemImage)
+
+                Spacer(minLength: 16)
+
+                Toggle("", isOn: isOn)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+        }
+    }
+
+    private var mouseSpeedControlRow: some View {
+        controlCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 14) {
+                    controlCopy(
+                        title: "Mouse Speed",
+                        detail: "Adjust cursor speed.",
+                        systemImage: "speedometer"
+                    )
+
+                    Spacer(minLength: 16)
+
+                    Text(mouseSpeedValueLabel(for: mouseMovementSpeed))
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Slider(value: $mouseMovementSpeed, in: 0.25 ... 3.0, step: 0.25)
+
+                    HStack {
+                        Text("0.25x")
+                        Spacer()
+                        Text("3x")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var mouseHotkeyControlRow: some View {
+        controlCard {
+            VStack(alignment: .leading, spacing: 14) {
+                controlCopy(
+                    title: "Mouse Toggle Hotkey",
+                    detail: "Choose the toggle shortcut.",
+                    systemImage: "keyboard"
+                )
+
+                KeyboardShortcuts.Recorder(for: .toggleMouseMovement)
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                Text("Shortcut hookup comes later.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func controlCopy(title: String, detail: String, systemImage: String) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: systemImage)
                 .font(.title3)
@@ -293,27 +364,48 @@ struct ContentView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-
-            Spacer(minLength: 16)
-
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(rowFillColor)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(cardBorderColor, lineWidth: 1)
-        )
+    }
+
+    private func controlCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(rowFillColor)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(cardBorderColor, lineWidth: 1)
+            )
     }
 }
 
 enum DashboardLayoutMode: Equatable {
     case stacked
     case twoColumn
+}
+
+enum ControlPreferenceKey: String {
+    case videoEnabled = "contentView.videoEnabled"
+    case trackIREnabled = "contentView.trackIREnabled"
+    case mouseMovementEnabled = "contentView.mouseMovementEnabled"
+    case mouseMovementSpeed = "contentView.mouseMovementSpeed"
+}
+
+func defaultMouseMovementShortcut() -> KeyboardShortcuts.Shortcut {
+    .init(.f7, modifiers: [.shift])
+}
+
+func toggledMouseMovementState(isEnabled: Bool) -> Bool {
+    !isEnabled
+}
+
+func mouseSpeedValueLabel(for speed: Double) -> String {
+    "\(speed.formatted(.number.precision(.fractionLength(0 ... 2))))x"
+}
+
+extension KeyboardShortcuts.Name {
+    static let toggleMouseMovement = Self("toggleMouseMovement", default: defaultMouseMovementShortcut())
 }
 
 func dashboardLayout(for width: CGFloat) -> DashboardLayoutMode {

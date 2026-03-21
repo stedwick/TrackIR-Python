@@ -26,7 +26,9 @@ The `mac/` directory contains the SwiftUI macOS application shell. Treat it as a
 - UI flow checks belong in `OpenTrackIRUITests/`.
 - Hardware and protocol validation should primarily happen through the shared C library and its native harnesses, not only through the macOS app.
 - When full Xcode is selected via `xcode-select`, prefer validating the macOS app with `xcodebuild` from the shell so build and test failures are visible without copying errors out of Xcode.
-- Default to macOS app builds and unit tests. Only run UI tests when the user explicitly asks for them, because they repeatedly launch and close the app.
+- Default to macOS app builds and unit tests only.
+- Do not run scheme-wide macOS test commands that include `OpenTrackIRUITests` unless the user explicitly asks for UI testing.
+- Prefer targeted commands such as `xcodebuild build` and `xcodebuild test -only-testing:OpenTrackIRTests` during normal macOS UI work.
 
 ## Change strategy
 

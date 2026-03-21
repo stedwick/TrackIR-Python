@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D4A100012F70800100DE98E6 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = D4A100042F70800100DE98E6 /* KeyboardShortcuts */; };
+		D4A100022F70800100DE98E6 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = D4A100052F70800100DE98E6 /* KeyboardShortcuts */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		D499E6F92F6F11C500DE98E6 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +57,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D4A100012F70800100DE98E6 /* KeyboardShortcuts in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -59,6 +65,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D4A100022F70800100DE98E6 /* KeyboardShortcuts in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +119,7 @@
 			);
 			name = OpenTrackIR;
 			packageProductDependencies = (
+				D4A100042F70800100DE98E6 /* KeyboardShortcuts */,
 			);
 			productName = OpenTrackIR;
 			productReference = D499E6EB2F6F11C500DE98E6 /* OpenTrackIR.app */;
@@ -135,6 +143,7 @@
 			);
 			name = OpenTrackIRTests;
 			packageProductDependencies = (
+				D4A100052F70800100DE98E6 /* KeyboardShortcuts */,
 			);
 			productName = OpenTrackIRTests;
 			productReference = D499E6F82F6F11C500DE98E6 /* OpenTrackIRTests.xctest */;
@@ -195,6 +204,9 @@
 			);
 			mainGroup = D499E6E22F6F11C500DE98E6;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D4A100032F70800100DE98E6 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D499E6EC2F6F11C500DE98E6 /* Products */;
 			projectDirPath = "";
@@ -605,6 +617,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D4A100032F70800100DE98E6 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sindresorhus/KeyboardShortcuts";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D4A100042F70800100DE98E6 /* KeyboardShortcuts */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4A100032F70800100DE98E6 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
+			productName = KeyboardShortcuts;
+		};
+		D4A100052F70800100DE98E6 /* KeyboardShortcuts */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4A100032F70800100DE98E6 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
+			productName = KeyboardShortcuts;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D499E6E32F6F11C500DE98E6 /* Project object */;
 }

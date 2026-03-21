@@ -40,7 +40,9 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - For large changes, run the relevant linter, build, and tests.
 - For small doc-only changes, no extra validation is required.
 - For the macOS app, prefer `xcodebuild` from the shell when full Xcode is selected so Swift build/test failures can be checked directly.
-- For the macOS app, default to build plus unit-test coverage. Only run UI tests when the user explicitly asks for them, because they visibly relaunch the app.
+- For the macOS app, default to build plus unit-test coverage only.
+- Do not run scheme-wide macOS test commands that include `OpenTrackIRUITests` unless the user explicitly asks for UI testing.
+- Prefer targeted macOS validation commands such as `xcodebuild build` and `xcodebuild test -only-testing:OpenTrackIRTests` so the app is not repeatedly relaunched during normal work.
 
 ## Directory guide
 
