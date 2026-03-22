@@ -359,6 +359,12 @@ struct ContentViewTests {
             isWindowVisible: false,
             isMouseMovementEnabled: false,
             isTrackIREnabled: true,
+            keepAwakeSeconds: 0
+        ))
+        #expect(trackIRShouldPollSnapshots(
+            isWindowVisible: false,
+            isMouseMovementEnabled: false,
+            isTrackIREnabled: true,
             keepAwakeSeconds: 29
         ))
         #expect(!trackIRShouldPollSnapshots(
@@ -367,6 +373,54 @@ struct ContentViewTests {
             isTrackIREnabled: false,
             keepAwakeSeconds: 0
         ))
+    }
+
+    @Test func lowPowerTransitionWaitsForContinuousBackgroundIdleAndExitsImmediately() {
+        let initial = trackIRLowPowerState(
+            previousBackgroundIdleStartTime: nil,
+            isWindowVisible: false,
+            isMouseMovementEnabled: false,
+            currentTime: 10,
+            idleDelay: 60
+        )
+        let afterThirtySeconds = trackIRLowPowerState(
+            previousBackgroundIdleStartTime: initial.backgroundIdleStartTime,
+            isWindowVisible: false,
+            isMouseMovementEnabled: false,
+            currentTime: 40,
+            idleDelay: 60
+        )
+        let afterSixtySeconds = trackIRLowPowerState(
+            previousBackgroundIdleStartTime: initial.backgroundIdleStartTime,
+            isWindowVisible: false,
+            isMouseMovementEnabled: false,
+            currentTime: 70,
+            idleDelay: 60
+        )
+        let afterKeepAwakeNudge = trackIRLowPowerState(
+            previousBackgroundIdleStartTime: afterSixtySeconds.backgroundIdleStartTime,
+            isWindowVisible: false,
+            isMouseMovementEnabled: false,
+            currentTime: 71,
+            idleDelay: 60
+        )
+        let afterForeground = trackIRLowPowerState(
+            previousBackgroundIdleStartTime: afterKeepAwakeNudge.backgroundIdleStartTime,
+            isWindowVisible: true,
+            isMouseMovementEnabled: false,
+            currentTime: 72,
+            idleDelay: 60
+        )
+
+        #expect(initial.backgroundIdleStartTime == 10)
+        #expect(!initial.isLowPowerModeEnabled)
+        #expect(afterThirtySeconds.backgroundIdleStartTime == 10)
+        #expect(!afterThirtySeconds.isLowPowerModeEnabled)
+        #expect(afterSixtySeconds.isLowPowerModeEnabled)
+        #expect(afterKeepAwakeNudge.backgroundIdleStartTime == 10)
+        #expect(afterKeepAwakeNudge.isLowPowerModeEnabled)
+        #expect(afterForeground.backgroundIdleStartTime == nil)
+        #expect(!afterForeground.isLowPowerModeEnabled)
     }
 
     @Test func keepAwakeOnlyFiresWhileTrackIRIsEnabledAndMouseMovementIsOff() {
@@ -539,7 +593,7 @@ struct ContentViewTests {
 
         snapshot.has_error_message = true
         withUnsafeMutableBytes(of: &snapshot.error_message) { buffer in
-            _ = buffer.copyBytes(from: message)
+            buffer.copyBytes(from: message)
         }
 
         #expect(trackIRSessionErrorDescription(snapshot: snapshot) == "TrackIR busy")
@@ -559,7 +613,7 @@ struct ContentViewTests {
         snapshot.packet_type = 0x05
         snapshot.has_error_message = true
         withUnsafeMutableBytes(of: &snapshot.error_message) { buffer in
-            _ = buffer.copyBytes(from: Array("TrackIR busy".utf8))
+            buffer.copyBytes(from: Array("TrackIR busy".utf8))
         }
 
         #expect(trackIRDisplayState(snapshot: snapshot) == TrackIRCameraDisplayState(

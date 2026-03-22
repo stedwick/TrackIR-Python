@@ -22,6 +22,13 @@ typedef enum otir_trackir_session_phase {
     OTIR_TRACKIR_SESSION_PHASE_FAILED = 4
 } otir_trackir_session_phase;
 
+typedef enum otir_trackir_session_processing_mode {
+    OTIR_TRACKIR_SESSION_PROCESSING_MODE_FULL_TRACKING = 0,
+    OTIR_TRACKIR_SESSION_PROCESSING_MODE_REDUCED_TRACKING = 1,
+    OTIR_TRACKIR_SESSION_PROCESSING_MODE_PREVIEW_ONLY = 2,
+    OTIR_TRACKIR_SESSION_PROCESSING_MODE_LOW_POWER = 3
+} otir_trackir_session_processing_mode;
+
 typedef struct otir_trackir_session_snapshot {
     otir_trackir_session_phase phase;
     otir_status status;
@@ -37,6 +44,7 @@ typedef struct otir_trackir_session_snapshot {
     uint64_t preview_frame_generation;
     uint16_t preview_width;
     uint16_t preview_height;
+    bool is_low_power_mode;
     bool has_error_message;
     char error_message[OTIR_TRACKIR_SESSION_ERROR_MESSAGE_LENGTH];
 } otir_trackir_session_snapshot;
@@ -59,6 +67,16 @@ void otir_trackir_session_set_minimum_blob_area_points(
 void otir_trackir_session_set_scaled_hull_enabled(
     otir_trackir_session *session,
     bool enabled
+);
+void otir_trackir_session_set_low_power_mode_enabled(
+    otir_trackir_session *session,
+    bool enabled
+);
+otir_trackir_session_processing_mode otir_trackir_session_select_processing_mode(
+    bool low_power_mode_enabled,
+    bool should_process_tracking,
+    bool should_publish_preview,
+    bool tracking_is_rate_limited
 );
 void otir_trackir_session_copy_snapshot(
     otir_trackir_session *session,

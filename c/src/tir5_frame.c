@@ -1,6 +1,5 @@
 #include "opentrackir/tir5.h"
 
-#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +22,17 @@ typedef struct otir_tir5v3_polygon_point {
     double y;
 } otir_tir5v3_polygon_point;
 
+typedef struct otir_tir5v3_blob_workspace {
+    size_t parents[OTIR_TIR5V3_MAX_STRIPES];
+    int blob_for_root[OTIR_TIR5V3_MAX_STRIPES];
+    otir_tir5v3_blob_accumulator blobs[OTIR_TIR5V3_MAX_STRIPES];
+    otir_tir5v3_polygon_point points[OTIR_TIR5V3_MAX_STRIPES * 4];
+    otir_tir5v3_polygon_point hull[OTIR_TIR5V3_MAX_STRIPES * 4];
+} otir_tir5v3_blob_workspace;
+
+static size_t blob_root(size_t *parents, size_t index);
+static void merge_blob_roots(size_t *parents, size_t left_index, size_t right_index);
+
 static int clamp_int(int value, int low, int high) {
     if (value < low) {
         return low;
@@ -37,20 +47,6 @@ static bool stripe_is_trackable(const otir_tir5v3_stripe *stripe) {
     return stripe != NULL && stripe->points > 0;
 }
 
-static int stripe_row_distance(
-    const otir_tir5v3_stripe *left,
-    const otir_tir5v3_stripe *right
-) {
-    int distance;
-
-    if (left == NULL || right == NULL) {
-        return INT_MAX;
-    }
-
-    distance = left->vline - right->vline;
-    return distance < 0 ? -distance : distance;
-}
-
 static bool stripe_spans_touch_or_overlap(
     const otir_tir5v3_stripe *left,
     const otir_tir5v3_stripe *right
@@ -63,17 +59,64 @@ static bool stripe_spans_touch_or_overlap(
         right->hstart <= left->hstop + 1;
 }
 
-static bool stripes_belong_to_same_blob(
-    const otir_tir5v3_stripe *left,
-    const otir_tir5v3_stripe *right,
-    int row_adjacency
+static void merge_blob_rows(
+    const otir_tir5v3_stripe *stripes,
+    size_t stripe_count,
+    int row_adjacency,
+    size_t *parents,
+    int *next_in_row
 ) {
-    if (!stripe_is_trackable(left) || !stripe_is_trackable(right)) {
-        return false;
+    int row_heads[OTIR_TIR5V3_FRAME_HEIGHT];
+    size_t index;
+    int row;
+
+    for (row = 0; row < OTIR_TIR5V3_FRAME_HEIGHT; ++row) {
+        row_heads[row] = -1;
     }
 
-    return stripe_row_distance(left, right) <= row_adjacency &&
-        stripe_spans_touch_or_overlap(left, right);
+    for (index = stripe_count; index > 0; --index) {
+        const otir_tir5v3_stripe *stripe = &stripes[index - 1];
+
+        if (!stripe_is_trackable(stripe) ||
+            stripe->vline < 0 ||
+            stripe->vline >= OTIR_TIR5V3_FRAME_HEIGHT) {
+            continue;
+        }
+
+        next_in_row[index - 1] = row_heads[stripe->vline];
+        row_heads[stripe->vline] = (int)(index - 1);
+    }
+
+    for (row = 0; row < OTIR_TIR5V3_FRAME_HEIGHT; ++row) {
+        int last_compare_row = clamp_int(
+            row + row_adjacency,
+            row,
+            OTIR_TIR5V3_FRAME_HEIGHT - 1
+        );
+        int left_index = row_heads[row];
+
+        while (left_index >= 0) {
+            int compare_row;
+
+            for (compare_row = row; compare_row <= last_compare_row; ++compare_row) {
+                int right_index = compare_row == row
+                    ? next_in_row[left_index]
+                    : row_heads[compare_row];
+
+                while (right_index >= 0) {
+                    if (stripe_spans_touch_or_overlap(
+                        &stripes[left_index],
+                        &stripes[right_index]
+                    )) {
+                        merge_blob_roots(parents, (size_t)left_index, (size_t)right_index);
+                    }
+                    right_index = next_in_row[right_index];
+                }
+            }
+
+            left_index = next_in_row[left_index];
+        }
+    }
 }
 
 static size_t blob_root(size_t *parents, size_t index) {
@@ -348,30 +391,24 @@ static bool collect_blob_hull_centroid(
     const int *blob_for_root,
     size_t selected_blob_index,
     double hull_scale,
+    otir_tir5v3_blob_workspace *workspace,
     double *out_x,
     double *out_y
 ) {
-    otir_tir5v3_polygon_point *points = NULL;
-    otir_tir5v3_polygon_point *hull = NULL;
+    otir_tir5v3_polygon_point *points;
+    otir_tir5v3_polygon_point *hull;
     size_t point_count = 0;
     size_t hull_count;
     size_t index;
-    double centroid_x = 0.0;
-    double centroid_y = 0.0;
-    bool did_compute = false;
 
     if (stripes == NULL || parents == NULL || blob_for_root == NULL ||
-        out_x == NULL || out_y == NULL) {
+        workspace == NULL || out_x == NULL || out_y == NULL) {
         return false;
     }
 
-    points = malloc(sizeof(*points) * stripe_count * 4);
-    hull = malloc(sizeof(*hull) * stripe_count * 4);
-    if (points == NULL || hull == NULL) {
-        free(points);
-        free(hull);
-        return false;
-    }
+    (void)hull_scale;
+    points = workspace->points;
+    hull = workspace->hull;
 
     for (index = 0; index < stripe_count; ++index) {
         double left;
@@ -400,19 +437,7 @@ static bool collect_blob_hull_centroid(
     }
 
     hull_count = build_convex_hull(points, point_count, hull);
-    if (hull_count >= 3 && polygon_centroid(hull, hull_count, &centroid_x, &centroid_y)) {
-        size_t point_index;
-
-        for (point_index = 0; point_index < hull_count; ++point_index) {
-            hull[point_index].x = centroid_x + ((hull[point_index].x - centroid_x) * hull_scale);
-            hull[point_index].y = centroid_y + ((hull[point_index].y - centroid_y) * hull_scale);
-        }
-        did_compute = polygon_centroid(hull, hull_count, out_x, out_y);
-    }
-
-    free(points);
-    free(hull);
-    return did_compute;
+    return hull_count >= 3 && polygon_centroid(hull, hull_count, out_x, out_y);
 }
 
 int otir_tir5v3_normalize_minimum_blob_area_points(int minimum_area_points) {
@@ -430,27 +455,37 @@ otir_tir5v3_blob_tracking_config otir_tir5v3_default_blob_tracking_config(void) 
     return config;
 }
 
-bool otir_tir5v3_compute_blob_result(
+size_t otir_tir5v3_blob_workspace_bytes(void) {
+    return sizeof(otir_tir5v3_blob_workspace);
+}
+
+bool otir_tir5v3_compute_blob_result_with_workspace(
     const otir_tir5v3_stripe *stripes,
     size_t stripe_count,
     otir_tir5v3_blob_tracking_config config,
     bool has_previous_centroid,
     double previous_centroid_x,
     double previous_centroid_y,
+    void *workspace,
+    size_t workspace_size,
     otir_tir5v3_blob_result *out_result
 ) {
     otir_tir5v3_blob_tracking_config default_config = otir_tir5v3_default_blob_tracking_config();
-    size_t *parents = NULL;
-    int *blob_for_root = NULL;
-    otir_tir5v3_blob_accumulator *blobs = NULL;
+    otir_tir5v3_blob_workspace *blob_workspace = workspace;
+    size_t *parents;
+    int *blob_for_root;
+    otir_tir5v3_blob_accumulator *blobs;
     size_t blob_count = 0;
     size_t selected_blob_index = SIZE_MAX;
     size_t index;
-    size_t next_index;
 
-    if (out_result == NULL) {
+    if (workspace == NULL || workspace_size < sizeof(*blob_workspace) || out_result == NULL) {
         return false;
     }
+
+    parents = blob_workspace->parents;
+    blob_for_root = blob_workspace->blob_for_root;
+    blobs = blob_workspace->blobs;
 
     memset(out_result, 0, sizeof(*out_result));
     out_result->centroid_mode = OTIR_TIR5V3_CENTROID_MODE_NONE;
@@ -469,30 +504,16 @@ bool otir_tir5v3_compute_blob_result(
         config.hull_scale = default_config.hull_scale;
     }
 
-    parents = malloc(sizeof(*parents) * stripe_count);
-    blob_for_root = malloc(sizeof(*blob_for_root) * stripe_count);
-    blobs = calloc(stripe_count, sizeof(*blobs));
-    if (parents == NULL || blob_for_root == NULL || blobs == NULL) {
-        free(parents);
-        free(blob_for_root);
-        free(blobs);
-        return false;
-    }
-
+    memset(blobs, 0, sizeof(*blobs) * stripe_count);
     for (index = 0; index < stripe_count; ++index) {
         parents[index] = index;
         blob_for_root[index] = -1;
     }
 
+    merge_blob_rows(stripes, stripe_count, config.row_adjacency, parents, blob_for_root);
+
     for (index = 0; index < stripe_count; ++index) {
-        if (!stripe_is_trackable(&stripes[index])) {
-            continue;
-        }
-        for (next_index = index + 1; next_index < stripe_count; ++next_index) {
-            if (stripes_belong_to_same_blob(&stripes[index], &stripes[next_index], config.row_adjacency)) {
-                merge_blob_roots(parents, index, next_index);
-            }
-        }
+        blob_for_root[index] = -1;
     }
 
     for (index = 0; index < stripe_count; ++index) {
@@ -549,6 +570,7 @@ bool otir_tir5v3_compute_blob_result(
                 blob_for_root,
                 selected_blob_index,
                 config.hull_scale,
+                blob_workspace,
                 &out_result->centroid_x,
                 &out_result->centroid_y
             )) {
@@ -556,10 +578,38 @@ bool otir_tir5v3_compute_blob_result(
         }
     }
 
-    free(parents);
-    free(blob_for_root);
-    free(blobs);
     return out_result->has_centroid;
+}
+
+bool otir_tir5v3_compute_blob_result(
+    const otir_tir5v3_stripe *stripes,
+    size_t stripe_count,
+    otir_tir5v3_blob_tracking_config config,
+    bool has_previous_centroid,
+    double previous_centroid_x,
+    double previous_centroid_y,
+    otir_tir5v3_blob_result *out_result
+) {
+    void *workspace = malloc(otir_tir5v3_blob_workspace_bytes());
+    bool did_compute;
+
+    if (workspace == NULL) {
+        return false;
+    }
+
+    did_compute = otir_tir5v3_compute_blob_result_with_workspace(
+        stripes,
+        stripe_count,
+        config,
+        has_previous_centroid,
+        previous_centroid_x,
+        previous_centroid_y,
+        workspace,
+        otir_tir5v3_blob_workspace_bytes(),
+        out_result
+    );
+    free(workspace);
+    return did_compute;
 }
 
 void otir_tir5v3_build_frame(

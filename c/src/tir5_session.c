@@ -7,6 +7,15 @@
 #include <time.h>
 
 #define OTIR_TRACKIR_SESSION_MAX_PREVIEW_FRAMES_PER_SECOND 30.0
+#define OTIR_TRACKIR_SESSION_LOW_POWER_FRAMES_PER_SECOND 2.0
+
+typedef struct trackir_session_runtime_config {
+    bool video_enabled;
+    double maximum_tracking_frames_per_second;
+    int minimum_blob_area_points;
+    bool scaled_hull_enabled;
+    bool low_power_mode_enabled;
+} trackir_session_runtime_config;
 
 struct otir_trackir_session {
     pthread_mutex_t mutex;
@@ -18,6 +27,7 @@ struct otir_trackir_session {
     double maximum_tracking_frames_per_second;
     int minimum_blob_area_points;
     bool scaled_hull_enabled;
+    bool low_power_mode_enabled;
     otir_trackir_session_snapshot snapshot;
     uint8_t preview_frame[OTIR_TRACKIR_SESSION_FRAME_BYTES];
 };
@@ -33,10 +43,9 @@ static void trackir_session_set_failure_locked(
 );
 static void trackir_session_join_worker_if_exited(otir_trackir_session *session);
 static bool trackir_session_stop_requested(otir_trackir_session *session);
-static double trackir_session_maximum_tracking_frames_per_second(otir_trackir_session *session);
-static bool trackir_session_video_enabled(otir_trackir_session *session);
-static int trackir_session_minimum_blob_area_points(otir_trackir_session *session);
-static bool trackir_session_scaled_hull_enabled(otir_trackir_session *session);
+static trackir_session_runtime_config trackir_session_runtime_config_snapshot(
+    otir_trackir_session *session
+);
 static void trackir_copy_string(char *destination, size_t capacity, const char *source);
 static void trackir_session_format_failure_message(
     otir_status status,
@@ -65,6 +74,7 @@ otir_trackir_session *otir_trackir_session_create(void) {
         otir_tir5v3_default_blob_tracking_config().minimum_area_points;
     session->scaled_hull_enabled =
         otir_tir5v3_default_blob_tracking_config().use_scaled_hull_centroid;
+    session->low_power_mode_enabled = false;
     trackir_session_reset_snapshot_locked(session);
     pthread_mutex_unlock(&session->mutex);
     return session;
@@ -200,6 +210,38 @@ void otir_trackir_session_set_scaled_hull_enabled(
     pthread_mutex_unlock(&session->mutex);
 }
 
+void otir_trackir_session_set_low_power_mode_enabled(
+    otir_trackir_session *session,
+    bool enabled
+) {
+    if (session == NULL) {
+        return;
+    }
+
+    pthread_mutex_lock(&session->mutex);
+    session->low_power_mode_enabled = enabled;
+    session->snapshot.is_low_power_mode = enabled;
+    pthread_mutex_unlock(&session->mutex);
+}
+
+otir_trackir_session_processing_mode otir_trackir_session_select_processing_mode(
+    bool low_power_mode_enabled,
+    bool should_process_tracking,
+    bool should_publish_preview,
+    bool tracking_is_rate_limited
+) {
+    if (low_power_mode_enabled) {
+        return OTIR_TRACKIR_SESSION_PROCESSING_MODE_LOW_POWER;
+    }
+    if (!should_process_tracking && should_publish_preview) {
+        return OTIR_TRACKIR_SESSION_PROCESSING_MODE_PREVIEW_ONLY;
+    }
+    if (tracking_is_rate_limited) {
+        return OTIR_TRACKIR_SESSION_PROCESSING_MODE_REDUCED_TRACKING;
+    }
+    return OTIR_TRACKIR_SESSION_PROCESSING_MODE_FULL_TRACKING;
+}
+
 void otir_trackir_session_copy_snapshot(
     otir_trackir_session *session,
     otir_trackir_session_snapshot *out_snapshot
@@ -242,6 +284,7 @@ bool otir_trackir_session_copy_preview_frame(
 static void *trackir_session_worker_main(void *context) {
     otir_trackir_session *session = context;
     otir_tir5v3_device *device = NULL;
+    void *blob_workspace = malloc(otir_tir5v3_blob_workspace_bytes());
     otir_tir5v3_packet *packet = malloc(sizeof(*packet));
     otir_status status;
     uint64_t frame_index = 0;
@@ -258,11 +301,12 @@ static void *trackir_session_worker_main(void *context) {
     double previous_selected_centroid_y = 0.0;
     uint8_t *frame_buffer = malloc(OTIR_TRACKIR_SESSION_FRAME_BYTES);
 
-    if (packet == NULL || frame_buffer == NULL) {
+    if (blob_workspace == NULL || packet == NULL || frame_buffer == NULL) {
         pthread_mutex_lock(&session->mutex);
         trackir_session_set_failure_locked(session, OTIR_STATUS_IO, "Allocate buffers");
         session->worker_exited = true;
         pthread_mutex_unlock(&session->mutex);
+        free(blob_workspace);
         free(packet);
         free(frame_buffer);
         return NULL;
@@ -274,6 +318,7 @@ static void *trackir_session_worker_main(void *context) {
         trackir_session_set_failure_locked(session, status, "Open");
         session->worker_exited = true;
         pthread_mutex_unlock(&session->mutex);
+        free(blob_workspace);
         free(packet);
         free(frame_buffer);
         return NULL;
@@ -311,16 +356,16 @@ static void *trackir_session_worker_main(void *context) {
         while (!trackir_session_stop_requested(session)) {
             otir_tir5v3_blob_result blob_result;
             otir_tir5v3_blob_tracking_config blob_config = otir_tir5v3_default_blob_tracking_config();
-            bool video_enabled;
+            trackir_session_runtime_config runtime_config;
+            otir_trackir_session_processing_mode processing_mode;
             double centroid_x = 0.0;
             double centroid_y = 0.0;
-            double maximum_tracking_frames_per_second = 0.0;
-            int minimum_blob_area_points = 0;
+            double effective_tracking_frames_per_second = 0.0;
             bool has_centroid = false;
             bool has_previous_blob_centroid = false;
             bool should_process_tracking = false;
             bool should_publish_preview = false;
-            bool scaled_hull_enabled = false;
+            bool tracking_is_rate_limited = false;
             double now;
             double elapsed_since_last_tracking_process = 0.0;
             double elapsed_since_last_publish = 0.0;
@@ -351,48 +396,17 @@ static void *trackir_session_worker_main(void *context) {
             if (has_tracking_process_time) {
                 elapsed_since_last_tracking_process = now - last_tracking_process_time;
             }
-            maximum_tracking_frames_per_second =
-                trackir_session_maximum_tracking_frames_per_second(session);
+            runtime_config = trackir_session_runtime_config_snapshot(session);
+            effective_tracking_frames_per_second = runtime_config.low_power_mode_enabled
+                ? OTIR_TRACKIR_SESSION_LOW_POWER_FRAMES_PER_SECOND
+                : runtime_config.maximum_tracking_frames_per_second;
             should_process_tracking = !has_tracking_process_time ||
-                maximum_tracking_frames_per_second <= 0.0 ||
+                effective_tracking_frames_per_second <= 0.0 ||
                 otir_tir5v3_should_publish_frame(
                     elapsed_since_last_tracking_process,
-                    maximum_tracking_frames_per_second
+                    effective_tracking_frames_per_second
                 );
-            if (!should_process_tracking) {
-                continue;
-            }
-
-            frame_index += 1;
-            minimum_blob_area_points = trackir_session_minimum_blob_area_points(session);
-            scaled_hull_enabled = trackir_session_scaled_hull_enabled(session);
-            blob_config.minimum_area_points = minimum_blob_area_points;
-            blob_config.use_scaled_hull_centroid = scaled_hull_enabled;
-            has_previous_blob_centroid = has_previous_selected_centroid;
-            blob_result = (otir_tir5v3_blob_result){0};
-            if (otir_tir5v3_compute_blob_result(
-                packet->stripes,
-                packet->stripe_count,
-                blob_config,
-                has_previous_blob_centroid,
-                previous_selected_centroid_x,
-                previous_selected_centroid_y,
-                &blob_result
-            )) {
-                has_previous_selected_centroid = true;
-                previous_selected_centroid_x = blob_result.centroid_x;
-                previous_selected_centroid_y = blob_result.centroid_y;
-            } else {
-                has_previous_selected_centroid = false;
-            }
-            if (blob_result.has_centroid) {
-                centroid_x = blob_result.centroid_x;
-                centroid_y = blob_result.centroid_y;
-                has_centroid = true;
-            }
-
-            video_enabled = trackir_session_video_enabled(session);
-            if (video_enabled) {
+            if (runtime_config.video_enabled) {
                 if (has_preview_publish_time) {
                     elapsed_since_last_publish = now - last_preview_publish_time;
                 }
@@ -402,22 +416,80 @@ static void *trackir_session_worker_main(void *context) {
                         OTIR_TRACKIR_SESSION_MAX_PREVIEW_FRAMES_PER_SECOND
                     );
             }
+            if (!should_process_tracking && !should_publish_preview) {
+                continue;
+            }
 
-            pthread_mutex_lock(&session->mutex);
-            session->snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_STREAMING;
-            session->snapshot.status = OTIR_STATUS_OK;
-            session->snapshot.frame_index = frame_index;
-            session->snapshot.has_frame_rate = has_source_frame_rate;
-            session->snapshot.frame_rate = measured_source_frame_rate;
-            session->snapshot.has_centroid = has_centroid;
-            session->snapshot.centroid_x = centroid_x;
-            session->snapshot.centroid_y = centroid_y;
-            session->snapshot.has_packet_type = true;
-            session->snapshot.packet_type = packet->packet_type;
-            pthread_mutex_unlock(&session->mutex);
+            tracking_is_rate_limited = !runtime_config.low_power_mode_enabled &&
+                effective_tracking_frames_per_second > 0.0 &&
+                has_source_frame_rate &&
+                effective_tracking_frames_per_second < measured_source_frame_rate;
+            processing_mode = otir_trackir_session_select_processing_mode(
+                runtime_config.low_power_mode_enabled,
+                should_process_tracking,
+                should_publish_preview,
+                tracking_is_rate_limited
+            );
 
-            last_tracking_process_time = now;
-            has_tracking_process_time = true;
+            if (processing_mode != OTIR_TRACKIR_SESSION_PROCESSING_MODE_PREVIEW_ONLY) {
+                frame_index += 1;
+                if (processing_mode != OTIR_TRACKIR_SESSION_PROCESSING_MODE_LOW_POWER) {
+                    blob_config.minimum_area_points = runtime_config.minimum_blob_area_points;
+                    blob_config.use_scaled_hull_centroid = runtime_config.scaled_hull_enabled;
+                    has_previous_blob_centroid = has_previous_selected_centroid;
+                    blob_result = (otir_tir5v3_blob_result){0};
+                    if (otir_tir5v3_compute_blob_result_with_workspace(
+                        packet->stripes,
+                        packet->stripe_count,
+                        blob_config,
+                        has_previous_blob_centroid,
+                        previous_selected_centroid_x,
+                        previous_selected_centroid_y,
+                        blob_workspace,
+                        otir_tir5v3_blob_workspace_bytes(),
+                        &blob_result
+                    )) {
+                        has_previous_selected_centroid = true;
+                        previous_selected_centroid_x = blob_result.centroid_x;
+                        previous_selected_centroid_y = blob_result.centroid_y;
+                    } else {
+                        has_previous_selected_centroid = false;
+                    }
+                    if (blob_result.has_centroid) {
+                        centroid_x = blob_result.centroid_x;
+                        centroid_y = blob_result.centroid_y;
+                        has_centroid = true;
+                    }
+                }
+
+                pthread_mutex_lock(&session->mutex);
+                session->snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_STREAMING;
+                session->snapshot.status = OTIR_STATUS_OK;
+                session->snapshot.frame_index = frame_index;
+                session->snapshot.has_frame_rate = has_source_frame_rate;
+                session->snapshot.frame_rate = measured_source_frame_rate;
+                session->snapshot.has_centroid = has_centroid;
+                session->snapshot.centroid_x = centroid_x;
+                session->snapshot.centroid_y = centroid_y;
+                session->snapshot.has_packet_type = true;
+                session->snapshot.packet_type = packet->packet_type;
+                session->snapshot.is_low_power_mode =
+                    processing_mode == OTIR_TRACKIR_SESSION_PROCESSING_MODE_LOW_POWER;
+                pthread_mutex_unlock(&session->mutex);
+
+                last_tracking_process_time = now;
+                has_tracking_process_time = true;
+            } else {
+                pthread_mutex_lock(&session->mutex);
+                session->snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_STREAMING;
+                session->snapshot.status = OTIR_STATUS_OK;
+                session->snapshot.has_frame_rate = has_source_frame_rate;
+                session->snapshot.frame_rate = measured_source_frame_rate;
+                session->snapshot.has_packet_type = true;
+                session->snapshot.packet_type = packet->packet_type;
+                session->snapshot.is_low_power_mode = false;
+                pthread_mutex_unlock(&session->mutex);
+            }
 
             if (!should_publish_preview) {
                 continue;
@@ -446,6 +518,7 @@ static void *trackir_session_worker_main(void *context) {
 
     (void)otir_tir5v3_stop_streaming(device);
     otir_tir5v3_close(device);
+    free(blob_workspace);
     free(packet);
     free(frame_buffer);
 
@@ -462,6 +535,7 @@ static void trackir_session_reset_snapshot_locked(otir_trackir_session *session)
     memset(&session->snapshot, 0, sizeof(session->snapshot));
     session->snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_IDLE;
     session->snapshot.status = OTIR_STATUS_OK;
+    session->snapshot.is_low_power_mode = false;
 }
 
 static void trackir_session_clear_preview_locked(otir_trackir_session *session) {
@@ -534,40 +608,20 @@ static bool trackir_session_stop_requested(otir_trackir_session *session) {
     return stop_requested;
 }
 
-static double trackir_session_maximum_tracking_frames_per_second(otir_trackir_session *session) {
-    double maximum_tracking_frames_per_second;
+static trackir_session_runtime_config trackir_session_runtime_config_snapshot(
+    otir_trackir_session *session
+) {
+    trackir_session_runtime_config runtime_config;
 
     pthread_mutex_lock(&session->mutex);
-    maximum_tracking_frames_per_second = session->maximum_tracking_frames_per_second;
+    runtime_config.video_enabled = session->video_enabled;
+    runtime_config.maximum_tracking_frames_per_second =
+        session->maximum_tracking_frames_per_second;
+    runtime_config.minimum_blob_area_points = session->minimum_blob_area_points;
+    runtime_config.scaled_hull_enabled = session->scaled_hull_enabled;
+    runtime_config.low_power_mode_enabled = session->low_power_mode_enabled;
     pthread_mutex_unlock(&session->mutex);
-    return maximum_tracking_frames_per_second;
-}
-
-static bool trackir_session_video_enabled(otir_trackir_session *session) {
-    bool video_enabled;
-
-    pthread_mutex_lock(&session->mutex);
-    video_enabled = session->video_enabled;
-    pthread_mutex_unlock(&session->mutex);
-    return video_enabled;
-}
-
-static int trackir_session_minimum_blob_area_points(otir_trackir_session *session) {
-    int minimum_blob_area_points;
-
-    pthread_mutex_lock(&session->mutex);
-    minimum_blob_area_points = session->minimum_blob_area_points;
-    pthread_mutex_unlock(&session->mutex);
-    return minimum_blob_area_points;
-}
-
-static bool trackir_session_scaled_hull_enabled(otir_trackir_session *session) {
-    bool scaled_hull_enabled;
-
-    pthread_mutex_lock(&session->mutex);
-    scaled_hull_enabled = session->scaled_hull_enabled;
-    pthread_mutex_unlock(&session->mutex);
-    return scaled_hull_enabled;
+    return runtime_config;
 }
 
 static void trackir_copy_string(char *destination, size_t capacity, const char *source) {

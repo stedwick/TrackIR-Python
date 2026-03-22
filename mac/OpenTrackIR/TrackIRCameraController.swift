@@ -252,6 +252,7 @@ final class TrackIRCameraController: ObservableObject {
         otir_trackir_session_set_video_enabled(session, isVideoEnabled)
         otir_trackir_session_set_minimum_blob_area_points(session, Int32(minimumBlobAreaPoints))
         otir_trackir_session_set_scaled_hull_enabled(session, isScaledHullContoursEnabled)
+        otir_trackir_session_set_low_power_mode_enabled(session, false)
         otir_mac_mouse_controller_prepare_post_event_access(
             mouseController,
             trackIRShouldRequestMouseEventAccess(
@@ -358,20 +359,47 @@ final class TrackIRCameraController: ObservableObject {
         pollTask?.cancel()
 
         pollTask = Task.detached(priority: .utility) { [weak self] in
+            let lowPowerIdleDelay: TimeInterval = 60
             var lastPreviewFrameGeneration: UInt64 = 0
             var lastPreviewUpdateTime: TimeInterval?
             var lastDisplayUpdateTime: TimeInterval?
             var lastPublishedDisplayState: TrackIRCameraDisplayState?
             var hasPublishedPreviewImage = false
             var lastMouseMovementTime = ProcessInfo.processInfo.systemUptime
+            var backgroundIdleStartTime: TimeInterval?
+            var isLowPowerModeEnabled = false
+            var previewFrameBytes = [UInt8](
+                repeating: 0,
+                count: Int(OTIR_TRACKIR_SESSION_FRAME_BYTES)
+            )
+
+            defer {
+                otir_trackir_session_set_low_power_mode_enabled(session, false)
+            }
 
             while !Task.isCancelled {
                 var snapshot = otir_trackir_session_snapshot()
                 var latestPreviewImage: CGImage?
+                let currentTime = ProcessInfo.processInfo.systemUptime
+                let lowPowerTransition = trackIRLowPowerState(
+                    previousBackgroundIdleStartTime: backgroundIdleStartTime,
+                    isWindowVisible: configuration.shouldPublishUI,
+                    isMouseMovementEnabled: configuration.isMouseMovementEnabled,
+                    currentTime: currentTime,
+                    idleDelay: lowPowerIdleDelay
+                )
+
+                backgroundIdleStartTime = lowPowerTransition.backgroundIdleStartTime
+                if lowPowerTransition.isLowPowerModeEnabled != isLowPowerModeEnabled {
+                    otir_trackir_session_set_low_power_mode_enabled(
+                        session,
+                        lowPowerTransition.isLowPowerModeEnabled
+                    )
+                    isLowPowerModeEnabled = lowPowerTransition.isLowPowerModeEnabled
+                }
 
                 otir_trackir_session_copy_snapshot(session, &snapshot)
 
-                let currentTime = ProcessInfo.processInfo.systemUptime
                 let elapsedPreviewTime = lastPreviewUpdateTime.map { currentTime - $0 }
 
                 if trackIRShouldUpdatePreviewFrame(
@@ -382,13 +410,9 @@ final class TrackIRCameraController: ObservableObject {
                     elapsedTimeSinceLastPreview: elapsedPreviewTime,
                     maximumPreviewFramesPerSecond: configuration.maximumPreviewFramesPerSecond
                 ) {
-                    var frameBytes = [UInt8](
-                        repeating: 0,
-                        count: Int(OTIR_TRACKIR_SESSION_FRAME_BYTES)
-                    )
                     var frameGeneration: UInt64 = 0
 
-                    let didCopyPreviewFrame = frameBytes.withUnsafeMutableBufferPointer { buffer in
+                    let didCopyPreviewFrame = previewFrameBytes.withUnsafeMutableBufferPointer { buffer in
                         otir_trackir_session_copy_preview_frame(
                             session,
                             buffer.baseAddress,
@@ -399,7 +423,7 @@ final class TrackIRCameraController: ObservableObject {
 
                     if didCopyPreviewFrame {
                         latestPreviewImage = trackIRPreviewImage(
-                            frameBytes: frameBytes,
+                            frameBytes: previewFrameBytes,
                             width: Int(snapshot.preview_width),
                             height: Int(snapshot.preview_height)
                         )
@@ -558,7 +582,8 @@ nonisolated func trackIRShouldPollSnapshots(
     isTrackIREnabled: Bool,
     keepAwakeSeconds: Int
 ) -> Bool {
-    isWindowVisible || isMouseMovementEnabled || (isTrackIREnabled && keepAwakeSeconds > 0)
+    _ = keepAwakeSeconds
+    return isWindowVisible || isMouseMovementEnabled || isTrackIREnabled
 }
 
 nonisolated func trackIRShouldRequestMouseEventAccess(
@@ -578,6 +603,33 @@ nonisolated func trackIRShouldFireKeepAwake(
         !isMouseMovementEnabled &&
         keepAwakeSeconds > 0 &&
         timeSinceLastMouseMovement >= Double(keepAwakeSeconds)
+}
+
+struct TrackIRLowPowerTransition: Equatable {
+    let backgroundIdleStartTime: TimeInterval?
+    let isLowPowerModeEnabled: Bool
+}
+
+nonisolated func trackIRLowPowerState(
+    previousBackgroundIdleStartTime: TimeInterval?,
+    isWindowVisible: Bool,
+    isMouseMovementEnabled: Bool,
+    currentTime: TimeInterval,
+    idleDelay: TimeInterval
+) -> TrackIRLowPowerTransition {
+    let shouldTrackBackgroundIdle = !isWindowVisible && !isMouseMovementEnabled
+    let backgroundIdleStartTime: TimeInterval? = shouldTrackBackgroundIdle
+        ? (previousBackgroundIdleStartTime ?? currentTime)
+        : nil
+    let isLowPowerModeEnabled =
+        shouldTrackBackgroundIdle &&
+        backgroundIdleStartTime != nil &&
+        currentTime - backgroundIdleStartTime! >= idleDelay
+
+    return TrackIRLowPowerTransition(
+        backgroundIdleStartTime: backgroundIdleStartTime,
+        isLowPowerModeEnabled: isLowPowerModeEnabled
+    )
 }
 
 nonisolated func trackIRPollingInterval(

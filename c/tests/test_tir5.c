@@ -1,5 +1,6 @@
 #include "opentrackir/tir5.h"
 #include "opentrackir/tir5_mouse.h"
+#include "opentrackir/tir5_session.h"
 #include "opentrackir/tir5_tooling.h"
 
 #include <assert.h>
@@ -29,11 +30,13 @@ static void test_normalize_minimum_blob_area_points_clamps_to_positive_values(vo
 static void test_compute_blob_result_selects_largest_blob(void);
 static void test_compute_blob_result_uses_previous_centroid_to_break_ties(void);
 static void test_compute_blob_result_can_use_scaled_hull_centroid(void);
+static void test_compute_blob_result_row_bucket_grouping_respects_row_adjacency(void);
 static void test_shutdown_steps_turns_led_off_even_without_streaming(void);
 static void test_build_frame_marks_stripes_and_stats(void);
 static void test_normalize_maximum_frames_per_second_rejects_invalid_values(void);
 static void test_should_process_frame_respects_processing_cap(void);
 static void test_should_publish_frame_respects_maximum_rate(void);
+static void test_session_processing_mode_prefers_low_power_and_preview_only(void);
 static void test_mouse_transform_delta_applies_flip_and_rotation(void);
 static void test_mouse_vertical_gain_scales_y_axis(void);
 static void test_mouse_smoothing_mode_matches_python_thresholds(void);
@@ -56,11 +59,13 @@ int main(void) {
     test_compute_blob_result_selects_largest_blob();
     test_compute_blob_result_uses_previous_centroid_to_break_ties();
     test_compute_blob_result_can_use_scaled_hull_centroid();
+    test_compute_blob_result_row_bucket_grouping_respects_row_adjacency();
     test_shutdown_steps_turns_led_off_even_without_streaming();
     test_build_frame_marks_stripes_and_stats();
     test_normalize_maximum_frames_per_second_rejects_invalid_values();
     test_should_process_frame_respects_processing_cap();
     test_should_publish_frame_respects_maximum_rate();
+    test_session_processing_mode_prefers_low_power_and_preview_only();
     test_mouse_transform_delta_applies_flip_and_rotation();
     test_mouse_vertical_gain_scales_y_axis();
     test_mouse_smoothing_mode_matches_python_thresholds();
@@ -357,6 +362,33 @@ static void test_compute_blob_result_can_use_scaled_hull_centroid(void) {
     assert(hull_result.centroid_y > raw_result.centroid_y);
 }
 
+static void test_compute_blob_result_row_bucket_grouping_respects_row_adjacency(void) {
+    otir_tir5v3_stripe stripes[] = {
+        {.hstart = 10, .hstop = 12, .vline = 10, .points = 3, .sum_x = 3, .sum = 3},
+        {.hstart = 11, .hstop = 13, .vline = 11, .points = 3, .sum_x = 3, .sum = 3},
+        {.hstart = 10, .hstop = 12, .vline = 14, .points = 3, .sum_x = 3, .sum = 3},
+    };
+    otir_tir5v3_blob_tracking_config config = otir_tir5v3_default_blob_tracking_config();
+    otir_tir5v3_blob_result result = {0};
+
+    config.minimum_area_points = 1;
+    config.use_scaled_hull_centroid = false;
+    config.row_adjacency = 1;
+
+    assert(otir_tir5v3_compute_blob_result(
+        stripes,
+        3,
+        config,
+        false,
+        0.0,
+        0.0,
+        &result
+    ));
+    assert(result.blob_count == 2);
+    assert(result.selected_blob_area_points == 6);
+    assert(fabs(result.centroid_y - 10.5) < 0.0001);
+}
+
 static void test_shutdown_steps_turns_led_off_even_without_streaming(void) {
     otir_tir5v3_shutdown_step steps[4];
     size_t count;
@@ -407,6 +439,25 @@ static void test_should_publish_frame_respects_maximum_rate(void) {
     assert(otir_tir5v3_should_publish_frame(1.0 / 60.0, 60.0));
     assert(otir_tir5v3_should_publish_frame(0.05, 60.0));
     assert(!otir_tir5v3_should_publish_frame(0.05, 0.0));
+}
+
+static void test_session_processing_mode_prefers_low_power_and_preview_only(void) {
+    assert(
+        otir_trackir_session_select_processing_mode(true, false, true, false) ==
+        OTIR_TRACKIR_SESSION_PROCESSING_MODE_LOW_POWER
+    );
+    assert(
+        otir_trackir_session_select_processing_mode(false, false, true, false) ==
+        OTIR_TRACKIR_SESSION_PROCESSING_MODE_PREVIEW_ONLY
+    );
+    assert(
+        otir_trackir_session_select_processing_mode(false, true, false, true) ==
+        OTIR_TRACKIR_SESSION_PROCESSING_MODE_REDUCED_TRACKING
+    );
+    assert(
+        otir_trackir_session_select_processing_mode(false, true, false, false) ==
+        OTIR_TRACKIR_SESSION_PROCESSING_MODE_FULL_TRACKING
+    );
 }
 
 static void test_mouse_transform_delta_applies_flip_and_rotation(void) {

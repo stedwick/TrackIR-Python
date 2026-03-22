@@ -181,6 +181,18 @@ bool otir_tir5v3_compute_weighted_centroid(
 );
 int otir_tir5v3_normalize_minimum_blob_area_points(int minimum_area_points);
 otir_tir5v3_blob_tracking_config otir_tir5v3_default_blob_tracking_config(void);
+size_t otir_tir5v3_blob_workspace_bytes(void);
+bool otir_tir5v3_compute_blob_result_with_workspace(
+    const otir_tir5v3_stripe *stripes,
+    size_t stripe_count,
+    otir_tir5v3_blob_tracking_config config,
+    bool has_previous_centroid,
+    double previous_centroid_x,
+    double previous_centroid_y,
+    void *workspace,
+    size_t workspace_size,
+    otir_tir5v3_blob_result *out_result
+);
 bool otir_tir5v3_compute_blob_result(
     const otir_tir5v3_stripe *stripes,
     size_t stripe_count,
