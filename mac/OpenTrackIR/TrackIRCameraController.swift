@@ -70,7 +70,8 @@ final class TrackIRCameraController: ObservableObject {
         maximumTrackingFramesPerSecond: Double,
         isWindowVisible: Bool,
         isMouseMovementEnabled: Bool,
-        mouseMovementSpeed: Double
+        mouseMovementSpeed: Double,
+        mouseTransform: VideoPreviewTransform
     ) {
         let effectiveVideoEnabled = trackIREffectiveVideoEnabled(
             isVideoEnabled: isVideoEnabled,
@@ -91,7 +92,8 @@ final class TrackIRCameraController: ObservableObject {
                 maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond,
                 shouldPollSnapshots: shouldPollSnapshots,
                 isMouseMovementEnabled: isMouseMovementEnabled,
-                mouseMovementSpeed: mouseMovementSpeed
+                mouseMovementSpeed: mouseMovementSpeed,
+                mouseTransform: mouseTransform
             )
         } else {
             if shouldStreamTrackIRSession(
@@ -110,7 +112,8 @@ final class TrackIRCameraController: ObservableObject {
         maximumTrackingFramesPerSecond: Double,
         isWindowVisible: Bool,
         isMouseMovementEnabled: Bool,
-        mouseMovementSpeed: Double
+        mouseMovementSpeed: Double,
+        mouseTransform: VideoPreviewTransform
     ) {
         let shouldPollSnapshots = trackIRShouldPollSnapshots(
             isWindowVisible: isWindowVisible,
@@ -137,7 +140,8 @@ final class TrackIRCameraController: ObservableObject {
             maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond,
             shouldPollSnapshots: shouldPollSnapshots,
             isMouseMovementEnabled: isMouseMovementEnabled,
-            mouseMovementSpeed: mouseMovementSpeed
+            mouseMovementSpeed: mouseMovementSpeed,
+            mouseTransform: mouseTransform
         )
     }
 
@@ -154,7 +158,8 @@ final class TrackIRCameraController: ObservableObject {
         maximumTrackingFramesPerSecond: Double,
         shouldPollSnapshots: Bool,
         isMouseMovementEnabled: Bool,
-        mouseMovementSpeed: Double
+        mouseMovementSpeed: Double,
+        mouseTransform: VideoPreviewTransform
     ) {
         guard let session = ensureSession() else {
             phase = .failed
@@ -203,6 +208,7 @@ final class TrackIRCameraController: ObservableObject {
             isVideoEnabled: isVideoEnabled,
             isMouseMovementEnabled: isMouseMovementEnabled,
             mouseMovementSpeed: mouseMovementSpeed,
+            mouseTransform: mouseTransform,
             pollInterval: trackIRPollingInterval(
                 isVideoEnabled: isVideoEnabled,
                 isMouseMovementEnabled: isMouseMovementEnabled,
@@ -323,7 +329,8 @@ final class TrackIRCameraController: ObservableObject {
             centroidX: centroidX,
             centroidY: centroidY,
             isMovementEnabled: configuration.isMouseMovementEnabled && phase == .streaming,
-            speed: configuration.mouseMovementSpeed
+            speed: configuration.mouseMovementSpeed,
+            transform: configuration.mouseTransform
         )
 
         if let previewImage {
@@ -352,6 +359,7 @@ private struct TrackIRPollingConfiguration: Equatable {
     let isVideoEnabled: Bool
     let isMouseMovementEnabled: Bool
     let mouseMovementSpeed: Double
+    let mouseTransform: VideoPreviewTransform
     let pollInterval: TimeInterval
 }
 

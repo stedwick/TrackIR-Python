@@ -449,12 +449,12 @@ struct ContentView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Slider(value: $mouseMovementSpeed, in: 0.25 ... 3.0, step: 0.25)
+                    Slider(value: $mouseMovementSpeed, in: 0.25 ... 30.0, step: 0.25)
 
                     HStack {
                         Text("0.25x")
                         Spacer()
-                        Text("3x")
+                        Text("30x")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -591,6 +591,12 @@ struct ContentView: View {
     }
 
     private func syncTrackIRCamera() {
+        let mouseTransform = previewVideoTransform(
+            flipHorizontal: isVideoFlipHorizontalEnabled,
+            flipVertical: isVideoFlipVerticalEnabled,
+            rotationDegrees: videoRotationDegrees
+        )
+
         cameraController.syncStreaming(
             isTrackIREnabled: isTrackIREnabled,
             isVideoEnabled: isVideoEnabled,
@@ -601,11 +607,18 @@ struct ContentView: View {
                 isWindowVisible: isWindowVisible
             ),
             isMouseMovementEnabled: isMouseMovementEnabled,
-            mouseMovementSpeed: mouseMovementSpeed
+            mouseMovementSpeed: mouseMovementSpeed,
+            mouseTransform: mouseTransform
         )
     }
 
     private func refreshTrackIRCamera() {
+        let mouseTransform = previewVideoTransform(
+            flipHorizontal: isVideoFlipHorizontalEnabled,
+            flipVertical: isVideoFlipVerticalEnabled,
+            rotationDegrees: videoRotationDegrees
+        )
+
         cameraController.refresh(
             isTrackIREnabled: isTrackIREnabled,
             isVideoEnabled: isVideoEnabled,
@@ -616,7 +629,8 @@ struct ContentView: View {
                 isWindowVisible: isWindowVisible
             ),
             isMouseMovementEnabled: isMouseMovementEnabled,
-            mouseMovementSpeed: mouseMovementSpeed
+            mouseMovementSpeed: mouseMovementSpeed,
+            mouseTransform: mouseTransform
         )
     }
 }
@@ -660,15 +674,28 @@ func defaultMouseMovementShortcut() -> KeyboardShortcuts.Shortcut {
 
 func controlDefaultValues() -> ControlDefaultValues {
     ControlDefaultValues(
-        videoEnabled: false,
-        trackIREnabled: false,
-        mouseMovementEnabled: false,
-        mouseMovementSpeed: 1.0,
+        videoEnabled: true,
+        trackIREnabled: true,
+        mouseMovementEnabled: true,
+        mouseMovementSpeed: 5.0,
         videoFlipHorizontalEnabled: true,
         videoFlipVerticalEnabled: false,
         videoRotationDegrees: 0.0,
         videoFramesPerSecond: 60.0
     )
+}
+
+func controlDefaultPreferences(_ defaults: ControlDefaultValues) -> [String: Any] {
+    [
+        ControlPreferenceKey.videoEnabled.rawValue: defaults.videoEnabled,
+        ControlPreferenceKey.trackIREnabled.rawValue: defaults.trackIREnabled,
+        ControlPreferenceKey.mouseMovementEnabled.rawValue: defaults.mouseMovementEnabled,
+        ControlPreferenceKey.mouseMovementSpeed.rawValue: defaults.mouseMovementSpeed,
+        ControlPreferenceKey.videoFlipHorizontal.rawValue: defaults.videoFlipHorizontalEnabled,
+        ControlPreferenceKey.videoFlipVertical.rawValue: defaults.videoFlipVerticalEnabled,
+        ControlPreferenceKey.videoRotationDegrees.rawValue: defaults.videoRotationDegrees,
+        ControlPreferenceKey.videoFramesPerSecond.rawValue: defaults.videoFramesPerSecond,
+    ]
 }
 
 func toggledMouseMovementState(isEnabled: Bool) -> Bool {

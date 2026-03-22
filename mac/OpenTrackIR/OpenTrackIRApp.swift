@@ -15,6 +15,10 @@ struct OpenTrackIRApp: App {
     @StateObject private var cameraController = TrackIRCameraController()
     @State private var mouseMovementHotkeyController = MouseMovementHotkeyController()
 
+    init() {
+        UserDefaults.standard.register(defaults: controlDefaultPreferences(controlDefaultValues()))
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView(cameraController: cameraController)

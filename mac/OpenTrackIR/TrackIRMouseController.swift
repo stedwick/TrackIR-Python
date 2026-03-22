@@ -9,7 +9,8 @@ func trackIRMouseStep(
     previousCentroid: CGPoint?,
     currentCentroid: CGPoint?,
     isMovementEnabled: Bool,
-    speed: Double
+    speed: Double,
+    transform: VideoPreviewTransform
 ) -> TrackIRMouseStep {
     guard isMovementEnabled, let currentCentroid else {
         return TrackIRMouseStep(cursorDelta: nil, nextCentroid: nil)
@@ -20,9 +21,13 @@ func trackIRMouseStep(
     }
 
     return TrackIRMouseStep(
-        cursorDelta: CGPoint(
-            x: (currentCentroid.x - previousCentroid.x) * speed,
-            y: (currentCentroid.y - previousCentroid.y) * speed
+        cursorDelta: transformedTrackIRMouseDelta(
+            rawDelta: CGPoint(
+                x: currentCentroid.x - previousCentroid.x,
+                y: currentCentroid.y - previousCentroid.y
+            ),
+            speed: speed,
+            transform: transform
         ),
         nextCentroid: currentCentroid
     )
@@ -36,14 +41,16 @@ final class TrackIRMouseController {
         centroidX: Double?,
         centroidY: Double?,
         isMovementEnabled: Bool,
-        speed: Double
+        speed: Double,
+        transform: VideoPreviewTransform
     ) {
         let currentCentroid = trackIRCentroidPoint(x: centroidX, y: centroidY)
         let step = trackIRMouseStep(
             previousCentroid: previousCentroid,
             currentCentroid: currentCentroid,
             isMovementEnabled: isMovementEnabled,
-            speed: speed
+            speed: speed,
+            transform: transform
         )
 
         previousCentroid = step.nextCentroid
@@ -81,6 +88,23 @@ final class TrackIRMouseController {
 
         mouseEvent.post(tap: .cghidEventTap)
     }
+}
+
+func transformedTrackIRMouseDelta(
+    rawDelta: CGPoint,
+    speed: Double,
+    transform: VideoPreviewTransform
+) -> CGPoint {
+    let flippedX = rawDelta.x * transform.scaleX
+    let flippedY = rawDelta.y * transform.scaleY
+    let radians = transform.rotationDegrees * .pi / 180.0
+    let rotatedX = (flippedX * cos(radians)) - (flippedY * sin(radians))
+    let rotatedY = (flippedX * sin(radians)) + (flippedY * cos(radians))
+
+    return CGPoint(
+        x: rotatedX * speed,
+        y: rotatedY * speed
+    )
 }
 
 private func trackIRCentroidPoint(x: Double?, y: Double?) -> CGPoint? {

@@ -54,15 +54,28 @@ struct ContentViewTests {
 
     @Test func controlDefaultValuesMatchExpectedStartupState() {
         #expect(controlDefaultValues() == ControlDefaultValues(
-            videoEnabled: false,
-            trackIREnabled: false,
-            mouseMovementEnabled: false,
-            mouseMovementSpeed: 1.0,
+            videoEnabled: true,
+            trackIREnabled: true,
+            mouseMovementEnabled: true,
+            mouseMovementSpeed: 5.0,
             videoFlipHorizontalEnabled: true,
             videoFlipVerticalEnabled: false,
             videoRotationDegrees: 0.0,
             videoFramesPerSecond: 60.0
         ))
+    }
+
+    @Test func controlDefaultPreferencesMapsDefaultsToStoredKeys() {
+        let preferences = controlDefaultPreferences(controlDefaultValues())
+
+        #expect(preferences[ControlPreferenceKey.videoEnabled.rawValue] as? Bool == true)
+        #expect(preferences[ControlPreferenceKey.trackIREnabled.rawValue] as? Bool == true)
+        #expect(preferences[ControlPreferenceKey.mouseMovementEnabled.rawValue] as? Bool == true)
+        #expect(preferences[ControlPreferenceKey.mouseMovementSpeed.rawValue] as? Double == 5.0)
+        #expect(preferences[ControlPreferenceKey.videoFlipHorizontal.rawValue] as? Bool == true)
+        #expect(preferences[ControlPreferenceKey.videoFlipVertical.rawValue] as? Bool == false)
+        #expect(preferences[ControlPreferenceKey.videoRotationDegrees.rawValue] as? Double == 0.0)
+        #expect(preferences[ControlPreferenceKey.videoFramesPerSecond.rawValue] as? Double == 60.0)
     }
 
     @Test func defaultMouseMovementShortcutUsesShiftF7() {
