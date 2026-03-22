@@ -607,12 +607,12 @@ struct ContentView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Slider(value: mouseDeadzoneBinding, in: 0.0 ... 2.0, step: 0.01)
+                    Slider(value: mouseDeadzoneBinding, in: 0.0 ... 1.0, step: 0.01)
 
                     HStack {
                         Text("0.00")
                         Spacer()
-                        Text("2.00")
+                        Text("1.00")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1068,7 +1068,7 @@ func normalizedMouseSmoothing(_ smoothing: Double) -> Int {
 }
 
 func normalizedMouseDeadzone(_ deadzone: Double) -> Double {
-    min(max(deadzone, 0.0), 2.0)
+    min(max(deadzone, 0.0), 1.0)
 }
 
 func normalizedMouseJumpThreshold(_ jumpThresholdPixels: Int) -> Int {
