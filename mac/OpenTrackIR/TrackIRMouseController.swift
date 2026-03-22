@@ -92,7 +92,8 @@ final class TrackIRMouseController {
             return
         }
 
-        CGWarpMouseCursorPosition(nextPosition)
+        // Disabled while testing the pure Quartz post path.
+        // CGWarpMouseCursorPosition(nextPosition)
     }
 
     private func canPostMouseEvents() -> Bool {
