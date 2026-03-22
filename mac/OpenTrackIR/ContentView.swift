@@ -79,7 +79,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Open · TrackIR")
+                    Text("OpenTrackIR")
                         .font(.system(size: 30, weight: .semibold, design: .rounded))
 
                     Text("macOS TrackIR preview and controls")
@@ -170,8 +170,14 @@ struct ContentView: View {
             .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 10)
 
             HStack(spacing: 12) {
-                previewMetric(title: "Source", value: cameraController.sourceLabel)
-                previewMetric(title: "Rate", value: cameraController.frameRateLabel)
+                previewMetric(title: "Device", value: cameraController.sourceLabel)
+                previewMetric(
+                    title: "FPS",
+                    value: trackIRRateSummaryLabel(
+                        maximumFramesPerSecond: videoFramesPerSecond,
+                        sourceFrameRate: cameraController.frameRate
+                    )
+                )
                 previewMetric(title: "Position", value: cameraController.centroidPairLabel)
                 previewMetric(title: "Backend", value: cameraController.backendLabel)
             }
@@ -485,7 +491,7 @@ struct ContentView: View {
                     HStack(alignment: .top, spacing: 14) {
                         controlCopy(
                             title: "TrackIR FPS",
-                            detail: "Cap TrackIR telemetry.",
+                            detail: "Cap TrackIR processing.",
                             systemImage: "gauge.with.dots.needle.33percent"
                         )
 
@@ -646,6 +652,12 @@ func trackIRFramesPerSecondValueLabel(for framesPerSecond: Double) -> String {
     }
 
     return "\(Int(framesPerSecond.rounded())) fps"
+}
+
+func trackIRRateSummaryLabel(maximumFramesPerSecond: Double, sourceFrameRate: Double?) -> String {
+    let capLabel = maximumFramesPerSecond > 0 ? String(Int(maximumFramesPerSecond.rounded())) : "Uncapped"
+    let sourceLabel = sourceFrameRate.map { String(Int($0.rounded())) } ?? "-"
+    return "\(capLabel) / max \(sourceLabel)"
 }
 
 extension KeyboardShortcuts.Name {

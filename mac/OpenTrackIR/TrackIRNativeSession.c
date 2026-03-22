@@ -209,12 +209,12 @@ static void *trackir_session_worker_main(void *context) {
     otir_tir5v3_packet *packet = malloc(sizeof(*packet));
     otir_status status;
     uint64_t frame_index = 0;
-    double measured_frame_rate = 0.0;
-    bool has_frame_rate = false;
-    int sampled_frame_count = 0;
-    CFAbsoluteTime sample_start_time = CFAbsoluteTimeGetCurrent();
-    CFAbsoluteTime last_tracking_publish_time = 0.0;
-    bool has_tracking_publish_time = false;
+    double measured_source_frame_rate = 0.0;
+    bool has_source_frame_rate = false;
+    int sampled_source_frame_count = 0;
+    CFAbsoluteTime source_sample_start_time = CFAbsoluteTimeGetCurrent();
+    CFAbsoluteTime last_tracking_process_time = 0.0;
+    bool has_tracking_process_time = false;
     CFAbsoluteTime last_preview_publish_time = 0.0;
     bool has_preview_publish_time = false;
     uint8_t *frame_buffer = malloc(OTIR_TRACKIR_SESSION_FRAME_BYTES);
@@ -275,10 +275,10 @@ static void *trackir_session_worker_main(void *context) {
             double centroid_y = 0.0;
             double maximum_tracking_frames_per_second = 0.0;
             bool has_centroid = false;
-            bool should_publish_tracking = false;
+            bool should_process_tracking = false;
             bool should_publish_preview = false;
             CFAbsoluteTime now;
-            CFAbsoluteTime elapsed_since_last_tracking_publish = 0.0;
+            CFAbsoluteTime elapsed_since_last_tracking_process = 0.0;
             CFAbsoluteTime elapsed_since_last_publish = 0.0;
 
             status = otir_tir5v3_read_packet(device, 50, packet);
@@ -293,32 +293,33 @@ static void *trackir_session_worker_main(void *context) {
                 continue;
             }
 
-            frame_index += 1;
-            sampled_frame_count += 1;
+            sampled_source_frame_count += 1;
             now = CFAbsoluteTimeGetCurrent();
 
-            if (now - sample_start_time >= 0.25) {
-                measured_frame_rate = (double)sampled_frame_count / (now - sample_start_time);
-                has_frame_rate = true;
-                sampled_frame_count = 0;
-                sample_start_time = now;
+            if (now - source_sample_start_time >= 0.25) {
+                measured_source_frame_rate =
+                    (double)sampled_source_frame_count / (now - source_sample_start_time);
+                has_source_frame_rate = true;
+                sampled_source_frame_count = 0;
+                source_sample_start_time = now;
             }
 
-            if (has_tracking_publish_time) {
-                elapsed_since_last_tracking_publish = now - last_tracking_publish_time;
+            if (has_tracking_process_time) {
+                elapsed_since_last_tracking_process = now - last_tracking_process_time;
             }
             maximum_tracking_frames_per_second =
                 trackir_session_maximum_tracking_frames_per_second(session);
-            should_publish_tracking = !has_tracking_publish_time ||
+            should_process_tracking = !has_tracking_process_time ||
                 maximum_tracking_frames_per_second <= 0.0 ||
                 otir_tir5v3_should_publish_frame(
-                    elapsed_since_last_tracking_publish,
+                    elapsed_since_last_tracking_process,
                     maximum_tracking_frames_per_second
                 );
-            if (!should_publish_tracking) {
+            if (!should_process_tracking) {
                 continue;
             }
 
+            frame_index += 1;
             otir_tir5v3_packet_stats(packet, frame_index, &stats);
             if (stats.has_centroid) {
                 centroid_x = stats.centroid_x;
@@ -342,8 +343,8 @@ static void *trackir_session_worker_main(void *context) {
             session->snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_STREAMING;
             session->snapshot.status = OTIR_STATUS_OK;
             session->snapshot.frame_index = frame_index;
-            session->snapshot.has_frame_rate = has_frame_rate;
-            session->snapshot.frame_rate = measured_frame_rate;
+            session->snapshot.has_frame_rate = has_source_frame_rate;
+            session->snapshot.frame_rate = measured_source_frame_rate;
             session->snapshot.has_centroid = has_centroid;
             session->snapshot.centroid_x = centroid_x;
             session->snapshot.centroid_y = centroid_y;
@@ -351,8 +352,8 @@ static void *trackir_session_worker_main(void *context) {
             session->snapshot.packet_type = packet->packet_type;
             pthread_mutex_unlock(&session->mutex);
 
-            last_tracking_publish_time = now;
-            has_tracking_publish_time = true;
+            last_tracking_process_time = now;
+            has_tracking_process_time = true;
 
             if (!should_publish_preview) {
                 continue;

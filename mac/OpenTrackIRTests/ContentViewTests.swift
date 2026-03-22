@@ -106,6 +106,12 @@ struct ContentViewTests {
         #expect(trackIRFramesPerSecondValueLabel(for: 124.6) == "125 fps")
     }
 
+    @Test func trackIRRateSummaryLabelCombinesCapAndSourceRate() {
+        #expect(trackIRRateSummaryLabel(maximumFramesPerSecond: 60, sourceFrameRate: 122.4) == "60 / max 122")
+        #expect(trackIRRateSummaryLabel(maximumFramesPerSecond: 0, sourceFrameRate: 122.6) == "Uncapped / max 123")
+        #expect(trackIRRateSummaryLabel(maximumFramesPerSecond: 30, sourceFrameRate: nil) == "30 / max -")
+    }
+
     @Test func trackIRStreamingDependsOnTrackIREnableOnly() {
         #expect(shouldStreamTrackIRSession(isTrackIREnabled: true, isVideoEnabled: true))
         #expect(shouldStreamTrackIRSession(isTrackIREnabled: true, isVideoEnabled: false))
