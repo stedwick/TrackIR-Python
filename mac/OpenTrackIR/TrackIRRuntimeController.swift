@@ -12,6 +12,8 @@ struct TrackIRControlState: Equatable {
     var mouseDeadzone: Double
     var isAvoidMouseJumpsEnabled: Bool
     var mouseJumpThresholdPixels: Int
+    var minimumBlobAreaPoints: Int
+    var isScaledHullContoursEnabled: Bool
     var keepAwakeSeconds: Int
     var isTimeoutEnabled: Bool
     var timeoutSeconds: Int
@@ -87,6 +89,8 @@ final class TrackIRRuntimeController: ObservableObject {
             mouseDeadzone: controlState.mouseDeadzone,
             isAvoidMouseJumpsEnabled: controlState.isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: controlState.mouseJumpThresholdPixels,
+            minimumBlobAreaPoints: controlState.minimumBlobAreaPoints,
+            isScaledHullContoursEnabled: controlState.isScaledHullContoursEnabled,
             keepAwakeSeconds: controlState.keepAwakeSeconds,
             mouseTransform: currentMouseTransform()
         )
@@ -143,6 +147,18 @@ final class TrackIRRuntimeController: ObservableObject {
     func setMouseJumpThresholdPixels(_ mouseJumpThresholdPixels: Int) {
         updateControlState {
             $0.mouseJumpThresholdPixels = normalizedMouseJumpThreshold(mouseJumpThresholdPixels)
+        }
+    }
+
+    func setMinimumBlobAreaPoints(_ minimumBlobAreaPoints: Int) {
+        updateControlState {
+            $0.minimumBlobAreaPoints = normalizedMinimumBlobArea(minimumBlobAreaPoints)
+        }
+    }
+
+    func setScaledHullContoursEnabled(_ isScaledHullContoursEnabled: Bool) {
+        updateControlState {
+            $0.isScaledHullContoursEnabled = isScaledHullContoursEnabled
         }
     }
 
@@ -231,6 +247,8 @@ final class TrackIRRuntimeController: ObservableObject {
             mouseDeadzone: controlState.mouseDeadzone,
             isAvoidMouseJumpsEnabled: controlState.isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: controlState.mouseJumpThresholdPixels,
+            minimumBlobAreaPoints: controlState.minimumBlobAreaPoints,
+            isScaledHullContoursEnabled: controlState.isScaledHullContoursEnabled,
             keepAwakeSeconds: controlState.keepAwakeSeconds,
             mouseTransform: currentMouseTransform()
         )
@@ -302,6 +320,12 @@ func trackIRControlState(userDefaults: UserDefaults) -> TrackIRControlState {
         mouseJumpThresholdPixels: userDefaults.object(
             forKey: ControlPreferenceKey.mouseJumpThresholdPixels.rawValue
         ) as? Int ?? defaults.mouseJumpThresholdPixels,
+        minimumBlobAreaPoints: userDefaults.object(
+            forKey: ControlPreferenceKey.minimumBlobAreaPoints.rawValue
+        ) as? Int ?? defaults.minimumBlobAreaPoints,
+        isScaledHullContoursEnabled: userDefaults.object(
+            forKey: ControlPreferenceKey.scaledHullContoursEnabled.rawValue
+        ) as? Bool ?? defaults.isScaledHullContoursEnabled,
         keepAwakeSeconds: userDefaults.object(forKey: ControlPreferenceKey.keepAwakeSeconds.rawValue)
             as? Int ?? defaults.keepAwakeSeconds,
         isTimeoutEnabled: userDefaults.object(forKey: ControlPreferenceKey.timeoutEnabled.rawValue)
@@ -336,6 +360,14 @@ func persistControlState(_ controlState: TrackIRControlState, userDefaults: User
     userDefaults.set(
         controlState.mouseJumpThresholdPixels,
         forKey: ControlPreferenceKey.mouseJumpThresholdPixels.rawValue
+    )
+    userDefaults.set(
+        controlState.minimumBlobAreaPoints,
+        forKey: ControlPreferenceKey.minimumBlobAreaPoints.rawValue
+    )
+    userDefaults.set(
+        controlState.isScaledHullContoursEnabled,
+        forKey: ControlPreferenceKey.scaledHullContoursEnabled.rawValue
     )
     userDefaults.set(controlState.keepAwakeSeconds, forKey: ControlPreferenceKey.keepAwakeSeconds.rawValue)
     userDefaults.set(controlState.isTimeoutEnabled, forKey: ControlPreferenceKey.timeoutEnabled.rawValue)

@@ -52,6 +52,14 @@ void otir_trackir_session_set_maximum_tracking_frames_per_second(
     double maximum_frames_per_second
 );
 void otir_trackir_session_set_video_enabled(otir_trackir_session *session, bool enabled);
+void otir_trackir_session_set_minimum_blob_area_points(
+    otir_trackir_session *session,
+    int minimum_blob_area_points
+);
+void otir_trackir_session_set_scaled_hull_enabled(
+    otir_trackir_session *session,
+    bool enabled
+);
 void otir_trackir_session_copy_snapshot(
     otir_trackir_session *session,
     otir_trackir_session_snapshot *out_snapshot

@@ -76,11 +76,38 @@ typedef struct otir_tir5v3_frame_stats {
     uint64_t frame_index;
     uint8_t packet_type;
     size_t stripe_count;
+    size_t blob_count;
     bool has_centroid;
     double centroid_x;
     double centroid_y;
+    int selected_blob_area_points;
+    int selected_blob_brightness_sum;
+    int centroid_mode;
     int packet_no;
 } otir_tir5v3_frame_stats;
+
+typedef enum otir_tir5v3_centroid_mode {
+    OTIR_TIR5V3_CENTROID_MODE_NONE = 0,
+    OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB = 1,
+    OTIR_TIR5V3_CENTROID_MODE_SCALED_HULL = 2
+} otir_tir5v3_centroid_mode;
+
+typedef struct otir_tir5v3_blob_tracking_config {
+    int minimum_area_points;
+    bool use_scaled_hull_centroid;
+    int row_adjacency;
+    double hull_scale;
+} otir_tir5v3_blob_tracking_config;
+
+typedef struct otir_tir5v3_blob_result {
+    bool has_centroid;
+    double centroid_x;
+    double centroid_y;
+    size_t blob_count;
+    int selected_blob_area_points;
+    int selected_blob_brightness_sum;
+    otir_tir5v3_centroid_mode centroid_mode;
+} otir_tir5v3_blob_result;
 
 typedef enum otir_tir5v3_shutdown_action {
     OTIR_TIR5V3_SHUTDOWN_INTENT_1 = 1,
@@ -151,6 +178,17 @@ bool otir_tir5v3_compute_weighted_centroid(
     size_t stripe_count,
     double *out_x,
     double *out_y
+);
+int otir_tir5v3_normalize_minimum_blob_area_points(int minimum_area_points);
+otir_tir5v3_blob_tracking_config otir_tir5v3_default_blob_tracking_config(void);
+bool otir_tir5v3_compute_blob_result(
+    const otir_tir5v3_stripe *stripes,
+    size_t stripe_count,
+    otir_tir5v3_blob_tracking_config config,
+    bool has_previous_centroid,
+    double previous_centroid_x,
+    double previous_centroid_y,
+    otir_tir5v3_blob_result *out_result
 );
 
 size_t otir_tir5v3_shutdown_steps(

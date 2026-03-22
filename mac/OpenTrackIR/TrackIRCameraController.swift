@@ -107,6 +107,8 @@ final class TrackIRCameraController: ObservableObject {
         mouseDeadzone: Double,
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
+        minimumBlobAreaPoints: Int,
+        isScaledHullContoursEnabled: Bool,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
@@ -137,6 +139,8 @@ final class TrackIRCameraController: ObservableObject {
                 mouseDeadzone: mouseDeadzone,
                 isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
                 mouseJumpThresholdPixels: mouseJumpThresholdPixels,
+                minimumBlobAreaPoints: minimumBlobAreaPoints,
+                isScaledHullContoursEnabled: isScaledHullContoursEnabled,
                 keepAwakeSeconds: keepAwakeSeconds,
                 mouseTransform: mouseTransform
             )
@@ -162,6 +166,8 @@ final class TrackIRCameraController: ObservableObject {
         mouseDeadzone: Double,
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
+        minimumBlobAreaPoints: Int,
+        isScaledHullContoursEnabled: Bool,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
@@ -198,6 +204,8 @@ final class TrackIRCameraController: ObservableObject {
             mouseDeadzone: mouseDeadzone,
             isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: mouseJumpThresholdPixels,
+            minimumBlobAreaPoints: minimumBlobAreaPoints,
+            isScaledHullContoursEnabled: isScaledHullContoursEnabled,
             keepAwakeSeconds: keepAwakeSeconds,
             mouseTransform: mouseTransform
         )
@@ -222,6 +230,8 @@ final class TrackIRCameraController: ObservableObject {
         mouseDeadzone: Double,
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
+        minimumBlobAreaPoints: Int,
+        isScaledHullContoursEnabled: Bool,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
@@ -238,6 +248,8 @@ final class TrackIRCameraController: ObservableObject {
             maximumTrackingFramesPerSecond
         )
         otir_trackir_session_set_video_enabled(session, isVideoEnabled)
+        otir_trackir_session_set_minimum_blob_area_points(session, Int32(minimumBlobAreaPoints))
+        otir_trackir_session_set_scaled_hull_enabled(session, isScaledHullContoursEnabled)
         otir_mac_mouse_controller_prepare_post_event_access(
             mouseController,
             trackIRShouldRequestMouseEventAccess(
@@ -285,6 +297,8 @@ final class TrackIRCameraController: ObservableObject {
             mouseDeadzone: mouseDeadzone,
             isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: mouseJumpThresholdPixels,
+            minimumBlobAreaPoints: minimumBlobAreaPoints,
+            isScaledHullContoursEnabled: isScaledHullContoursEnabled,
             keepAwakeSeconds: keepAwakeSeconds,
             mouseTransform: mouseTransform,
             shouldPublishUI: shouldPublishUI,
@@ -495,6 +509,8 @@ private struct TrackIRPollingConfiguration: Equatable {
     let mouseDeadzone: Double
     let isAvoidMouseJumpsEnabled: Bool
     let mouseJumpThresholdPixels: Int
+    let minimumBlobAreaPoints: Int
+    let isScaledHullContoursEnabled: Bool
     let keepAwakeSeconds: Int
     let mouseTransform: VideoPreviewTransform
     let shouldPublishUI: Bool

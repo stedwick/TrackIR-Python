@@ -102,6 +102,14 @@ struct ContentView: View {
         controlState.mouseJumpThresholdPixels
     }
 
+    private var minimumBlobAreaPoints: Int {
+        controlState.minimumBlobAreaPoints
+    }
+
+    private var isScaledHullContoursEnabled: Bool {
+        controlState.isScaledHullContoursEnabled
+    }
+
     private var keepAwakeSeconds: Int {
         controlState.keepAwakeSeconds
     }
@@ -507,7 +515,7 @@ struct ContentView: View {
                     HStack(alignment: .top, spacing: 14) {
                         controlCopy(
                             title: "Advanced Controls",
-                            detail: "Advanced tuning for mouse smoothing, keep-awake, and timeout.",
+                            detail: "Advanced tuning for blob detection, smoothing, keep-awake, and timeout.",
                             systemImage: "slider.horizontal.3"
                         )
 
@@ -525,6 +533,7 @@ struct ContentView: View {
 
                 if isAdvancedMouseExpanded {
                     LazyVGrid(columns: advancedMouseControlColumns, alignment: .leading, spacing: 14) {
+                        blobDetectionControlRow
                         mouseSmoothingControlRow
                         mouseDeadzoneControlRow
                         mouseJumpFilterControlRow
@@ -619,6 +628,28 @@ struct ContentView: View {
                     suffix: "px",
                     isEnabled: isAvoidMouseJumpsEnabled
                 )
+            }
+        }
+    }
+
+    private var blobDetectionControlRow: some View {
+        controlCard {
+            VStack(alignment: .leading, spacing: 16) {
+                controlCopy(
+                    title: "Blob Detection",
+                    detail: "Filter tiny blobs and optionally use scaled hull contours for centroiding.",
+                    systemImage: "scope"
+                )
+
+                integerSettingRow(
+                    title: "Minimum Blob Area",
+                    detail: "Ignore blob candidates smaller than this many stripe points.",
+                    value: minimumBlobAreaPointsBinding,
+                    suffix: "pts"
+                )
+
+                Toggle("Scaled Hull Contours", isOn: isScaledHullContoursEnabledBinding)
+                    .toggleStyle(.checkbox)
             }
         }
     }
@@ -880,6 +911,20 @@ struct ContentView: View {
         )
     }
 
+    private var minimumBlobAreaPointsBinding: Binding<Int> {
+        Binding(
+            get: { minimumBlobAreaPoints },
+            set: { runtimeController.setMinimumBlobAreaPoints($0) }
+        )
+    }
+
+    private var isScaledHullContoursEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isScaledHullContoursEnabled },
+            set: { runtimeController.setScaledHullContoursEnabled($0) }
+        )
+    }
+
     private var keepAwakeSecondsBinding: Binding<Int> {
         Binding(
             get: { keepAwakeSeconds },
@@ -945,6 +990,8 @@ enum ControlPreferenceKey: String {
     case mouseDeadzone = "contentView.mouseDeadzone"
     case avoidMouseJumpsEnabled = "contentView.avoidMouseJumpsEnabled"
     case mouseJumpThresholdPixels = "contentView.mouseJumpThresholdPixels"
+    case minimumBlobAreaPoints = "contentView.minimumBlobAreaPoints"
+    case scaledHullContoursEnabled = "contentView.scaledHullContoursEnabled"
     case keepAwakeSeconds = "contentView.keepAwakeSeconds"
     case timeoutEnabled = "contentView.timeoutEnabled"
     case timeoutSeconds = "contentView.timeoutSeconds"
@@ -963,6 +1010,8 @@ struct ControlDefaultValues: Equatable {
     let mouseDeadzone: Double
     let avoidMouseJumpsEnabled: Bool
     let mouseJumpThresholdPixels: Int
+    let minimumBlobAreaPoints: Int
+    let isScaledHullContoursEnabled: Bool
     let keepAwakeSeconds: Int
     let timeoutEnabled: Bool
     let timeoutSeconds: Int
@@ -992,6 +1041,8 @@ func controlDefaultValues() -> ControlDefaultValues {
         mouseDeadzone: 0.04,
         avoidMouseJumpsEnabled: true,
         mouseJumpThresholdPixels: 50,
+        minimumBlobAreaPoints: 4,
+        isScaledHullContoursEnabled: true,
         keepAwakeSeconds: 29,
         timeoutEnabled: true,
         timeoutSeconds: 28_800,
@@ -1012,6 +1063,8 @@ func controlDefaultPreferences(_ defaults: ControlDefaultValues) -> [String: Any
         ControlPreferenceKey.mouseDeadzone.rawValue: defaults.mouseDeadzone,
         ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue: defaults.avoidMouseJumpsEnabled,
         ControlPreferenceKey.mouseJumpThresholdPixels.rawValue: defaults.mouseJumpThresholdPixels,
+        ControlPreferenceKey.minimumBlobAreaPoints.rawValue: defaults.minimumBlobAreaPoints,
+        ControlPreferenceKey.scaledHullContoursEnabled.rawValue: defaults.isScaledHullContoursEnabled,
         ControlPreferenceKey.keepAwakeSeconds.rawValue: defaults.keepAwakeSeconds,
         ControlPreferenceKey.timeoutEnabled.rawValue: defaults.timeoutEnabled,
         ControlPreferenceKey.timeoutSeconds.rawValue: defaults.timeoutSeconds,
@@ -1052,6 +1105,10 @@ func normalizedMouseDeadzone(_ deadzone: Double) -> Double {
 
 func normalizedMouseJumpThreshold(_ jumpThresholdPixels: Int) -> Int {
     max(jumpThresholdPixels, 1)
+}
+
+func normalizedMinimumBlobArea(_ minimumBlobAreaPoints: Int) -> Int {
+    max(minimumBlobAreaPoints, 1)
 }
 
 func normalizedKeepAwakeSeconds(_ keepAwakeSeconds: Int) -> Int {
