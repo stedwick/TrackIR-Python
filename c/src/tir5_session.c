@@ -13,7 +13,7 @@ typedef struct trackir_session_runtime_config {
     bool video_enabled;
     double maximum_tracking_frames_per_second;
     int minimum_blob_area_points;
-    bool scaled_hull_enabled;
+    otir_tir5v3_centroid_mode centroid_mode;
     bool low_power_mode_enabled;
 } trackir_session_runtime_config;
 
@@ -26,7 +26,7 @@ struct otir_trackir_session {
     bool video_enabled;
     double maximum_tracking_frames_per_second;
     int minimum_blob_area_points;
-    bool scaled_hull_enabled;
+    otir_tir5v3_centroid_mode centroid_mode;
     bool low_power_mode_enabled;
     otir_trackir_session_snapshot snapshot;
     uint8_t preview_frame[OTIR_TRACKIR_SESSION_FRAME_BYTES];
@@ -72,8 +72,7 @@ otir_trackir_session *otir_trackir_session_create(void) {
         otir_tir5v3_normalize_maximum_frames_per_second(0.0);
     session->minimum_blob_area_points =
         otir_tir5v3_default_blob_tracking_config().minimum_area_points;
-    session->scaled_hull_enabled =
-        otir_tir5v3_default_blob_tracking_config().use_scaled_hull_centroid;
+    session->centroid_mode = otir_tir5v3_default_blob_tracking_config().centroid_mode;
     session->low_power_mode_enabled = false;
     trackir_session_reset_snapshot_locked(session);
     pthread_mutex_unlock(&session->mutex);
@@ -201,12 +200,28 @@ void otir_trackir_session_set_scaled_hull_enabled(
     otir_trackir_session *session,
     bool enabled
 ) {
+    otir_trackir_session_set_centroid_mode(
+        session,
+        enabled
+            ? OTIR_TIR5V3_CENTROID_MODE_FILLED_HULL
+            : OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB
+    );
+}
+
+void otir_trackir_session_set_centroid_mode(
+    otir_trackir_session *session,
+    otir_tir5v3_centroid_mode mode
+) {
     if (session == NULL) {
         return;
     }
 
     pthread_mutex_lock(&session->mutex);
-    session->scaled_hull_enabled = enabled;
+    if (mode < OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB ||
+        mode > OTIR_TIR5V3_CENTROID_MODE_REGULARIZED_BINARY) {
+        mode = OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB;
+    }
+    session->centroid_mode = mode;
     pthread_mutex_unlock(&session->mutex);
 }
 
@@ -459,7 +474,7 @@ static void *trackir_session_worker_main(void *context) {
                 frame_index += 1;
                 if (processing_mode != OTIR_TRACKIR_SESSION_PROCESSING_MODE_LOW_POWER) {
                     blob_config.minimum_area_points = runtime_config.minimum_blob_area_points;
-                    blob_config.use_scaled_hull_centroid = runtime_config.scaled_hull_enabled;
+                    blob_config.centroid_mode = runtime_config.centroid_mode;
                     has_previous_blob_centroid = has_previous_selected_centroid;
                     blob_result = (otir_tir5v3_blob_result){0};
                     if (otir_tir5v3_compute_blob_result_with_workspace(
@@ -642,7 +657,7 @@ static trackir_session_runtime_config trackir_session_runtime_config_snapshot(
     runtime_config.maximum_tracking_frames_per_second =
         session->maximum_tracking_frames_per_second;
     runtime_config.minimum_blob_area_points = session->minimum_blob_area_points;
-    runtime_config.scaled_hull_enabled = session->scaled_hull_enabled;
+    runtime_config.centroid_mode = session->centroid_mode;
     runtime_config.low_power_mode_enabled = session->low_power_mode_enabled;
     pthread_mutex_unlock(&session->mutex);
     return runtime_config;

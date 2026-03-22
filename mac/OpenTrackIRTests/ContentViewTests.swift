@@ -87,7 +87,7 @@ struct ContentViewTests {
             avoidMouseJumpsEnabled: true,
             mouseJumpThresholdPixels: 50,
             minimumBlobAreaPoints: 100,
-            isConvexHullCentroidEnabled: true,
+            blobCentroidMode: .filledHull,
             keepAwakeSeconds: 29,
             timeoutEnabled: true,
             timeoutSeconds: 28_800,
@@ -111,7 +111,10 @@ struct ContentViewTests {
         #expect(preferences[ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.mouseJumpThresholdPixels.rawValue] as? Int == 50)
         #expect(preferences[ControlPreferenceKey.minimumBlobAreaPoints.rawValue] as? Int == 100)
-        #expect(preferences[ControlPreferenceKey.convexHullCentroidEnabled.rawValue] as? Bool == true)
+        #expect(
+            preferences[ControlPreferenceKey.convexHullCentroidEnabled.rawValue] as? Int ==
+                TrackIRBlobCentroidMode.filledHull.rawValue
+        )
         #expect(preferences[ControlPreferenceKey.keepAwakeSeconds.rawValue] as? Int == 29)
         #expect(preferences[ControlPreferenceKey.timeoutEnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.timeoutSeconds.rawValue] as? Int == 28_800)
@@ -135,7 +138,7 @@ struct ContentViewTests {
             isAvoidMouseJumpsEnabled: false,
             mouseJumpThresholdPixels: 80,
             minimumBlobAreaPoints: 9,
-            isConvexHullCentroidEnabled: false,
+            blobCentroidMode: .rawWeighted,
             keepAwakeSeconds: 45,
             isTimeoutEnabled: false,
             timeoutSeconds: 600,
@@ -151,6 +154,25 @@ struct ContentViewTests {
         #expect(trackIRControlState(userDefaults: userDefaults) == controlState)
 
         userDefaults.removePersistentDomain(forName: suiteName)
+    }
+
+    @Test func blobCentroidModeMigratesLegacyBooleanPreference() {
+        let suiteName = "OpenTrackIRTests.\(UUID().uuidString)"
+        let userDefaults = UserDefaults(suiteName: suiteName)!
+
+        userDefaults.removePersistentDomain(forName: suiteName)
+        userDefaults.set(true, forKey: ControlPreferenceKey.convexHullCentroidEnabled.rawValue)
+        #expect(trackIRControlState(userDefaults: userDefaults).blobCentroidMode == .filledHull)
+
+        userDefaults.set(false, forKey: ControlPreferenceKey.convexHullCentroidEnabled.rawValue)
+        #expect(trackIRControlState(userDefaults: userDefaults).blobCentroidMode == .rawWeighted)
+
+        userDefaults.removePersistentDomain(forName: suiteName)
+    }
+
+    @Test func legacyBooleanPreferenceDetectionDistinguishesBoolFromIntMode() {
+        #expect(isLegacyBooleanPreferenceValue(true))
+        #expect(!isLegacyBooleanPreferenceValue(TrackIRBlobCentroidMode.rawWeighted.rawValue))
     }
 
     @Test func defaultMouseMovementShortcutUsesShiftF7() {
@@ -182,7 +204,23 @@ struct ContentViewTests {
         #expect(mouseSmoothingValueLabel(for: 3) == "3")
         #expect(mouseDeadzoneValueLabel(for: 0.04) == "0.04")
         #expect(controlDefaultValues().minimumBlobAreaPoints == 100)
+        #expect(trackIRBlobCentroidModeLabel(for: .rawWeighted) == "Off")
+        #expect(trackIRBlobCentroidModeDescription(for: .binary).contains("equally"))
         #expect(trackIRTimeoutHelperText == "8 hours = 60 sec x 60 min x 8 hrs = 28800 sec")
+    }
+
+    @Test func nativeBlobCentroidModeMappingMatchesSharedCEnum() {
+        #expect(trackIRNativeBlobCentroidMode(.rawWeighted) == OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB)
+        #expect(trackIRNativeBlobCentroidMode(.filledHull) == OTIR_TIR5V3_CENTROID_MODE_FILLED_HULL)
+        #expect(trackIRNativeBlobCentroidMode(.binary) == OTIR_TIR5V3_CENTROID_MODE_BINARY_BLOB)
+        #expect(
+            trackIRNativeBlobCentroidMode(.blended) ==
+                OTIR_TIR5V3_CENTROID_MODE_BLENDED_BINARY_WEIGHTED
+        )
+        #expect(
+            trackIRNativeBlobCentroidMode(.regularizedBinary) ==
+                OTIR_TIR5V3_CENTROID_MODE_REGULARIZED_BINARY
+        )
     }
 
     @Test func advancedMouseValuesAreNormalizedBeforeStorage() {
@@ -468,7 +506,7 @@ struct ContentViewTests {
             isAvoidMouseJumpsEnabled: true,
             mouseJumpThresholdPixels: 50,
             minimumBlobAreaPoints: 100,
-            isConvexHullCentroidEnabled: true,
+            blobCentroidMode: .filledHull,
             keepAwakeSeconds: 29,
             isTimeoutEnabled: true,
             timeoutSeconds: 28_800,
@@ -499,7 +537,7 @@ struct ContentViewTests {
             isAvoidMouseJumpsEnabled: true,
             mouseJumpThresholdPixels: 50,
             minimumBlobAreaPoints: 100,
-            isConvexHullCentroidEnabled: true,
+            blobCentroidMode: .filledHull,
             keepAwakeSeconds: 29,
             isTimeoutEnabled: true,
             timeoutSeconds: 28_800,

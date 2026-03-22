@@ -110,8 +110,8 @@ struct ContentView: View {
         controlState.minimumBlobAreaPoints
     }
 
-    private var isConvexHullCentroidEnabled: Bool {
-        controlState.isConvexHullCentroidEnabled
+    private var blobCentroidMode: TrackIRBlobCentroidMode {
+        controlState.blobCentroidMode
     }
 
     private var keepAwakeSeconds: Int {
@@ -642,7 +642,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 16) {
                 controlCopy(
                     title: "Blob Detection",
-                    detail: "Filter tiny blobs and optionally use a convex hull centroid for rubber-band centroiding.",
+                    detail: "Filter tiny blobs and choose how the centroid is stabilized when the blob brightness flickers.",
                     systemImage: "scope"
                 )
 
@@ -653,10 +653,21 @@ struct ContentView: View {
                     suffix: "pts"
                 )
 
-                Toggle("Convex Hull Centroid", isOn: isConvexHullCentroidEnabledBinding)
-                    .toggleStyle(.checkbox)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Centroid Formula")
+                        .font(.subheadline.weight(.semibold))
 
-                Text("PacMan-to-Pie mode: treat a chipped circle more like a full circle before centroiding.")
+                    Picker("Centroid Formula", selection: blobCentroidModeBinding) {
+                        ForEach(TrackIRBlobCentroidMode.allCases, id: \.self) { mode in
+                            Text(trackIRBlobCentroidModeLabel(for: mode))
+                                .tag(mode)
+                        }
+                    }
+                    .pickerStyle(.radioGroup)
+                    .labelsHidden()
+                }
+
+                Text(trackIRBlobCentroidModeDescription(for: blobCentroidMode))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -959,10 +970,10 @@ struct ContentView: View {
         )
     }
 
-    private var isConvexHullCentroidEnabledBinding: Binding<Bool> {
+    private var blobCentroidModeBinding: Binding<TrackIRBlobCentroidMode> {
         Binding(
-            get: { isConvexHullCentroidEnabled },
-            set: { runtimeController.setConvexHullCentroidEnabled($0) }
+            get: { blobCentroidMode },
+            set: { runtimeController.setBlobCentroidMode($0) }
         )
     }
 
@@ -1055,7 +1066,7 @@ struct ControlDefaultValues: Equatable {
     let avoidMouseJumpsEnabled: Bool
     let mouseJumpThresholdPixels: Int
     let minimumBlobAreaPoints: Int
-    let isConvexHullCentroidEnabled: Bool
+    let blobCentroidMode: TrackIRBlobCentroidMode
     let keepAwakeSeconds: Int
     let timeoutEnabled: Bool
     let timeoutSeconds: Int
@@ -1087,7 +1098,7 @@ func controlDefaultValues() -> ControlDefaultValues {
         avoidMouseJumpsEnabled: true,
         mouseJumpThresholdPixels: 50,
         minimumBlobAreaPoints: 100,
-        isConvexHullCentroidEnabled: true,
+        blobCentroidMode: .filledHull,
         keepAwakeSeconds: 29,
         timeoutEnabled: true,
         timeoutSeconds: 28_800,
@@ -1110,7 +1121,7 @@ func controlDefaultPreferences(_ defaults: ControlDefaultValues) -> [String: Any
         ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue: defaults.avoidMouseJumpsEnabled,
         ControlPreferenceKey.mouseJumpThresholdPixels.rawValue: defaults.mouseJumpThresholdPixels,
         ControlPreferenceKey.minimumBlobAreaPoints.rawValue: defaults.minimumBlobAreaPoints,
-        ControlPreferenceKey.convexHullCentroidEnabled.rawValue: defaults.isConvexHullCentroidEnabled,
+        ControlPreferenceKey.convexHullCentroidEnabled.rawValue: defaults.blobCentroidMode.rawValue,
         ControlPreferenceKey.keepAwakeSeconds.rawValue: defaults.keepAwakeSeconds,
         ControlPreferenceKey.timeoutEnabled.rawValue: defaults.timeoutEnabled,
         ControlPreferenceKey.timeoutSeconds.rawValue: defaults.timeoutSeconds,
@@ -1119,6 +1130,71 @@ func controlDefaultPreferences(_ defaults: ControlDefaultValues) -> [String: Any
         ControlPreferenceKey.videoRotationDegrees.rawValue: defaults.videoRotationDegrees,
         ControlPreferenceKey.videoFramesPerSecond.rawValue: defaults.videoFramesPerSecond,
     ]
+}
+
+enum TrackIRBlobCentroidMode: Int, CaseIterable, Equatable {
+    case rawWeighted = 1
+    case filledHull = 2
+    case binary = 3
+    case blended = 4
+    case regularizedBinary = 5
+}
+
+func normalizedTrackIRBlobCentroidMode(_ rawValue: Int) -> TrackIRBlobCentroidMode {
+    TrackIRBlobCentroidMode(rawValue: rawValue) ?? .filledHull
+}
+
+func isLegacyBooleanPreferenceValue(_ value: Any) -> Bool {
+    guard let number = value as? NSNumber else {
+        return false
+    }
+
+    return CFGetTypeID(number) == CFBooleanGetTypeID()
+}
+
+func migratedTrackIRBlobCentroidMode(
+    storedValue: Any?,
+    defaultMode: TrackIRBlobCentroidMode
+) -> TrackIRBlobCentroidMode {
+    if let storedValue, isLegacyBooleanPreferenceValue(storedValue),
+        let isConvexHullEnabled = storedValue as? Bool {
+        return isConvexHullEnabled ? .filledHull : .rawWeighted
+    }
+    if let rawValue = storedValue as? Int {
+        return normalizedTrackIRBlobCentroidMode(rawValue)
+    }
+
+    return defaultMode
+}
+
+func trackIRBlobCentroidModeLabel(for mode: TrackIRBlobCentroidMode) -> String {
+    switch mode {
+        case .rawWeighted:
+            return "Off"
+        case .filledHull:
+            return "Filled Hull"
+        case .binary:
+            return "Binary"
+        case .blended:
+            return "Blended"
+        case .regularizedBinary:
+            return "Previous-Regularized"
+    }
+}
+
+func trackIRBlobCentroidModeDescription(for mode: TrackIRBlobCentroidMode) -> String {
+    switch mode {
+        case .rawWeighted:
+            return "Use the current brightness-weighted centroid with no extra stabilization."
+        case .filledHull:
+            return "Ignore grayscale inside the blob and use the centroid of the blob's filled convex hull."
+        case .binary:
+            return "Treat every blob pixel equally so tiny brightness changes do not pull the center around."
+        case .blended:
+            return "Mix the binary centroid with the brightness-weighted centroid for a middle ground."
+        case .regularizedBinary:
+            return "Blend the new binary centroid with the previous center to calm tiny frame-to-frame wobble."
+    }
 }
 
 func toggledMouseMovementState(isEnabled: Bool) -> Bool {

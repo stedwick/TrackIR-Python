@@ -75,6 +75,10 @@ void otir_trackir_session_set_scaled_hull_enabled(
     otir_trackir_session *session,
     bool enabled
 );
+void otir_trackir_session_set_centroid_mode(
+    otir_trackir_session *session,
+    otir_tir5v3_centroid_mode mode
+);
 void otir_trackir_session_set_low_power_mode_enabled(
     otir_trackir_session *session,
     bool enabled

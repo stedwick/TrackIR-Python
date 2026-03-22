@@ -143,7 +143,7 @@ final class TrackIRCameraController: ObservableObject {
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
         minimumBlobAreaPoints: Int,
-        isConvexHullCentroidEnabled: Bool,
+        blobCentroidMode: TrackIRBlobCentroidMode,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
@@ -177,7 +177,7 @@ final class TrackIRCameraController: ObservableObject {
                 isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
                 mouseJumpThresholdPixels: mouseJumpThresholdPixels,
                 minimumBlobAreaPoints: minimumBlobAreaPoints,
-                isConvexHullCentroidEnabled: isConvexHullCentroidEnabled,
+                blobCentroidMode: blobCentroidMode,
                 keepAwakeSeconds: keepAwakeSeconds,
                 mouseTransform: mouseTransform
             )
@@ -207,7 +207,7 @@ final class TrackIRCameraController: ObservableObject {
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
         minimumBlobAreaPoints: Int,
-        isConvexHullCentroidEnabled: Bool,
+        blobCentroidMode: TrackIRBlobCentroidMode,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
@@ -247,7 +247,7 @@ final class TrackIRCameraController: ObservableObject {
             isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: mouseJumpThresholdPixels,
             minimumBlobAreaPoints: minimumBlobAreaPoints,
-            isConvexHullCentroidEnabled: isConvexHullCentroidEnabled,
+            blobCentroidMode: blobCentroidMode,
             keepAwakeSeconds: keepAwakeSeconds,
             mouseTransform: mouseTransform
         )
@@ -274,7 +274,7 @@ final class TrackIRCameraController: ObservableObject {
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
         minimumBlobAreaPoints: Int,
-        isConvexHullCentroidEnabled: Bool,
+        blobCentroidMode: TrackIRBlobCentroidMode,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
@@ -292,7 +292,10 @@ final class TrackIRCameraController: ObservableObject {
         )
         otir_trackir_session_set_video_enabled(session, isVideoEnabled)
         otir_trackir_session_set_minimum_blob_area_points(session, Int32(minimumBlobAreaPoints))
-        otir_trackir_session_set_scaled_hull_enabled(session, isConvexHullCentroidEnabled)
+        otir_trackir_session_set_centroid_mode(
+            session,
+            trackIRNativeBlobCentroidMode(blobCentroidMode)
+        )
         otir_trackir_session_set_low_power_mode_enabled(session, false)
         otir_mac_mouse_controller_prepare_post_event_access(
             mouseController,
@@ -343,7 +346,7 @@ final class TrackIRCameraController: ObservableObject {
             isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: mouseJumpThresholdPixels,
             minimumBlobAreaPoints: minimumBlobAreaPoints,
-            isConvexHullCentroidEnabled: isConvexHullCentroidEnabled,
+            blobCentroidMode: blobCentroidMode,
             keepAwakeSeconds: keepAwakeSeconds,
             mouseTransform: mouseTransform,
             shouldPublishUI: shouldPublishUI,
@@ -600,7 +603,7 @@ private struct TrackIRPollingConfiguration: Equatable {
     let isAvoidMouseJumpsEnabled: Bool
     let mouseJumpThresholdPixels: Int
     let minimumBlobAreaPoints: Int
-    let isConvexHullCentroidEnabled: Bool
+    let blobCentroidMode: TrackIRBlobCentroidMode
     let keepAwakeSeconds: Int
     let mouseTransform: VideoPreviewTransform
     let shouldPublishUI: Bool
@@ -861,6 +864,23 @@ nonisolated func trackIRMouseTransform(
         scale_y: Double(transform.scaleY),
         rotation_degrees: transform.rotationDegrees
     )
+}
+
+nonisolated func trackIRNativeBlobCentroidMode(
+    _ mode: TrackIRBlobCentroidMode
+) -> otir_tir5v3_centroid_mode {
+    switch mode {
+        case .rawWeighted:
+            return OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB
+        case .filledHull:
+            return OTIR_TIR5V3_CENTROID_MODE_FILLED_HULL
+        case .binary:
+            return OTIR_TIR5V3_CENTROID_MODE_BINARY_BLOB
+        case .blended:
+            return OTIR_TIR5V3_CENTROID_MODE_BLENDED_BINARY_WEIGHTED
+        case .regularizedBinary:
+            return OTIR_TIR5V3_CENTROID_MODE_REGULARIZED_BINARY
+    }
 }
 
 private nonisolated func trackIRApplyMouseMovement(

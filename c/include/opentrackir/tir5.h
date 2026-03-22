@@ -89,12 +89,17 @@ typedef struct otir_tir5v3_frame_stats {
 typedef enum otir_tir5v3_centroid_mode {
     OTIR_TIR5V3_CENTROID_MODE_NONE = 0,
     OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB = 1,
-    OTIR_TIR5V3_CENTROID_MODE_SCALED_HULL = 2
+    OTIR_TIR5V3_CENTROID_MODE_FILLED_HULL = 2,
+    OTIR_TIR5V3_CENTROID_MODE_BINARY_BLOB = 3,
+    OTIR_TIR5V3_CENTROID_MODE_BLENDED_BINARY_WEIGHTED = 4,
+    OTIR_TIR5V3_CENTROID_MODE_REGULARIZED_BINARY = 5,
+    OTIR_TIR5V3_CENTROID_MODE_SCALED_HULL = OTIR_TIR5V3_CENTROID_MODE_FILLED_HULL
 } otir_tir5v3_centroid_mode;
 
 typedef struct otir_tir5v3_blob_tracking_config {
     int minimum_area_points;
     bool use_scaled_hull_centroid;
+    otir_tir5v3_centroid_mode centroid_mode;
     int row_adjacency;
     double hull_scale;
 } otir_tir5v3_blob_tracking_config;
