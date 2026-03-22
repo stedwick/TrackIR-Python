@@ -1,7 +1,9 @@
 import Foundation
 import IOKit.hid
 
-let xKeysFastMouseMultiplier = 2.5
+enum XKeysFootPedalConstants {
+    nonisolated static let fastMouseMultiplier = 2.5
+}
 
 enum XKeysIndicatorState: Equatable, Sendable {
     case disabled
@@ -51,7 +53,7 @@ nonisolated func trackIRMouseEffectiveSpeed(
     baseSpeed: Double,
     isXKeysFastMouseEnabled: Bool,
     isXKeysPedalPressed: Bool,
-    multiplier: Double = xKeysFastMouseMultiplier
+    multiplier: Double = XKeysFootPedalConstants.fastMouseMultiplier
 ) -> Double {
     guard isXKeysFastMouseEnabled, isXKeysPedalPressed else {
         return baseSpeed

@@ -404,14 +404,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				AUTOMATION_APPLE_EVENTS = NO;
-				CODE_SIGN_IDENTITY = "Developer ID Application: Philip Brocoum (WP9BPQYC6P)";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application: Philip Brocoum (WP9BPQYC6P)";
-				CODE_SIGN_STYLE = Manual;
+					AUTOMATION_APPLE_EVENTS = NO;
+					CODE_SIGN_IDENTITY = "Apple Development";
+					"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+					CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = WP9BPQYC6P;
+					DEAD_CODE_STRIPPING = YES;
+					DEVELOPMENT_TEAM = WP9BPQYC6P;
+					"DEVELOPMENT_TEAM[sdk=macosx*]" = WP9BPQYC6P;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_CODE_COVERAGE = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -483,14 +483,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				AUTOMATION_APPLE_EVENTS = NO;
-				CODE_SIGN_IDENTITY = "Developer ID Application: Philip Brocoum (WP9BPQYC6P)";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application: Philip Brocoum (WP9BPQYC6P)";
-				CODE_SIGN_STYLE = Manual;
+					AUTOMATION_APPLE_EVENTS = NO;
+					CODE_SIGN_IDENTITY = "Developer ID Application: Philip Brocoum (WP9BPQYC6P)";
+					"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application: Philip Brocoum (WP9BPQYC6P)";
+					CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 2;
-				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = WP9BPQYC6P;
+					DEAD_CODE_STRIPPING = YES;
+					DEVELOPMENT_TEAM = "";
+					"DEVELOPMENT_TEAM[sdk=macosx*]" = WP9BPQYC6P;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_CODE_COVERAGE = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -560,13 +560,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_IDENTITY = "Developer ID Application: Philip Brocoum (WP9BPQYC6P)";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application: Philip Brocoum (WP9BPQYC6P)";
-				CODE_SIGN_STYLE = Manual;
+					CODE_SIGN_IDENTITY = "Apple Development";
+					"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+					CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = "";
-				"DEVELOPMENT_TEAM[sdk=macosx*]" = WP9BPQYC6P;
+					DEVELOPMENT_TEAM = WP9BPQYC6P;
+					"DEVELOPMENT_TEAM[sdk=macosx*]" = WP9BPQYC6P;
 					GENERATE_INFOPLIST_FILE = YES;
 					MACOSX_DEPLOYMENT_TARGET = 26.2;
 					MARKETING_VERSION = 0.2;
@@ -588,11 +588,15 @@
 		D499E7112F6F11C500DE98E6 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-					BUNDLE_LOADER = "$(TEST_HOST)";
-					CODE_SIGN_STYLE = Automatic;
-					CURRENT_PROJECT_VERSION = 2;
-					DEAD_CODE_STRIPPING = YES;
-					GENERATE_INFOPLIST_FILE = YES;
+						BUNDLE_LOADER = "$(TEST_HOST)";
+						CODE_SIGN_IDENTITY = "Apple Development";
+						"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+						CODE_SIGN_STYLE = Automatic;
+						CURRENT_PROJECT_VERSION = 2;
+						DEAD_CODE_STRIPPING = YES;
+						DEVELOPMENT_TEAM = WP9BPQYC6P;
+						"DEVELOPMENT_TEAM[sdk=macosx*]" = WP9BPQYC6P;
+						GENERATE_INFOPLIST_FILE = YES;
 					MACOSX_DEPLOYMENT_TARGET = 26.2;
 					MARKETING_VERSION = 0.2;
 					PRODUCT_BUNDLE_IDENTIFIER = philsapps.OpenTrackIRTests;
@@ -612,13 +616,13 @@
 		D499E7132F6F11C500DE98E6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_IDENTITY = "Developer ID Application: Philip Brocoum (WP9BPQYC6P)";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Developer ID Application: Philip Brocoum (WP9BPQYC6P)";
-				CODE_SIGN_STYLE = Manual;
+					CODE_SIGN_IDENTITY = "Apple Development";
+					"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+					CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = "";
-					"DEVELOPMENT_TEAM[sdk=macosx*]" = WP9BPQYC6P;
+					DEVELOPMENT_TEAM = WP9BPQYC6P;
+						"DEVELOPMENT_TEAM[sdk=macosx*]" = WP9BPQYC6P;
 					GENERATE_INFOPLIST_FILE = YES;
 					MACOSX_DEPLOYMENT_TARGET = 26.2;
 					MARKETING_VERSION = 0.2;
@@ -639,10 +643,14 @@
 		D499E7142F6F11C500DE98E6 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-					CODE_SIGN_STYLE = Automatic;
-					CURRENT_PROJECT_VERSION = 2;
-					DEAD_CODE_STRIPPING = YES;
-					GENERATE_INFOPLIST_FILE = YES;
+						CODE_SIGN_IDENTITY = "Apple Development";
+						"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+						CODE_SIGN_STYLE = Automatic;
+						CURRENT_PROJECT_VERSION = 2;
+						DEAD_CODE_STRIPPING = YES;
+						DEVELOPMENT_TEAM = WP9BPQYC6P;
+						"DEVELOPMENT_TEAM[sdk=macosx*]" = WP9BPQYC6P;
+						GENERATE_INFOPLIST_FILE = YES;
 					MACOSX_DEPLOYMENT_TARGET = 26.2;
 					MARKETING_VERSION = 0.2;
 					PRODUCT_BUNDLE_IDENTIFIER = philsapps.OpenTrackIRUITests;
