@@ -31,6 +31,11 @@ static void test_normalize_maximum_frames_per_second_rejects_invalid_values(void
 static void test_should_process_frame_respects_processing_cap(void);
 static void test_should_publish_frame_respects_maximum_rate(void);
 static void test_mouse_transform_delta_applies_flip_and_rotation(void);
+static void test_mouse_vertical_gain_scales_y_axis(void);
+static void test_mouse_smoothing_mode_matches_python_thresholds(void);
+static void test_mouse_jump_filter_uses_plain_pixel_thresholds(void);
+static void test_mouse_deadzone_uses_short_average_magnitude(void);
+static void test_mouse_tracker_applies_adaptive_smoothing(void);
 static void test_mouse_step_suppresses_zero_delta(void);
 static void test_cli_read_maximum_frames_per_second_accepts_optional_argument(void);
 
@@ -49,6 +54,11 @@ int main(void) {
     test_should_process_frame_respects_processing_cap();
     test_should_publish_frame_respects_maximum_rate();
     test_mouse_transform_delta_applies_flip_and_rotation();
+    test_mouse_vertical_gain_scales_y_axis();
+    test_mouse_smoothing_mode_matches_python_thresholds();
+    test_mouse_jump_filter_uses_plain_pixel_thresholds();
+    test_mouse_deadzone_uses_short_average_magnitude();
+    test_mouse_tracker_applies_adaptive_smoothing();
     test_mouse_step_suppresses_zero_delta();
     test_cli_read_maximum_frames_per_second_accepts_optional_argument();
     puts("c/tests/test_tir5: all tests passed");
@@ -310,6 +320,147 @@ static void test_mouse_transform_delta_applies_flip_and_rotation(void) {
     assert(fabs(rotated.y - 6.0) < 0.0001);
 }
 
+static void test_mouse_vertical_gain_scales_y_axis(void) {
+    otir_trackir_mouse_point delta = otir_trackir_mouse_apply_vertical_gain(
+        (otir_trackir_mouse_point){.x = 8.0, .y = -4.0}
+    );
+
+    assert(fabs(delta.x - 8.0) < 0.0001);
+    assert(fabs(delta.y + 5.0) < 0.0001);
+}
+
+static void test_mouse_smoothing_mode_matches_python_thresholds(void) {
+    assert(
+        otir_trackir_mouse_smoothing_mode_for_delta(
+            (otir_trackir_mouse_point){.x = 0.1, .y = 0.1}
+        ) == OTIR_TRACKIR_MOUSE_SMOOTHING_MODE_LONG
+    );
+    assert(
+        otir_trackir_mouse_smoothing_mode_for_delta(
+            (otir_trackir_mouse_point){.x = 0.5, .y = 0.0}
+        ) == OTIR_TRACKIR_MOUSE_SMOOTHING_MODE_SHORT
+    );
+    assert(
+        otir_trackir_mouse_smoothing_mode_for_delta(
+            (otir_trackir_mouse_point){.x = 1.0, .y = 0.0}
+        ) == OTIR_TRACKIR_MOUSE_SMOOTHING_MODE_RAW
+    );
+}
+
+static void test_mouse_jump_filter_uses_plain_pixel_thresholds(void) {
+    assert(
+        otir_trackir_mouse_should_skip_jump(
+            (otir_trackir_mouse_point){.x = 51.0, .y = 0.0},
+            true,
+            50.0
+        )
+    );
+    assert(
+        otir_trackir_mouse_should_skip_jump(
+            (otir_trackir_mouse_point){.x = 0.0, .y = -51.0},
+            true,
+            50.0
+        )
+    );
+    assert(
+        !otir_trackir_mouse_should_skip_jump(
+            (otir_trackir_mouse_point){.x = 7.0, .y = 7.0},
+            true,
+            50.0
+        )
+    );
+    assert(
+        !otir_trackir_mouse_should_skip_jump(
+            (otir_trackir_mouse_point){.x = 80.0, .y = 0.0},
+            false,
+            50.0
+        )
+    );
+}
+
+static void test_mouse_deadzone_uses_short_average_magnitude(void) {
+    assert(
+        otir_trackir_mouse_is_inside_deadzone(
+            (otir_trackir_mouse_point){.x = 0.02, .y = 0.02},
+            0.04
+        )
+    );
+    assert(
+        !otir_trackir_mouse_is_inside_deadzone(
+            (otir_trackir_mouse_point){.x = 0.0, .y = 0.0},
+            0.04
+        )
+    );
+    assert(
+        !otir_trackir_mouse_is_inside_deadzone(
+            (otir_trackir_mouse_point){.x = 0.08, .y = 0.0},
+            0.04
+        )
+    );
+}
+
+static void test_mouse_tracker_applies_adaptive_smoothing(void) {
+    otir_trackir_mouse_tracker_state state = {0};
+    otir_trackir_mouse_tracker_config config = {
+        .is_movement_enabled = true,
+        .speed = 10.0,
+        .smoothing = 3.0,
+        .deadzone = 0.04,
+        .avoid_mouse_jumps = true,
+        .jump_threshold_pixels = 50.0,
+        .transform = {
+            .scale_x = 1.0,
+            .scale_y = 1.0,
+            .rotation_degrees = 0.0,
+        },
+    };
+    otir_trackir_mouse_step step;
+
+    step = otir_trackir_mouse_tracker_update(
+        &state,
+        true,
+        (otir_trackir_mouse_point){.x = 10.0, .y = 10.0},
+        config
+    );
+    assert(!step.has_cursor_delta);
+
+    step = otir_trackir_mouse_tracker_update(
+        &state,
+        true,
+        (otir_trackir_mouse_point){.x = 10.02, .y = 10.01},
+        config
+    );
+    assert(!step.has_cursor_delta);
+
+    step = otir_trackir_mouse_tracker_update(
+        &state,
+        true,
+        (otir_trackir_mouse_point){.x = 10.52, .y = 10.01},
+        config
+    );
+    assert(step.has_cursor_delta);
+    assert(fabs(step.cursor_delta.x - 2.6) < 0.0001);
+    assert(fabs(step.cursor_delta.y - 0.0625) < 0.0001);
+
+    step = otir_trackir_mouse_tracker_update(
+        &state,
+        true,
+        (otir_trackir_mouse_point){.x = 12.52, .y = 10.01},
+        config
+    );
+    assert(step.has_cursor_delta);
+    assert(fabs(step.cursor_delta.x - 20.0) < 0.0001);
+    assert(fabs(step.cursor_delta.y) < 0.0001);
+
+    step = otir_trackir_mouse_tracker_update(
+        &state,
+        true,
+        (otir_trackir_mouse_point){.x = 80.0, .y = 10.1},
+        config
+    );
+    assert(!step.has_cursor_delta);
+}
+
 static void test_mouse_step_suppresses_zero_delta(void) {
     otir_trackir_mouse_step first_step = otir_trackir_mouse_compute_step(
         false,
@@ -343,6 +494,8 @@ static void test_mouse_step_suppresses_zero_delta(void) {
     assert(!zero_delta_step.has_cursor_delta);
     assert(zero_delta_step.has_next_centroid);
     assert(otir_trackir_mouse_point_is_zero(zero_delta_step.cursor_delta));
+    assert(otir_trackir_mouse_short_smoothing_window(3.0) == 3);
+    assert(otir_trackir_mouse_long_smoothing_window(3.0) == 10);
 }
 
 static void test_normalize_maximum_frames_per_second_rejects_invalid_values(void) {

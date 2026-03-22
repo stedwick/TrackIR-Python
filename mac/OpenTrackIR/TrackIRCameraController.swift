@@ -103,6 +103,11 @@ final class TrackIRCameraController: ObservableObject {
         isWindowVisible: Bool,
         isMouseMovementEnabled: Bool,
         mouseMovementSpeed: Double,
+        mouseSmoothing: Int,
+        mouseDeadzone: Double,
+        isAvoidMouseJumpsEnabled: Bool,
+        mouseJumpThresholdPixels: Int,
+        keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
         let effectiveVideoEnabled = trackIREffectiveVideoEnabled(
@@ -111,7 +116,9 @@ final class TrackIRCameraController: ObservableObject {
         )
         let shouldPollSnapshots = trackIRShouldPollSnapshots(
             isWindowVisible: isWindowVisible,
-            isMouseMovementEnabled: isMouseMovementEnabled
+            isMouseMovementEnabled: isMouseMovementEnabled,
+            isTrackIREnabled: isTrackIREnabled,
+            keepAwakeSeconds: keepAwakeSeconds
         )
 
         if shouldAccessTrackIRHardware(
@@ -126,6 +133,11 @@ final class TrackIRCameraController: ObservableObject {
                 shouldPublishUI: isWindowVisible,
                 isMouseMovementEnabled: isMouseMovementEnabled,
                 mouseMovementSpeed: mouseMovementSpeed,
+                mouseSmoothing: mouseSmoothing,
+                mouseDeadzone: mouseDeadzone,
+                isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
+                mouseJumpThresholdPixels: mouseJumpThresholdPixels,
+                keepAwakeSeconds: keepAwakeSeconds,
                 mouseTransform: mouseTransform
             )
         } else {
@@ -146,11 +158,18 @@ final class TrackIRCameraController: ObservableObject {
         isWindowVisible: Bool,
         isMouseMovementEnabled: Bool,
         mouseMovementSpeed: Double,
+        mouseSmoothing: Int,
+        mouseDeadzone: Double,
+        isAvoidMouseJumpsEnabled: Bool,
+        mouseJumpThresholdPixels: Int,
+        keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
         let shouldPollSnapshots = trackIRShouldPollSnapshots(
             isWindowVisible: isWindowVisible,
-            isMouseMovementEnabled: isMouseMovementEnabled
+            isMouseMovementEnabled: isMouseMovementEnabled,
+            isTrackIREnabled: isTrackIREnabled,
+            keepAwakeSeconds: keepAwakeSeconds
         )
         let shouldRestart = shouldAccessTrackIRHardware(
             isTrackIREnabled: isTrackIREnabled,
@@ -175,6 +194,11 @@ final class TrackIRCameraController: ObservableObject {
             shouldPublishUI: isWindowVisible,
             isMouseMovementEnabled: isMouseMovementEnabled,
             mouseMovementSpeed: mouseMovementSpeed,
+            mouseSmoothing: mouseSmoothing,
+            mouseDeadzone: mouseDeadzone,
+            isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
+            mouseJumpThresholdPixels: mouseJumpThresholdPixels,
+            keepAwakeSeconds: keepAwakeSeconds,
             mouseTransform: mouseTransform
         )
     }
@@ -194,6 +218,11 @@ final class TrackIRCameraController: ObservableObject {
         shouldPublishUI: Bool,
         isMouseMovementEnabled: Bool,
         mouseMovementSpeed: Double,
+        mouseSmoothing: Int,
+        mouseDeadzone: Double,
+        isAvoidMouseJumpsEnabled: Bool,
+        mouseJumpThresholdPixels: Int,
+        keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
         guard let session = ensureSession() else {
@@ -211,7 +240,10 @@ final class TrackIRCameraController: ObservableObject {
         otir_trackir_session_set_video_enabled(session, isVideoEnabled)
         otir_mac_mouse_controller_prepare_post_event_access(
             mouseController,
-            isMouseMovementEnabled
+            trackIRShouldRequestMouseEventAccess(
+                isMouseMovementEnabled: isMouseMovementEnabled,
+                keepAwakeSeconds: keepAwakeSeconds
+            )
         )
 
         let startStatus = otir_trackir_session_start(session)
@@ -245,9 +277,15 @@ final class TrackIRCameraController: ObservableObject {
         }
 
         let configuration = TrackIRPollingConfiguration(
+            isTrackIREnabled: true,
             isVideoEnabled: isVideoEnabled,
             isMouseMovementEnabled: isMouseMovementEnabled,
             mouseMovementSpeed: mouseMovementSpeed,
+            mouseSmoothing: mouseSmoothing,
+            mouseDeadzone: mouseDeadzone,
+            isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
+            mouseJumpThresholdPixels: mouseJumpThresholdPixels,
+            keepAwakeSeconds: keepAwakeSeconds,
             mouseTransform: mouseTransform,
             shouldPublishUI: shouldPublishUI,
             maximumPreviewFramesPerSecond: 30.0,
@@ -309,6 +347,7 @@ final class TrackIRCameraController: ObservableObject {
             var lastDisplayUpdateTime: TimeInterval?
             var lastPublishedDisplayState: TrackIRCameraDisplayState?
             var hasPublishedPreviewImage = false
+            var lastMouseMovementTime = ProcessInfo.processInfo.systemUptime
 
             while !Task.isCancelled {
                 var snapshot = otir_trackir_session_snapshot()
@@ -369,12 +408,20 @@ final class TrackIRCameraController: ObservableObject {
                     (!configuration.isVideoEnabled ||
                         !snapshotCopy.has_preview_frame ||
                         snapshotCopy.phase != OTIR_TRACKIR_SESSION_PHASE_STREAMING)
-
-                trackIRApplyMouseMovement(
+                let didMoveMouse = trackIRApplyMouseMovement(
                     controller: mouseController,
                     snapshot: snapshotCopy,
                     configuration: configuration
                 )
+                if didMoveMouse {
+                    lastMouseMovementTime = currentTime
+                } else if trackIRShouldFireKeepAwake(
+                    isTrackIREnabled: configuration.isTrackIREnabled,
+                    keepAwakeSeconds: configuration.keepAwakeSeconds,
+                    timeSinceLastMouseMovement: currentTime - lastMouseMovementTime
+                ), otir_mac_mouse_controller_nudge(mouseController) {
+                    lastMouseMovementTime = currentTime
+                }
 
                 if shouldPublishDisplayState || previewImageCopy != nil || shouldClearPreviewImage {
                     let cameraController = self
@@ -439,9 +486,15 @@ private let trackIRLogger = Logger(
 )
 
 private struct TrackIRPollingConfiguration: Equatable {
+    let isTrackIREnabled: Bool
     let isVideoEnabled: Bool
     let isMouseMovementEnabled: Bool
     let mouseMovementSpeed: Double
+    let mouseSmoothing: Int
+    let mouseDeadzone: Double
+    let isAvoidMouseJumpsEnabled: Bool
+    let mouseJumpThresholdPixels: Int
+    let keepAwakeSeconds: Int
     let mouseTransform: VideoPreviewTransform
     let shouldPublishUI: Bool
     let maximumPreviewFramesPerSecond: Double
@@ -475,9 +528,26 @@ nonisolated func shouldAccessTrackIRHardware(
 
 nonisolated func trackIRShouldPollSnapshots(
     isWindowVisible: Bool,
-    isMouseMovementEnabled: Bool
+    isMouseMovementEnabled: Bool,
+    isTrackIREnabled: Bool,
+    keepAwakeSeconds: Int
 ) -> Bool {
-    isWindowVisible || isMouseMovementEnabled
+    isWindowVisible || isMouseMovementEnabled || (isTrackIREnabled && keepAwakeSeconds > 0)
+}
+
+nonisolated func trackIRShouldRequestMouseEventAccess(
+    isMouseMovementEnabled: Bool,
+    keepAwakeSeconds: Int
+) -> Bool {
+    isMouseMovementEnabled || keepAwakeSeconds > 0
+}
+
+nonisolated func trackIRShouldFireKeepAwake(
+    isTrackIREnabled: Bool,
+    keepAwakeSeconds: Int,
+    timeSinceLastMouseMovement: TimeInterval
+) -> Bool {
+    isTrackIREnabled && keepAwakeSeconds > 0 && timeSinceLastMouseMovement >= Double(keepAwakeSeconds)
 }
 
 nonisolated func trackIRPollingInterval(
@@ -636,16 +706,22 @@ private nonisolated func trackIRApplyMouseMovement(
     controller: OpaquePointer?,
     snapshot: otir_trackir_session_snapshot,
     configuration: TrackIRPollingConfiguration
-) {
+) -> Bool {
     otir_mac_mouse_controller_update(
         controller,
         snapshot.has_centroid,
         snapshot.centroid_x,
         snapshot.centroid_y,
-        configuration.isMouseMovementEnabled &&
-            snapshot.phase == OTIR_TRACKIR_SESSION_PHASE_STREAMING,
-        configuration.mouseMovementSpeed,
-        trackIRMouseTransform(configuration.mouseTransform)
+        otir_trackir_mouse_tracker_config(
+            is_movement_enabled: configuration.isMouseMovementEnabled &&
+                snapshot.phase == OTIR_TRACKIR_SESSION_PHASE_STREAMING,
+            speed: configuration.mouseMovementSpeed,
+            smoothing: Double(configuration.mouseSmoothing),
+            deadzone: configuration.mouseDeadzone,
+            avoid_mouse_jumps: configuration.isAvoidMouseJumpsEnabled,
+            jump_threshold_pixels: Double(configuration.mouseJumpThresholdPixels),
+            transform: trackIRMouseTransform(configuration.mouseTransform)
+        )
     )
 }
 

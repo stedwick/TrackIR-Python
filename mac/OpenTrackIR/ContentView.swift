@@ -86,6 +86,34 @@ struct ContentView: View {
         controlState.mouseMovementSpeed
     }
 
+    private var mouseSmoothing: Int {
+        controlState.mouseSmoothing
+    }
+
+    private var mouseDeadzone: Double {
+        controlState.mouseDeadzone
+    }
+
+    private var isAvoidMouseJumpsEnabled: Bool {
+        controlState.isAvoidMouseJumpsEnabled
+    }
+
+    private var mouseJumpThresholdPixels: Int {
+        controlState.mouseJumpThresholdPixels
+    }
+
+    private var keepAwakeSeconds: Int {
+        controlState.keepAwakeSeconds
+    }
+
+    private var isTimeoutEnabled: Bool {
+        controlState.isTimeoutEnabled
+    }
+
+    private var timeoutSeconds: Int {
+        controlState.timeoutSeconds
+    }
+
     private var isVideoFlipHorizontalEnabled: Bool {
         controlState.isVideoFlipHorizontalEnabled
     }
@@ -269,6 +297,9 @@ struct ContentView: View {
                 mouseSpeedControlRow
 
                 mouseHotkeyControlRow
+                    .gridCellColumns(columnCount == 1 ? 1 : 2)
+
+                advancedMouseControlsRow
                     .gridCellColumns(columnCount == 1 ? 1 : 2)
 
                 videoControlsRow
@@ -492,6 +523,103 @@ struct ContentView: View {
         }
     }
 
+    private var advancedMouseControlsRow: some View {
+        controlCard {
+            VStack(alignment: .leading, spacing: 16) {
+                controlCopy(
+                    title: "Advanced Mouse",
+                    detail: "Tune smoothing, dead zone, jump filtering, keep-awake, and timeout.",
+                    systemImage: "slider.horizontal.3"
+                )
+
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top, spacing: 14) {
+                        controlCopy(
+                            title: "Smoothing",
+                            detail: "Average slower movements more aggressively.",
+                            systemImage: "waveform.path.ecg"
+                        )
+
+                        Spacer(minLength: 16)
+
+                        Text(mouseSmoothingValueLabel(for: mouseSmoothing))
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Slider(value: mouseSmoothingBinding, in: 1 ... 10, step: 1)
+
+                        HStack {
+                            Text("1")
+                            Spacer()
+                            Text("10")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top, spacing: 14) {
+                        controlCopy(
+                            title: "Dead Zone",
+                            detail: "Suppress tiny filtered motion when you are trying to stay still.",
+                            systemImage: "dot.scope"
+                        )
+
+                        Spacer(minLength: 16)
+
+                        Text(mouseDeadzoneValueLabel(for: mouseDeadzone))
+                            .font(.title3.weight(.semibold))
+                            .monospacedDigit()
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Slider(value: mouseDeadzoneBinding, in: 0.0 ... 0.15, step: 0.01)
+
+                        HStack {
+                            Text("0.00")
+                            Spacer()
+                            Text("0.15")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+
+                Toggle("Avoid Mouse Jumps", isOn: isAvoidMouseJumpsEnabledBinding)
+                    .toggleStyle(.checkbox)
+
+                integerSettingRow(
+                    title: "Jump Threshold",
+                    detail: "Skip centroid jumps larger than this many pixels.",
+                    value: mouseJumpThresholdPixelsBinding,
+                    suffix: "px",
+                    isEnabled: isAvoidMouseJumpsEnabled
+                )
+
+                integerSettingRow(
+                    title: "Keep Awake",
+                    detail: "Move the cursor 1 px every N seconds while TrackIR is on. Use 0 to disable.",
+                    value: keepAwakeSecondsBinding,
+                    suffix: "sec"
+                )
+
+                Toggle("Enable Timeout", isOn: isTimeoutEnabledBinding)
+                    .toggleStyle(.checkbox)
+
+                integerSettingRow(
+                    title: "Timeout",
+                    detail: trackIRTimeoutHelperText,
+                    value: timeoutSecondsBinding,
+                    suffix: "sec",
+                    isEnabled: isTimeoutEnabled
+                )
+            }
+        }
+    }
+
     private var videoControlsRow: some View {
         controlCard {
             VStack(alignment: .leading, spacing: 16) {
@@ -600,10 +728,55 @@ struct ContentView: View {
             )
     }
 
+    private func integerSettingRow(
+        title: String,
+        detail: String,
+        value: Binding<Int>,
+        suffix: String,
+        isEnabled: Bool = true
+    ) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 16)
+
+            HStack(spacing: 8) {
+                TextField("", value: value, format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 96)
+                    .multilineTextAlignment(.trailing)
+                    .disabled(!isEnabled)
+                Text(suffix)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var mouseMovementSpeedBinding: Binding<Double> {
         Binding(
             get: { normalizedMouseMovementControlSpeed(mouseMovementSpeed) },
             set: { runtimeController.setMouseMovementSpeed(normalizedMouseMovementControlSpeed($0)) }
+        )
+    }
+
+    private var mouseSmoothingBinding: Binding<Double> {
+        Binding(
+            get: { Double(mouseSmoothing) },
+            set: { runtimeController.setMouseSmoothing($0) }
+        )
+    }
+
+    private var mouseDeadzoneBinding: Binding<Double> {
+        Binding(
+            get: { mouseDeadzone },
+            set: { runtimeController.setMouseDeadzone($0) }
         )
     }
 
@@ -625,6 +798,41 @@ struct ContentView: View {
         Binding(
             get: { isMouseMovementEnabled },
             set: { runtimeController.setMouseMovementEnabled($0) }
+        )
+    }
+
+    private var isAvoidMouseJumpsEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isAvoidMouseJumpsEnabled },
+            set: { runtimeController.setAvoidMouseJumpsEnabled($0) }
+        )
+    }
+
+    private var mouseJumpThresholdPixelsBinding: Binding<Int> {
+        Binding(
+            get: { mouseJumpThresholdPixels },
+            set: { runtimeController.setMouseJumpThresholdPixels($0) }
+        )
+    }
+
+    private var keepAwakeSecondsBinding: Binding<Int> {
+        Binding(
+            get: { keepAwakeSeconds },
+            set: { runtimeController.setKeepAwakeSeconds($0) }
+        )
+    }
+
+    private var isTimeoutEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isTimeoutEnabled },
+            set: { runtimeController.setTimeoutEnabled($0) }
+        )
+    }
+
+    private var timeoutSecondsBinding: Binding<Int> {
+        Binding(
+            get: { timeoutSeconds },
+            set: { runtimeController.setTimeoutSeconds($0) }
         )
     }
 
@@ -668,6 +876,13 @@ enum ControlPreferenceKey: String {
     case trackIREnabled = "contentView.trackIREnabled"
     case mouseMovementEnabled = "contentView.mouseMovementEnabled"
     case mouseMovementSpeed = "contentView.mouseMovementSpeed"
+    case mouseSmoothing = "contentView.mouseSmoothing"
+    case mouseDeadzone = "contentView.mouseDeadzone"
+    case avoidMouseJumpsEnabled = "contentView.avoidMouseJumpsEnabled"
+    case mouseJumpThresholdPixels = "contentView.mouseJumpThresholdPixels"
+    case keepAwakeSeconds = "contentView.keepAwakeSeconds"
+    case timeoutEnabled = "contentView.timeoutEnabled"
+    case timeoutSeconds = "contentView.timeoutSeconds"
     case videoFlipHorizontal = "contentView.videoFlipHorizontal"
     case videoFlipVertical = "contentView.videoFlipVertical"
     case videoRotationDegrees = "contentView.videoRotationDegrees"
@@ -679,6 +894,13 @@ struct ControlDefaultValues: Equatable {
     let trackIREnabled: Bool
     let mouseMovementEnabled: Bool
     let mouseMovementSpeed: Double
+    let mouseSmoothing: Int
+    let mouseDeadzone: Double
+    let avoidMouseJumpsEnabled: Bool
+    let mouseJumpThresholdPixels: Int
+    let keepAwakeSeconds: Int
+    let timeoutEnabled: Bool
+    let timeoutSeconds: Int
     let videoFlipHorizontalEnabled: Bool
     let videoFlipVerticalEnabled: Bool
     let videoRotationDegrees: Double
@@ -701,6 +923,13 @@ func controlDefaultValues() -> ControlDefaultValues {
         trackIREnabled: true,
         mouseMovementEnabled: true,
         mouseMovementSpeed: 2.0,
+        mouseSmoothing: 3,
+        mouseDeadzone: 0.04,
+        avoidMouseJumpsEnabled: true,
+        mouseJumpThresholdPixels: 50,
+        keepAwakeSeconds: 29,
+        timeoutEnabled: true,
+        timeoutSeconds: 28_800,
         videoFlipHorizontalEnabled: false,
         videoFlipVerticalEnabled: false,
         videoRotationDegrees: 0.0,
@@ -714,6 +943,13 @@ func controlDefaultPreferences(_ defaults: ControlDefaultValues) -> [String: Any
         ControlPreferenceKey.trackIREnabled.rawValue: defaults.trackIREnabled,
         ControlPreferenceKey.mouseMovementEnabled.rawValue: defaults.mouseMovementEnabled,
         ControlPreferenceKey.mouseMovementSpeed.rawValue: defaults.mouseMovementSpeed,
+        ControlPreferenceKey.mouseSmoothing.rawValue: defaults.mouseSmoothing,
+        ControlPreferenceKey.mouseDeadzone.rawValue: defaults.mouseDeadzone,
+        ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue: defaults.avoidMouseJumpsEnabled,
+        ControlPreferenceKey.mouseJumpThresholdPixels.rawValue: defaults.mouseJumpThresholdPixels,
+        ControlPreferenceKey.keepAwakeSeconds.rawValue: defaults.keepAwakeSeconds,
+        ControlPreferenceKey.timeoutEnabled.rawValue: defaults.timeoutEnabled,
+        ControlPreferenceKey.timeoutSeconds.rawValue: defaults.timeoutSeconds,
         ControlPreferenceKey.videoFlipHorizontal.rawValue: defaults.videoFlipHorizontalEnabled,
         ControlPreferenceKey.videoFlipVertical.rawValue: defaults.videoFlipVerticalEnabled,
         ControlPreferenceKey.videoRotationDegrees.rawValue: defaults.videoRotationDegrees,
@@ -729,13 +965,43 @@ func mouseSpeedValueLabel(for speed: Double) -> String {
     "\(speed.formatted(.number.precision(.fractionLength(0 ... 2))))x"
 }
 
+func mouseSmoothingValueLabel(for smoothing: Int) -> String {
+    "\(smoothing)"
+}
+
+func mouseDeadzoneValueLabel(for deadzone: Double) -> String {
+    deadzone.formatted(.number.precision(.fractionLength(2)))
+}
+
 func normalizedMouseMovementControlSpeed(_ storedSpeed: Double) -> Double {
     min(max(storedSpeed, 1.0), 5.0)
+}
+
+func normalizedMouseSmoothing(_ smoothing: Double) -> Int {
+    Int(min(max(smoothing.rounded(), 1.0), 10.0))
+}
+
+func normalizedMouseDeadzone(_ deadzone: Double) -> Double {
+    min(max(deadzone, 0.0), 0.15)
+}
+
+func normalizedMouseJumpThreshold(_ jumpThresholdPixels: Int) -> Int {
+    max(jumpThresholdPixels, 1)
+}
+
+func normalizedKeepAwakeSeconds(_ keepAwakeSeconds: Int) -> Int {
+    max(keepAwakeSeconds, 0)
+}
+
+func normalizedTimeoutSeconds(_ timeoutSeconds: Int) -> Int {
+    max(timeoutSeconds, 1)
 }
 
 func trackIRMouseBackendSpeed(controlSpeed: Double) -> Double {
     normalizedMouseMovementControlSpeed(controlSpeed) * 10.0
 }
+
+let trackIRTimeoutHelperText = "8 hours = 60 sec x 60 min x 8 hrs = 28800 sec"
 
 func previewVideoTransform(
     flipHorizontal: Bool,

@@ -2,6 +2,7 @@
 #define OPENTRACKIR_TRACKIR_MOUSE_BRIDGE_H
 
 #include <stdbool.h>
+#include <CoreGraphics/CoreGraphics.h>
 
 #include "../../c/include/opentrackir/tir5_mouse.h"
 
@@ -18,15 +19,21 @@ void otir_mac_mouse_controller_prepare_post_event_access(
     otir_mac_mouse_controller *controller,
     bool should_request_post_event_access
 );
+CGPoint otir_mac_quantized_cursor_position(CGPoint position);
+CGPoint otir_mac_clamped_cursor_position_for_bounds(
+    CGPoint current_position,
+    CGPoint delta,
+    CGRect display_bounds
+);
+bool otir_mac_should_post_cursor_move(CGPoint current_position, CGPoint next_position);
 bool otir_mac_mouse_controller_update(
     otir_mac_mouse_controller *controller,
     bool has_centroid,
     double centroid_x,
     double centroid_y,
-    bool is_movement_enabled,
-    double speed,
-    otir_trackir_mouse_transform transform
+    otir_trackir_mouse_tracker_config config
 );
+bool otir_mac_mouse_controller_nudge(otir_mac_mouse_controller *controller);
 
 #ifdef __cplusplus
 }

@@ -8,6 +8,13 @@ struct TrackIRControlState: Equatable {
     var isTrackIREnabled: Bool
     var isMouseMovementEnabled: Bool
     var mouseMovementSpeed: Double
+    var mouseSmoothing: Int
+    var mouseDeadzone: Double
+    var isAvoidMouseJumpsEnabled: Bool
+    var mouseJumpThresholdPixels: Int
+    var keepAwakeSeconds: Int
+    var isTimeoutEnabled: Bool
+    var timeoutSeconds: Int
     var isVideoFlipHorizontalEnabled: Bool
     var isVideoFlipVerticalEnabled: Bool
     var videoRotationDegrees: Double
@@ -24,6 +31,7 @@ final class TrackIRRuntimeController: ObservableObject {
     private var scenePhase: ScenePhase = .background
     private var controlActiveState: ControlActiveState = .inactive
     private var isWindowVisible = false
+    private var timeoutTask: Task<Void, Never>?
 
     init(
         userDefaults: UserDefaults = .standard,
@@ -33,6 +41,7 @@ final class TrackIRRuntimeController: ObservableObject {
         self.cameraController = cameraController ?? TrackIRCameraController()
         self.controlState = trackIRControlState(userDefaults: userDefaults)
         syncTrackIRCamera()
+        syncTimeoutTask()
     }
 
     func setWindowVisible(_ isWindowVisible: Bool) {
@@ -63,12 +72,6 @@ final class TrackIRRuntimeController: ObservableObject {
     }
 
     func refreshTrackIRCamera() {
-        let mouseTransform = previewVideoTransform(
-            flipHorizontal: controlState.isVideoFlipHorizontalEnabled,
-            flipVertical: controlState.isVideoFlipVerticalEnabled,
-            rotationDegrees: controlState.videoRotationDegrees
-        )
-
         cameraController.refresh(
             isTrackIREnabled: controlState.isTrackIREnabled,
             isVideoEnabled: controlState.isVideoEnabled,
@@ -80,7 +83,12 @@ final class TrackIRRuntimeController: ObservableObject {
             ),
             isMouseMovementEnabled: controlState.isMouseMovementEnabled,
             mouseMovementSpeed: trackIRMouseBackendSpeed(controlSpeed: controlState.mouseMovementSpeed),
-            mouseTransform: mouseTransform
+            mouseSmoothing: controlState.mouseSmoothing,
+            mouseDeadzone: controlState.mouseDeadzone,
+            isAvoidMouseJumpsEnabled: controlState.isAvoidMouseJumpsEnabled,
+            mouseJumpThresholdPixels: controlState.mouseJumpThresholdPixels,
+            keepAwakeSeconds: controlState.keepAwakeSeconds,
+            mouseTransform: currentMouseTransform()
         )
     }
 
@@ -111,6 +119,48 @@ final class TrackIRRuntimeController: ObservableObject {
     func setMouseMovementSpeed(_ mouseMovementSpeed: Double) {
         updateControlState {
             $0.mouseMovementSpeed = normalizedMouseMovementControlSpeed(mouseMovementSpeed)
+        }
+    }
+
+    func setMouseSmoothing(_ mouseSmoothing: Double) {
+        updateControlState {
+            $0.mouseSmoothing = normalizedMouseSmoothing(mouseSmoothing)
+        }
+    }
+
+    func setMouseDeadzone(_ mouseDeadzone: Double) {
+        updateControlState {
+            $0.mouseDeadzone = normalizedMouseDeadzone(mouseDeadzone)
+        }
+    }
+
+    func setAvoidMouseJumpsEnabled(_ isAvoidMouseJumpsEnabled: Bool) {
+        updateControlState {
+            $0.isAvoidMouseJumpsEnabled = isAvoidMouseJumpsEnabled
+        }
+    }
+
+    func setMouseJumpThresholdPixels(_ mouseJumpThresholdPixels: Int) {
+        updateControlState {
+            $0.mouseJumpThresholdPixels = normalizedMouseJumpThreshold(mouseJumpThresholdPixels)
+        }
+    }
+
+    func setKeepAwakeSeconds(_ keepAwakeSeconds: Int) {
+        updateControlState {
+            $0.keepAwakeSeconds = normalizedKeepAwakeSeconds(keepAwakeSeconds)
+        }
+    }
+
+    func setTimeoutEnabled(_ isTimeoutEnabled: Bool) {
+        updateControlState {
+            $0.isTimeoutEnabled = isTimeoutEnabled
+        }
+    }
+
+    func setTimeoutSeconds(_ timeoutSeconds: Int) {
+        updateControlState {
+            $0.timeoutSeconds = normalizedTimeoutSeconds(timeoutSeconds)
         }
     }
 
@@ -147,6 +197,7 @@ final class TrackIRRuntimeController: ObservableObject {
     }
 
     func shutdownAndWait() {
+        timeoutTask?.cancel()
         cameraController.shutdownAndWait()
     }
 
@@ -161,15 +212,10 @@ final class TrackIRRuntimeController: ObservableObject {
         controlState = nextState
         persistControlState(nextState, userDefaults: userDefaults)
         syncTrackIRCamera()
+        syncTimeoutTask()
     }
 
     private func syncTrackIRCamera() {
-        let mouseTransform = previewVideoTransform(
-            flipHorizontal: controlState.isVideoFlipHorizontalEnabled,
-            flipVertical: controlState.isVideoFlipVerticalEnabled,
-            rotationDegrees: controlState.videoRotationDegrees
-        )
-
         cameraController.syncStreaming(
             isTrackIREnabled: controlState.isTrackIREnabled,
             isVideoEnabled: controlState.isVideoEnabled,
@@ -181,8 +227,56 @@ final class TrackIRRuntimeController: ObservableObject {
             ),
             isMouseMovementEnabled: controlState.isMouseMovementEnabled,
             mouseMovementSpeed: trackIRMouseBackendSpeed(controlSpeed: controlState.mouseMovementSpeed),
-            mouseTransform: mouseTransform
+            mouseSmoothing: controlState.mouseSmoothing,
+            mouseDeadzone: controlState.mouseDeadzone,
+            isAvoidMouseJumpsEnabled: controlState.isAvoidMouseJumpsEnabled,
+            mouseJumpThresholdPixels: controlState.mouseJumpThresholdPixels,
+            keepAwakeSeconds: controlState.keepAwakeSeconds,
+            mouseTransform: currentMouseTransform()
         )
+    }
+
+    private func currentMouseTransform() -> VideoPreviewTransform {
+        previewVideoTransform(
+            flipHorizontal: controlState.isVideoFlipHorizontalEnabled,
+            flipVertical: controlState.isVideoFlipVerticalEnabled,
+            rotationDegrees: controlState.videoRotationDegrees
+        )
+    }
+
+    private func syncTimeoutTask() {
+        timeoutTask?.cancel()
+
+        guard shouldScheduleTrackIRTimeout(
+            isTrackIREnabled: controlState.isTrackIREnabled,
+            isTimeoutEnabled: controlState.isTimeoutEnabled,
+            timeoutSeconds: controlState.timeoutSeconds
+        ) else {
+            timeoutTask = nil
+            return
+        }
+
+        let timeoutSeconds = controlState.timeoutSeconds
+        timeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds) * 1_000_000_000)
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await MainActor.run {
+                self?.applyTrackIRTimeout()
+            }
+        }
+    }
+
+    private func applyTrackIRTimeout() {
+        updateControlState {
+            $0 = trackIRTimedOutControlState($0)
+        }
+    }
+
+    deinit {
+        timeoutTask?.cancel()
     }
 }
 
@@ -198,6 +292,22 @@ func trackIRControlState(userDefaults: UserDefaults) -> TrackIRControlState {
             ?? defaults.mouseMovementEnabled,
         mouseMovementSpeed: userDefaults.object(forKey: ControlPreferenceKey.mouseMovementSpeed.rawValue) as? Double
             ?? defaults.mouseMovementSpeed,
+        mouseSmoothing: userDefaults.object(forKey: ControlPreferenceKey.mouseSmoothing.rawValue) as? Int
+            ?? defaults.mouseSmoothing,
+        mouseDeadzone: userDefaults.object(forKey: ControlPreferenceKey.mouseDeadzone.rawValue) as? Double
+            ?? defaults.mouseDeadzone,
+        isAvoidMouseJumpsEnabled: userDefaults.object(
+            forKey: ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue
+        ) as? Bool ?? defaults.avoidMouseJumpsEnabled,
+        mouseJumpThresholdPixels: userDefaults.object(
+            forKey: ControlPreferenceKey.mouseJumpThresholdPixels.rawValue
+        ) as? Int ?? defaults.mouseJumpThresholdPixels,
+        keepAwakeSeconds: userDefaults.object(forKey: ControlPreferenceKey.keepAwakeSeconds.rawValue)
+            as? Int ?? defaults.keepAwakeSeconds,
+        isTimeoutEnabled: userDefaults.object(forKey: ControlPreferenceKey.timeoutEnabled.rawValue)
+            as? Bool ?? defaults.timeoutEnabled,
+        timeoutSeconds: userDefaults.object(forKey: ControlPreferenceKey.timeoutSeconds.rawValue)
+            as? Int ?? defaults.timeoutSeconds,
         isVideoFlipHorizontalEnabled: userDefaults.object(forKey: ControlPreferenceKey.videoFlipHorizontal.rawValue) as? Bool
             ?? defaults.videoFlipHorizontalEnabled,
         isVideoFlipVerticalEnabled: userDefaults.object(forKey: ControlPreferenceKey.videoFlipVertical.rawValue) as? Bool
@@ -217,6 +327,19 @@ func persistControlState(_ controlState: TrackIRControlState, userDefaults: User
         forKey: ControlPreferenceKey.mouseMovementEnabled.rawValue
     )
     userDefaults.set(controlState.mouseMovementSpeed, forKey: ControlPreferenceKey.mouseMovementSpeed.rawValue)
+    userDefaults.set(controlState.mouseSmoothing, forKey: ControlPreferenceKey.mouseSmoothing.rawValue)
+    userDefaults.set(controlState.mouseDeadzone, forKey: ControlPreferenceKey.mouseDeadzone.rawValue)
+    userDefaults.set(
+        controlState.isAvoidMouseJumpsEnabled,
+        forKey: ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue
+    )
+    userDefaults.set(
+        controlState.mouseJumpThresholdPixels,
+        forKey: ControlPreferenceKey.mouseJumpThresholdPixels.rawValue
+    )
+    userDefaults.set(controlState.keepAwakeSeconds, forKey: ControlPreferenceKey.keepAwakeSeconds.rawValue)
+    userDefaults.set(controlState.isTimeoutEnabled, forKey: ControlPreferenceKey.timeoutEnabled.rawValue)
+    userDefaults.set(controlState.timeoutSeconds, forKey: ControlPreferenceKey.timeoutSeconds.rawValue)
     userDefaults.set(
         controlState.isVideoFlipHorizontalEnabled,
         forKey: ControlPreferenceKey.videoFlipHorizontal.rawValue
@@ -233,4 +356,20 @@ func persistControlState(_ controlState: TrackIRControlState, userDefaults: User
         controlState.videoFramesPerSecond,
         forKey: ControlPreferenceKey.videoFramesPerSecond.rawValue
     )
+}
+
+func shouldScheduleTrackIRTimeout(
+    isTrackIREnabled: Bool,
+    isTimeoutEnabled: Bool,
+    timeoutSeconds: Int
+) -> Bool {
+    isTrackIREnabled && isTimeoutEnabled && timeoutSeconds > 0
+}
+
+func trackIRTimedOutControlState(_ controlState: TrackIRControlState) -> TrackIRControlState {
+    var nextState = controlState
+    nextState.isTrackIREnabled = false
+    nextState.isVideoEnabled = false
+    nextState.isMouseMovementEnabled = false
+    return nextState
 }

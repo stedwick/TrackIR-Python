@@ -46,6 +46,19 @@ struct ContentViewTests {
         #expect(ControlPreferenceKey.trackIREnabled.rawValue == "contentView.trackIREnabled")
         #expect(ControlPreferenceKey.mouseMovementEnabled.rawValue == "contentView.mouseMovementEnabled")
         #expect(ControlPreferenceKey.mouseMovementSpeed.rawValue == "contentView.mouseMovementSpeed")
+        #expect(ControlPreferenceKey.mouseSmoothing.rawValue == "contentView.mouseSmoothing")
+        #expect(ControlPreferenceKey.mouseDeadzone.rawValue == "contentView.mouseDeadzone")
+        #expect(
+            ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue ==
+                "contentView.avoidMouseJumpsEnabled"
+        )
+        #expect(
+            ControlPreferenceKey.mouseJumpThresholdPixels.rawValue ==
+                "contentView.mouseJumpThresholdPixels"
+        )
+        #expect(ControlPreferenceKey.keepAwakeSeconds.rawValue == "contentView.keepAwakeSeconds")
+        #expect(ControlPreferenceKey.timeoutEnabled.rawValue == "contentView.timeoutEnabled")
+        #expect(ControlPreferenceKey.timeoutSeconds.rawValue == "contentView.timeoutSeconds")
         #expect(ControlPreferenceKey.videoFlipHorizontal.rawValue == "contentView.videoFlipHorizontal")
         #expect(ControlPreferenceKey.videoFlipVertical.rawValue == "contentView.videoFlipVertical")
         #expect(ControlPreferenceKey.videoRotationDegrees.rawValue == "contentView.videoRotationDegrees")
@@ -58,6 +71,13 @@ struct ContentViewTests {
             trackIREnabled: true,
             mouseMovementEnabled: true,
             mouseMovementSpeed: 2.0,
+            mouseSmoothing: 3,
+            mouseDeadzone: 0.04,
+            avoidMouseJumpsEnabled: true,
+            mouseJumpThresholdPixels: 50,
+            keepAwakeSeconds: 29,
+            timeoutEnabled: true,
+            timeoutSeconds: 28_800,
             videoFlipHorizontalEnabled: false,
             videoFlipVerticalEnabled: false,
             videoRotationDegrees: 0.0,
@@ -72,6 +92,13 @@ struct ContentViewTests {
         #expect(preferences[ControlPreferenceKey.trackIREnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.mouseMovementEnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.mouseMovementSpeed.rawValue] as? Double == 2.0)
+        #expect(preferences[ControlPreferenceKey.mouseSmoothing.rawValue] as? Int == 3)
+        #expect(preferences[ControlPreferenceKey.mouseDeadzone.rawValue] as? Double == 0.04)
+        #expect(preferences[ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue] as? Bool == true)
+        #expect(preferences[ControlPreferenceKey.mouseJumpThresholdPixels.rawValue] as? Int == 50)
+        #expect(preferences[ControlPreferenceKey.keepAwakeSeconds.rawValue] as? Int == 29)
+        #expect(preferences[ControlPreferenceKey.timeoutEnabled.rawValue] as? Bool == true)
+        #expect(preferences[ControlPreferenceKey.timeoutSeconds.rawValue] as? Int == 28_800)
         #expect(preferences[ControlPreferenceKey.videoFlipHorizontal.rawValue] as? Bool == false)
         #expect(preferences[ControlPreferenceKey.videoFlipVertical.rawValue] as? Bool == false)
         #expect(preferences[ControlPreferenceKey.videoRotationDegrees.rawValue] as? Double == 0.0)
@@ -86,6 +113,13 @@ struct ContentViewTests {
             isTrackIREnabled: true,
             isMouseMovementEnabled: false,
             mouseMovementSpeed: 3.4,
+            mouseSmoothing: 7,
+            mouseDeadzone: 0.12,
+            isAvoidMouseJumpsEnabled: false,
+            mouseJumpThresholdPixels: 80,
+            keepAwakeSeconds: 45,
+            isTimeoutEnabled: false,
+            timeoutSeconds: 600,
             isVideoFlipHorizontalEnabled: true,
             isVideoFlipVerticalEnabled: true,
             videoRotationDegrees: 270,
@@ -123,6 +157,22 @@ struct ContentViewTests {
         #expect(normalizedMouseMovementControlSpeed(7.0) == 5.0)
         #expect(trackIRMouseBackendSpeed(controlSpeed: 2.0) == 20.0)
         #expect(trackIRMouseBackendSpeed(controlSpeed: 20.0) == 50.0)
+    }
+
+    @Test func advancedMouseDefaultsAndLabelsMatchExpectedValues() {
+        #expect(mouseSmoothingValueLabel(for: 3) == "3")
+        #expect(mouseDeadzoneValueLabel(for: 0.04) == "0.04")
+        #expect(trackIRTimeoutHelperText == "8 hours = 60 sec x 60 min x 8 hrs = 28800 sec")
+    }
+
+    @Test func advancedMouseValuesAreNormalizedBeforeStorage() {
+        #expect(normalizedMouseSmoothing(0) == 1)
+        #expect(normalizedMouseSmoothing(10.8) == 10)
+        #expect(normalizedMouseDeadzone(-1) == 0)
+        #expect(normalizedMouseDeadzone(0.3) == 0.15)
+        #expect(normalizedMouseJumpThreshold(0) == 1)
+        #expect(normalizedKeepAwakeSeconds(-10) == 0)
+        #expect(normalizedTimeoutSeconds(0) == 1)
     }
 
     @Test func previewVideoTransformMapsFlipsAndRotation() {
@@ -237,9 +287,98 @@ struct ContentViewTests {
     }
 
     @Test func trackIRPollingCanContinueWithoutVisibleWindowWhenMouseIsEnabled() {
-        #expect(trackIRShouldPollSnapshots(isWindowVisible: true, isMouseMovementEnabled: false))
-        #expect(trackIRShouldPollSnapshots(isWindowVisible: false, isMouseMovementEnabled: true))
-        #expect(!trackIRShouldPollSnapshots(isWindowVisible: false, isMouseMovementEnabled: false))
+        #expect(trackIRShouldPollSnapshots(
+            isWindowVisible: true,
+            isMouseMovementEnabled: false,
+            isTrackIREnabled: false,
+            keepAwakeSeconds: 0
+        ))
+        #expect(trackIRShouldPollSnapshots(
+            isWindowVisible: false,
+            isMouseMovementEnabled: true,
+            isTrackIREnabled: false,
+            keepAwakeSeconds: 0
+        ))
+        #expect(trackIRShouldPollSnapshots(
+            isWindowVisible: false,
+            isMouseMovementEnabled: false,
+            isTrackIREnabled: true,
+            keepAwakeSeconds: 29
+        ))
+        #expect(!trackIRShouldPollSnapshots(
+            isWindowVisible: false,
+            isMouseMovementEnabled: false,
+            isTrackIREnabled: false,
+            keepAwakeSeconds: 0
+        ))
+    }
+
+    @Test func keepAwakeOnlyFiresWhileTrackIRIsEnabled() {
+        #expect(trackIRShouldRequestMouseEventAccess(isMouseMovementEnabled: true, keepAwakeSeconds: 0))
+        #expect(trackIRShouldRequestMouseEventAccess(isMouseMovementEnabled: false, keepAwakeSeconds: 29))
+        #expect(trackIRShouldFireKeepAwake(
+            isTrackIREnabled: true,
+            keepAwakeSeconds: 29,
+            timeSinceLastMouseMovement: 29
+        ))
+        #expect(!trackIRShouldFireKeepAwake(
+            isTrackIREnabled: false,
+            keepAwakeSeconds: 29,
+            timeSinceLastMouseMovement: 60
+        ))
+        #expect(!trackIRShouldFireKeepAwake(
+            isTrackIREnabled: true,
+            keepAwakeSeconds: 29,
+            timeSinceLastMouseMovement: 10
+        ))
+    }
+
+    @Test func timeoutSchedulingAndExpirationToggleTrackIROff() {
+        let controlState = TrackIRControlState(
+            isVideoEnabled: true,
+            isTrackIREnabled: true,
+            isMouseMovementEnabled: true,
+            mouseMovementSpeed: 2.0,
+            mouseSmoothing: 3,
+            mouseDeadzone: 0.04,
+            isAvoidMouseJumpsEnabled: true,
+            mouseJumpThresholdPixels: 50,
+            keepAwakeSeconds: 29,
+            isTimeoutEnabled: true,
+            timeoutSeconds: 28_800,
+            isVideoFlipHorizontalEnabled: false,
+            isVideoFlipVerticalEnabled: false,
+            videoRotationDegrees: 0,
+            videoFramesPerSecond: 60
+        )
+
+        #expect(shouldScheduleTrackIRTimeout(
+            isTrackIREnabled: true,
+            isTimeoutEnabled: true,
+            timeoutSeconds: 28_800
+        ))
+        #expect(!shouldScheduleTrackIRTimeout(
+            isTrackIREnabled: true,
+            isTimeoutEnabled: false,
+            timeoutSeconds: 28_800
+        ))
+        #expect(trackIRTimedOutControlState(controlState) == TrackIRControlState(
+            isVideoEnabled: false,
+            isTrackIREnabled: false,
+            isMouseMovementEnabled: false,
+            mouseMovementSpeed: 2.0,
+            mouseSmoothing: 3,
+            mouseDeadzone: 0.04,
+            isAvoidMouseJumpsEnabled: true,
+            mouseJumpThresholdPixels: 50,
+            keepAwakeSeconds: 29,
+            isTimeoutEnabled: true,
+            timeoutSeconds: 28_800,
+            isVideoFlipHorizontalEnabled: false,
+            isVideoFlipVerticalEnabled: false,
+            videoRotationDegrees: 0,
+            videoFramesPerSecond: 60
+        ))
     }
 
     @Test func trackIRPollingIntervalMatchesMouseMovementMode() {
