@@ -170,7 +170,7 @@ struct ContentViewTests {
         #expect(normalizedMouseSmoothing(10.8) == 10)
         #expect(normalizedMouseDeadzone(-1) == 0)
         #expect(normalizedMouseDeadzone(0.3) == 0.3)
-        #expect(normalizedMouseDeadzone(2.5) == 2.0)
+        #expect(normalizedMouseDeadzone(2.5) == 1.0)
         #expect(normalizedMouseJumpThreshold(0) == 1)
         #expect(normalizedKeepAwakeSeconds(-10) == 0)
         #expect(normalizedTimeoutSeconds(0) == 1)
