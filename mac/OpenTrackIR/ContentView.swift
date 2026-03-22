@@ -12,6 +12,7 @@ private let defaultControlValues = controlDefaultValues()
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var cameraController: TrackIRCameraController
     @AppStorage(ControlPreferenceKey.videoEnabled.rawValue) private var isVideoEnabled = defaultControlValues.videoEnabled
     @AppStorage(ControlPreferenceKey.trackIREnabled.rawValue) private var isTrackIREnabled = defaultControlValues.trackIREnabled
@@ -21,6 +22,7 @@ struct ContentView: View {
     @AppStorage(ControlPreferenceKey.videoFlipVertical.rawValue) private var isVideoFlipVerticalEnabled = defaultControlValues.videoFlipVerticalEnabled
     @AppStorage(ControlPreferenceKey.videoRotationDegrees.rawValue) private var videoRotationDegrees = defaultControlValues.videoRotationDegrees
     @AppStorage(ControlPreferenceKey.videoFramesPerSecond.rawValue) private var videoFramesPerSecond = defaultControlValues.videoFramesPerSecond
+    @State private var isWindowVisible = false
 
     @MainActor
     init() {
@@ -55,22 +57,27 @@ struct ContentView: View {
         }
         .frame(minWidth: 760, minHeight: 560)
         .onAppear {
-            syncTrackIRCamera(isWindowVisible: true)
+            isWindowVisible = true
+            syncTrackIRCamera()
         }
         .onChange(of: isTrackIREnabled) { _, _ in
-            syncTrackIRCamera(isWindowVisible: true)
+            syncTrackIRCamera()
         }
         .onChange(of: isVideoEnabled) { _, _ in
-            syncTrackIRCamera(isWindowVisible: true)
+            syncTrackIRCamera()
         }
         .onChange(of: videoFramesPerSecond) { _, _ in
-            syncTrackIRCamera(isWindowVisible: true)
+            syncTrackIRCamera()
+        }
+        .onChange(of: scenePhase) { _, _ in
+            syncTrackIRCamera()
         }
         .onDisappear {
             if shouldShutdownTrackIRRuntime(for: .windowClosed) {
                 cameraController.shutdown()
             } else {
-                syncTrackIRCamera(isWindowVisible: false)
+                isWindowVisible = false
+                syncTrackIRCamera()
             }
         }
     }
@@ -573,12 +580,15 @@ struct ContentView: View {
             )
     }
 
-    private func syncTrackIRCamera(isWindowVisible: Bool) {
+    private func syncTrackIRCamera() {
         cameraController.syncStreaming(
             isTrackIREnabled: isTrackIREnabled,
             isVideoEnabled: isVideoEnabled,
             maximumTrackingFramesPerSecond: videoFramesPerSecond,
-            isWindowVisible: isWindowVisible
+            isWindowVisible: trackIRPresentationIsActive(
+                scenePhase: scenePhase,
+                isWindowVisible: isWindowVisible
+            )
         )
     }
 
@@ -734,6 +744,10 @@ func shouldShutdownTrackIRRuntime(for event: TrackIRRuntimeLifecycleEvent) -> Bo
         case .appWillTerminate:
             return true
     }
+}
+
+func trackIRPresentationIsActive(scenePhase: ScenePhase, isWindowVisible: Bool) -> Bool {
+    isWindowVisible && scenePhase == .active
 }
 
 func dashboardLayout(for width: CGFloat) -> DashboardLayoutMode {

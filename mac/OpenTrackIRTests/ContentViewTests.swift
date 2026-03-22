@@ -6,6 +6,7 @@
 import AppKit
 import CoreGraphics
 import KeyboardShortcuts
+import SwiftUI
 import Testing
 @testable import OpenTrackIR
 
@@ -153,6 +154,13 @@ struct ContentViewTests {
     @Test func trackIRRuntimeShutdownPolicyDependsOnAppLifecycleEvent() {
         #expect(!shouldShutdownTrackIRRuntime(for: .windowClosed))
         #expect(shouldShutdownTrackIRRuntime(for: .appWillTerminate))
+    }
+
+    @Test func trackIRPresentationRequiresActiveSceneAndVisibleWindow() {
+        #expect(trackIRPresentationIsActive(scenePhase: .active, isWindowVisible: true))
+        #expect(!trackIRPresentationIsActive(scenePhase: .inactive, isWindowVisible: true))
+        #expect(!trackIRPresentationIsActive(scenePhase: .background, isWindowVisible: true))
+        #expect(!trackIRPresentationIsActive(scenePhase: .active, isWindowVisible: false))
     }
 
     @Test func xcodePreviewEnvironmentDetectionMatchesKnownFlags() {
