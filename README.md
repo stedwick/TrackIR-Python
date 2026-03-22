@@ -4,6 +4,8 @@ OpenTrackIR is an infrared head-mouse to move your cursor on macOS if you are di
 
 If you want to try the current macOS app, download it from the [releases page](https://github.com/stedwick/OpenTrackIR/releases).
 
+![OpenTrackIR macOS screenshot](screenshots/OpenTrackIR-01-macOS-26-Screenshot.png)
+
 The repo is organized by implementation target:
 
 - `python/`: active protocol exploration, USB transport work, packet decoding, logging, and preview tooling.
