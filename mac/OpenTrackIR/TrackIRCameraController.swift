@@ -209,6 +209,7 @@ final class TrackIRCameraController: ObservableObject {
             isMouseMovementEnabled: isMouseMovementEnabled,
             mouseMovementSpeed: mouseMovementSpeed,
             mouseTransform: mouseTransform,
+            maximumPreviewFramesPerSecond: 30.0,
             pollInterval: trackIRPollingInterval(
                 isVideoEnabled: isVideoEnabled,
                 isMouseMovementEnabled: isMouseMovementEnabled,
@@ -260,6 +261,7 @@ final class TrackIRCameraController: ObservableObject {
 
         pollTask = Task.detached(priority: .utility) { [weak self] in
             var lastPreviewFrameGeneration: UInt64 = 0
+            var lastPreviewUpdateTime: TimeInterval?
 
             while !Task.isCancelled {
                 var snapshot = otir_trackir_session_snapshot()
@@ -267,9 +269,17 @@ final class TrackIRCameraController: ObservableObject {
 
                 otir_trackir_session_copy_snapshot(session, &snapshot)
 
-                if configuration.isVideoEnabled,
-                   snapshot.has_preview_frame,
-                   snapshot.preview_frame_generation != lastPreviewFrameGeneration {
+                let currentTime = ProcessInfo.processInfo.systemUptime
+                let elapsedPreviewTime = lastPreviewUpdateTime.map { currentTime - $0 }
+
+                if trackIRShouldUpdatePreviewFrame(
+                    isVideoEnabled: configuration.isVideoEnabled,
+                    hasPreviewFrame: snapshot.has_preview_frame,
+                    previewFrameGeneration: snapshot.preview_frame_generation,
+                    lastPreviewFrameGeneration: lastPreviewFrameGeneration,
+                    elapsedTimeSinceLastPreview: elapsedPreviewTime,
+                    maximumPreviewFramesPerSecond: configuration.maximumPreviewFramesPerSecond
+                ) {
                     var frameBytes = [UInt8](
                         repeating: 0,
                         count: Int(OTIR_TRACKIR_SESSION_FRAME_BYTES)
@@ -292,6 +302,7 @@ final class TrackIRCameraController: ObservableObject {
                             height: Int(snapshot.preview_height)
                         )
                         lastPreviewFrameGeneration = frameGeneration
+                        lastPreviewUpdateTime = currentTime
                     }
                 }
 
@@ -360,6 +371,7 @@ private struct TrackIRPollingConfiguration: Equatable {
     let isMouseMovementEnabled: Bool
     let mouseMovementSpeed: Double
     let mouseTransform: VideoPreviewTransform
+    let maximumPreviewFramesPerSecond: Double
     let pollInterval: TimeInterval
 }
 
@@ -399,8 +411,8 @@ nonisolated func trackIRPollingInterval(
     isMouseMovementEnabled: Bool,
     maximumTrackingFramesPerSecond: Double
 ) -> TimeInterval {
-    guard isMouseMovementEnabled else {
-        return isVideoEnabled ? (1.0 / 30.0) : 0.2
+    guard isVideoEnabled || isMouseMovementEnabled else {
+        return 0.2
     }
 
     let framesPerSecond = maximumTrackingFramesPerSecond > 0
@@ -408,6 +420,33 @@ nonisolated func trackIRPollingInterval(
         : 60.0
 
     return 1.0 / framesPerSecond
+}
+
+nonisolated func trackIRShouldUpdatePreviewFrame(
+    isVideoEnabled: Bool,
+    hasPreviewFrame: Bool,
+    previewFrameGeneration: UInt64,
+    lastPreviewFrameGeneration: UInt64,
+    elapsedTimeSinceLastPreview: TimeInterval?,
+    maximumPreviewFramesPerSecond: Double
+) -> Bool {
+    guard isVideoEnabled, hasPreviewFrame else {
+        return false
+    }
+
+    guard previewFrameGeneration != lastPreviewFrameGeneration else {
+        return false
+    }
+
+    guard maximumPreviewFramesPerSecond > 0 else {
+        return true
+    }
+
+    guard let elapsedTimeSinceLastPreview else {
+        return true
+    }
+
+    return elapsedTimeSinceLastPreview >= (1.0 / maximumPreviewFramesPerSecond)
 }
 
 nonisolated func trackIRCameraPhase(sessionPhase: otir_trackir_session_phase) -> TrackIRCameraPhase {

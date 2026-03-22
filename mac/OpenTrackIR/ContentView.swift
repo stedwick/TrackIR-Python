@@ -443,18 +443,18 @@ struct ContentView: View {
 
                     Spacer(minLength: 16)
 
-                    Text(mouseSpeedValueLabel(for: mouseMovementSpeed))
+                    Text(mouseSpeedValueLabel(for: normalizedMouseMovementControlSpeed(mouseMovementSpeed)))
                         .font(.title3.weight(.semibold))
                         .monospacedDigit()
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Slider(value: $mouseMovementSpeed, in: 0.25 ... 30.0, step: 0.25)
+                    Slider(value: mouseMovementSpeedBinding, in: 1.0 ... 5.0, step: 0.2)
 
                     HStack {
-                        Text("0.25x")
+                        Text("1x")
                         Spacer()
-                        Text("30x")
+                        Text("5x")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -607,7 +607,7 @@ struct ContentView: View {
                 isWindowVisible: isWindowVisible
             ),
             isMouseMovementEnabled: isMouseMovementEnabled,
-            mouseMovementSpeed: mouseMovementSpeed,
+            mouseMovementSpeed: trackIRMouseBackendSpeed(controlSpeed: mouseMovementSpeed),
             mouseTransform: mouseTransform
         )
     }
@@ -629,10 +629,18 @@ struct ContentView: View {
                 isWindowVisible: isWindowVisible
             ),
             isMouseMovementEnabled: isMouseMovementEnabled,
-            mouseMovementSpeed: mouseMovementSpeed,
+            mouseMovementSpeed: trackIRMouseBackendSpeed(controlSpeed: mouseMovementSpeed),
             mouseTransform: mouseTransform
         )
     }
+
+    private var mouseMovementSpeedBinding: Binding<Double> {
+        Binding(
+            get: { normalizedMouseMovementControlSpeed(mouseMovementSpeed) },
+            set: { mouseMovementSpeed = normalizedMouseMovementControlSpeed($0) }
+        )
+    }
+
 }
 
 enum DashboardLayoutMode: Equatable {
@@ -677,7 +685,7 @@ func controlDefaultValues() -> ControlDefaultValues {
         videoEnabled: true,
         trackIREnabled: true,
         mouseMovementEnabled: true,
-        mouseMovementSpeed: 5.0,
+        mouseMovementSpeed: 2.0,
         videoFlipHorizontalEnabled: false,
         videoFlipVerticalEnabled: false,
         videoRotationDegrees: 0.0,
@@ -704,6 +712,14 @@ func toggledMouseMovementState(isEnabled: Bool) -> Bool {
 
 func mouseSpeedValueLabel(for speed: Double) -> String {
     "\(speed.formatted(.number.precision(.fractionLength(0 ... 2))))x"
+}
+
+func normalizedMouseMovementControlSpeed(_ storedSpeed: Double) -> Double {
+    min(max(storedSpeed, 1.0), 5.0)
+}
+
+func trackIRMouseBackendSpeed(controlSpeed: Double) -> Double {
+    normalizedMouseMovementControlSpeed(controlSpeed) * 10.0
 }
 
 func previewVideoTransform(

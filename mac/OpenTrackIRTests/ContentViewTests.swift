@@ -57,7 +57,7 @@ struct ContentViewTests {
             videoEnabled: true,
             trackIREnabled: true,
             mouseMovementEnabled: true,
-            mouseMovementSpeed: 5.0,
+            mouseMovementSpeed: 2.0,
             videoFlipHorizontalEnabled: false,
             videoFlipVerticalEnabled: false,
             videoRotationDegrees: 0.0,
@@ -71,7 +71,7 @@ struct ContentViewTests {
         #expect(preferences[ControlPreferenceKey.videoEnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.trackIREnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.mouseMovementEnabled.rawValue] as? Bool == true)
-        #expect(preferences[ControlPreferenceKey.mouseMovementSpeed.rawValue] as? Double == 5.0)
+        #expect(preferences[ControlPreferenceKey.mouseMovementSpeed.rawValue] as? Double == 2.0)
         #expect(preferences[ControlPreferenceKey.videoFlipHorizontal.rawValue] as? Bool == false)
         #expect(preferences[ControlPreferenceKey.videoFlipVertical.rawValue] as? Bool == false)
         #expect(preferences[ControlPreferenceKey.videoRotationDegrees.rawValue] as? Double == 0.0)
@@ -91,8 +91,16 @@ struct ContentViewTests {
 
     @Test func mouseSpeedValueLabelUsesCompactMultiplierText() {
         #expect(mouseSpeedValueLabel(for: 1.0) == "1x")
-        #expect(mouseSpeedValueLabel(for: 1.25) == "1.25x")
-        #expect(mouseSpeedValueLabel(for: 0.5) == "0.5x")
+        #expect(mouseSpeedValueLabel(for: 2.2) == "2.2x")
+        #expect(mouseSpeedValueLabel(for: 5.0) == "5x")
+    }
+
+    @Test func mouseSpeedControlValueMapsToBackendScale() {
+        #expect(normalizedMouseMovementControlSpeed(2.0) == 2.0)
+        #expect(normalizedMouseMovementControlSpeed(0.5) == 1.0)
+        #expect(normalizedMouseMovementControlSpeed(7.0) == 5.0)
+        #expect(trackIRMouseBackendSpeed(controlSpeed: 2.0) == 20.0)
+        #expect(trackIRMouseBackendSpeed(controlSpeed: 20.0) == 50.0)
     }
 
     @Test func previewVideoTransformMapsFlipsAndRotation() {
@@ -217,7 +225,7 @@ struct ContentViewTests {
             isVideoEnabled: true,
             isMouseMovementEnabled: false,
             maximumTrackingFramesPerSecond: 125
-        ) - (1.0 / 30.0)) < 0.0001)
+        ) - (1.0 / 125.0)) < 0.0001)
         #expect(trackIRPollingInterval(
             isVideoEnabled: false,
             isMouseMovementEnabled: false,
@@ -229,10 +237,45 @@ struct ContentViewTests {
             maximumTrackingFramesPerSecond: 75
         ) - (1.0 / 75.0)) < 0.0001)
         #expect(abs(trackIRPollingInterval(
-            isVideoEnabled: false,
-            isMouseMovementEnabled: true,
+            isVideoEnabled: true,
+            isMouseMovementEnabled: false,
             maximumTrackingFramesPerSecond: 0
         ) - (1.0 / 60.0)) < 0.0001)
+    }
+
+    @Test func trackIRPreviewUpdatesStayCappedAtThirtyFramesPerSecond() {
+        #expect(trackIRShouldUpdatePreviewFrame(
+            isVideoEnabled: true,
+            hasPreviewFrame: true,
+            previewFrameGeneration: 2,
+            lastPreviewFrameGeneration: 1,
+            elapsedTimeSinceLastPreview: nil,
+            maximumPreviewFramesPerSecond: 30.0
+        ))
+        #expect(!trackIRShouldUpdatePreviewFrame(
+            isVideoEnabled: true,
+            hasPreviewFrame: true,
+            previewFrameGeneration: 2,
+            lastPreviewFrameGeneration: 2,
+            elapsedTimeSinceLastPreview: 0.1,
+            maximumPreviewFramesPerSecond: 30.0
+        ))
+        #expect(!trackIRShouldUpdatePreviewFrame(
+            isVideoEnabled: true,
+            hasPreviewFrame: true,
+            previewFrameGeneration: 3,
+            lastPreviewFrameGeneration: 2,
+            elapsedTimeSinceLastPreview: 0.02,
+            maximumPreviewFramesPerSecond: 30.0
+        ))
+        #expect(trackIRShouldUpdatePreviewFrame(
+            isVideoEnabled: true,
+            hasPreviewFrame: true,
+            previewFrameGeneration: 3,
+            lastPreviewFrameGeneration: 2,
+            elapsedTimeSinceLastPreview: 1.0 / 30.0,
+            maximumPreviewFramesPerSecond: 30.0
+        ))
     }
 
     @Test func trackIRCameraPhaseMapsNativeSessionStates() {
