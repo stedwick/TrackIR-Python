@@ -590,26 +590,19 @@ bool otir_tir5v3_compute_blob_result(
     double previous_centroid_y,
     otir_tir5v3_blob_result *out_result
 ) {
-    void *workspace = malloc(otir_tir5v3_blob_workspace_bytes());
-    bool did_compute;
+    otir_tir5v3_blob_workspace workspace;
 
-    if (workspace == NULL) {
-        return false;
-    }
-
-    did_compute = otir_tir5v3_compute_blob_result_with_workspace(
+    return otir_tir5v3_compute_blob_result_with_workspace(
         stripes,
         stripe_count,
         config,
         has_previous_centroid,
         previous_centroid_x,
         previous_centroid_y,
-        workspace,
-        otir_tir5v3_blob_workspace_bytes(),
+        &workspace,
+        sizeof(workspace),
         out_result
     );
-    free(workspace);
-    return did_compute;
 }
 
 void otir_tir5v3_build_frame(

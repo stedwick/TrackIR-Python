@@ -506,25 +506,52 @@ struct ContentViewTests {
 
     @Test func trackIRPollingIntervalMatchesMouseMovementMode() {
         #expect(abs(trackIRPollingInterval(
+            shouldPublishUI: true,
             isVideoEnabled: true,
             isMouseMovementEnabled: false,
             maximumTrackingFramesPerSecond: 125
         ) - (1.0 / 125.0)) < 0.0001)
         #expect(trackIRPollingInterval(
+            shouldPublishUI: false,
             isVideoEnabled: false,
             isMouseMovementEnabled: false,
             maximumTrackingFramesPerSecond: 125
-        ) == 0.2)
+        ) == 1.0)
         #expect(abs(trackIRPollingInterval(
+            shouldPublishUI: false,
             isVideoEnabled: false,
             isMouseMovementEnabled: true,
             maximumTrackingFramesPerSecond: 75
         ) - (1.0 / 75.0)) < 0.0001)
         #expect(abs(trackIRPollingInterval(
+            shouldPublishUI: true,
             isVideoEnabled: true,
             isMouseMovementEnabled: false,
             maximumTrackingFramesPerSecond: 0
         ) - (1.0 / 60.0)) < 0.0001)
+    }
+
+    @Test func trackIRSnapshotReadsAreSkippedForKeepAwakeOnlyBackgroundPolling() {
+        #expect(trackIRShouldReadSnapshot(
+            shouldPublishUI: true,
+            isVideoEnabled: false,
+            isMouseMovementEnabled: false
+        ))
+        #expect(trackIRShouldReadSnapshot(
+            shouldPublishUI: false,
+            isVideoEnabled: true,
+            isMouseMovementEnabled: false
+        ))
+        #expect(trackIRShouldReadSnapshot(
+            shouldPublishUI: false,
+            isVideoEnabled: false,
+            isMouseMovementEnabled: true
+        ))
+        #expect(!trackIRShouldReadSnapshot(
+            shouldPublishUI: false,
+            isVideoEnabled: false,
+            isMouseMovementEnabled: false
+        ))
     }
 
     @Test func trackIRPreviewUpdatesStayCappedAtThirtyFramesPerSecond() {

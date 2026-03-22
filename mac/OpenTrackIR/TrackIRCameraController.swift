@@ -3,7 +3,7 @@ import CoreGraphics
 import Foundation
 import OSLog
 
-enum TrackIRCameraPhase: Equatable {
+enum TrackIRCameraPhase: Equatable, Sendable {
     case idle
     case starting
     case streaming
@@ -11,7 +11,7 @@ enum TrackIRCameraPhase: Equatable {
     case failed
 }
 
-struct TrackIRCameraDisplayState: Equatable {
+struct TrackIRCameraDisplayState: Equatable, Sendable {
     var phase: TrackIRCameraPhase = .idle
     var lastErrorDescription: String?
     var frameIndex: UInt64 = 0
@@ -19,6 +19,24 @@ struct TrackIRCameraDisplayState: Equatable {
     var centroidX: Double?
     var centroidY: Double?
     var lastPacketType: UInt8?
+
+    nonisolated init(
+        phase: TrackIRCameraPhase = .idle,
+        lastErrorDescription: String? = nil,
+        frameIndex: UInt64 = 0,
+        frameRate: Double? = nil,
+        centroidX: Double? = nil,
+        centroidY: Double? = nil,
+        lastPacketType: UInt8? = nil
+    ) {
+        self.phase = phase
+        self.lastErrorDescription = lastErrorDescription
+        self.frameIndex = frameIndex
+        self.frameRate = frameRate
+        self.centroidX = centroidX
+        self.centroidY = centroidY
+        self.lastPacketType = lastPacketType
+    }
 }
 
 @MainActor
@@ -308,6 +326,7 @@ final class TrackIRCameraController: ObservableObject {
             maximumPreviewFramesPerSecond: 30.0,
             maximumTelemetryFramesPerSecond: 10.0,
             pollInterval: trackIRPollingInterval(
+                shouldPublishUI: shouldPublishUI,
                 isVideoEnabled: isVideoEnabled,
                 isMouseMovementEnabled: isMouseMovementEnabled,
                 maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond
@@ -378,8 +397,16 @@ final class TrackIRCameraController: ObservableObject {
             }
 
             while !Task.isCancelled {
+                let shouldReadSnapshot = trackIRShouldReadSnapshot(
+                    shouldPublishUI: configuration.shouldPublishUI,
+                    isVideoEnabled: configuration.isVideoEnabled,
+                    isMouseMovementEnabled: configuration.isMouseMovementEnabled
+                )
                 var snapshot = otir_trackir_session_snapshot()
                 var latestPreviewImage: CGImage?
+                var nextDisplayState = TrackIRCameraDisplayState()
+                var shouldPublishDisplayState = false
+                var shouldClearPreviewImage = false
                 let currentTime = ProcessInfo.processInfo.systemUptime
                 let lowPowerTransition = trackIRLowPowerState(
                     previousBackgroundIdleStartTime: backgroundIdleStartTime,
@@ -398,11 +425,13 @@ final class TrackIRCameraController: ObservableObject {
                     isLowPowerModeEnabled = lowPowerTransition.isLowPowerModeEnabled
                 }
 
-                otir_trackir_session_copy_snapshot(session, &snapshot)
+                if shouldReadSnapshot {
+                    otir_trackir_session_copy_snapshot(session, &snapshot)
+                }
 
                 let elapsedPreviewTime = lastPreviewUpdateTime.map { currentTime - $0 }
 
-                if trackIRShouldUpdatePreviewFrame(
+                if shouldReadSnapshot && trackIRShouldUpdatePreviewFrame(
                     isVideoEnabled: configuration.isVideoEnabled,
                     hasPreviewFrame: snapshot.has_preview_frame,
                     previewFrameGeneration: snapshot.preview_frame_generation,
@@ -432,27 +461,29 @@ final class TrackIRCameraController: ObservableObject {
                     }
                 }
 
-                let snapshotCopy = snapshot
-                let previewImageCopy = latestPreviewImage
-                let nextDisplayState = trackIRDisplayState(snapshot: snapshotCopy)
-                let elapsedDisplayTime = lastDisplayUpdateTime.map { currentTime - $0 }
-                let shouldPublishDisplayState = trackIRShouldPublishDisplayState(
-                    shouldPublishUI: configuration.shouldPublishUI,
-                    currentDisplayState: nextDisplayState,
-                    lastPublishedDisplayState: lastPublishedDisplayState,
-                    elapsedTimeSinceLastDisplay: elapsedDisplayTime,
-                    maximumDisplayFramesPerSecond: configuration.maximumTelemetryFramesPerSecond
-                )
-                let shouldClearPreviewImage = configuration.shouldPublishUI &&
-                    hasPublishedPreviewImage &&
-                    (!configuration.isVideoEnabled ||
-                        !snapshotCopy.has_preview_frame ||
-                        snapshotCopy.phase != OTIR_TRACKIR_SESSION_PHASE_STREAMING)
-                let didMoveMouse = trackIRApplyMouseMovement(
-                    controller: mouseController,
-                    snapshot: snapshotCopy,
-                    configuration: configuration
-                )
+                if configuration.shouldPublishUI {
+                    let elapsedDisplayTime = lastDisplayUpdateTime.map { currentTime - $0 }
+
+                    nextDisplayState = trackIRDisplayState(snapshot: snapshot)
+                    shouldPublishDisplayState = trackIRShouldPublishDisplayState(
+                        shouldPublishUI: configuration.shouldPublishUI,
+                        currentDisplayState: nextDisplayState,
+                        lastPublishedDisplayState: lastPublishedDisplayState,
+                        elapsedTimeSinceLastDisplay: elapsedDisplayTime,
+                        maximumDisplayFramesPerSecond: configuration.maximumTelemetryFramesPerSecond
+                    )
+                    shouldClearPreviewImage = hasPublishedPreviewImage &&
+                        (!configuration.isVideoEnabled ||
+                            !snapshot.has_preview_frame ||
+                            snapshot.phase != OTIR_TRACKIR_SESSION_PHASE_STREAMING)
+                }
+
+                let didMoveMouse = shouldReadSnapshot && configuration.isMouseMovementEnabled &&
+                    trackIRApplyMouseMovement(
+                        controller: mouseController,
+                        snapshot: snapshot,
+                        configuration: configuration
+                    )
                 if didMoveMouse {
                     lastMouseMovementTime = currentTime
                 } else if trackIRShouldFireKeepAwake(
@@ -464,14 +495,19 @@ final class TrackIRCameraController: ObservableObject {
                     lastMouseMovementTime = currentTime
                 }
 
-                if shouldPublishDisplayState || previewImageCopy != nil || shouldClearPreviewImage {
+                if shouldPublishDisplayState || latestPreviewImage != nil || shouldClearPreviewImage {
                     let cameraController = self
-                    await MainActor.run {
+                    let displayStateToApply = nextDisplayState
+                    let previewImageToApply = latestPreviewImage
+                    let shouldUpdateDisplayState = shouldPublishDisplayState
+                    let shouldClearPreview = shouldClearPreviewImage
+
+                    await MainActor.run { [cameraController] in
                         cameraController?.apply(
-                            displayState: nextDisplayState,
-                            previewImage: previewImageCopy,
-                            shouldUpdateDisplayState: shouldPublishDisplayState,
-                            shouldClearPreviewImage: shouldClearPreviewImage
+                            displayState: displayStateToApply,
+                            previewImage: previewImageToApply,
+                            shouldUpdateDisplayState: shouldUpdateDisplayState,
+                            shouldClearPreviewImage: shouldClearPreview
                         )
                     }
                 }
@@ -480,7 +516,7 @@ final class TrackIRCameraController: ObservableObject {
                     lastPublishedDisplayState = nextDisplayState
                     lastDisplayUpdateTime = currentTime
                 }
-                if previewImageCopy != nil {
+                if latestPreviewImage != nil {
                     hasPublishedPreviewImage = true
                 } else if shouldClearPreviewImage {
                     hasPublishedPreviewImage = false
@@ -605,6 +641,14 @@ nonisolated func trackIRShouldFireKeepAwake(
         timeSinceLastMouseMovement >= Double(keepAwakeSeconds)
 }
 
+nonisolated func trackIRShouldReadSnapshot(
+    shouldPublishUI: Bool,
+    isVideoEnabled: Bool,
+    isMouseMovementEnabled: Bool
+) -> Bool {
+    shouldPublishUI || isVideoEnabled || isMouseMovementEnabled
+}
+
 struct TrackIRLowPowerTransition: Equatable {
     let backgroundIdleStartTime: TimeInterval?
     let isLowPowerModeEnabled: Bool
@@ -633,12 +677,13 @@ nonisolated func trackIRLowPowerState(
 }
 
 nonisolated func trackIRPollingInterval(
+    shouldPublishUI: Bool,
     isVideoEnabled: Bool,
     isMouseMovementEnabled: Bool,
     maximumTrackingFramesPerSecond: Double
 ) -> TimeInterval {
-    guard isVideoEnabled || isMouseMovementEnabled else {
-        return 0.2
+    guard shouldPublishUI || isVideoEnabled || isMouseMovementEnabled else {
+        return 1.0
     }
 
     let framesPerSecond = maximumTrackingFramesPerSecond > 0
@@ -812,6 +857,10 @@ nonisolated func trackIRPreviewImage(frameBytes: [UInt8], width: Int, height: In
         return nil
     }
 
+    enum PreviewCache {
+        static let grayColorSpace = CGColorSpaceCreateDeviceGray()
+    }
+
     let frameData = Data(frameBytes)
     guard let dataProvider = CGDataProvider(data: frameData as CFData) else {
         return nil
@@ -823,7 +872,7 @@ nonisolated func trackIRPreviewImage(frameBytes: [UInt8], width: Int, height: In
         bitsPerComponent: 8,
         bitsPerPixel: 8,
         bytesPerRow: width,
-        space: CGColorSpaceCreateDeviceGray(),
+        space: PreviewCache.grayColorSpace,
         bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
         provider: dataProvider,
         decode: nil,

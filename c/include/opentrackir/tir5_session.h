@@ -29,6 +29,13 @@ typedef enum otir_trackir_session_processing_mode {
     OTIR_TRACKIR_SESSION_PROCESSING_MODE_LOW_POWER = 3
 } otir_trackir_session_processing_mode;
 
+typedef struct otir_trackir_session_source_rate_sample {
+    double frame_rate;
+    bool has_frame_rate;
+    int sampled_frame_count;
+    double sample_start_time;
+} otir_trackir_session_source_rate_sample;
+
 typedef struct otir_trackir_session_snapshot {
     otir_trackir_session_phase phase;
     otir_status status;
@@ -77,6 +84,11 @@ otir_trackir_session_processing_mode otir_trackir_session_select_processing_mode
     bool should_process_tracking,
     bool should_publish_preview,
     bool tracking_is_rate_limited
+);
+otir_trackir_session_source_rate_sample otir_trackir_session_next_source_rate_sample(
+    bool low_power_mode_enabled,
+    otir_trackir_session_source_rate_sample current_sample,
+    double now
 );
 void otir_trackir_session_copy_snapshot(
     otir_trackir_session *session,

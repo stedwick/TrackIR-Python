@@ -102,7 +102,7 @@ The macOS project now streams real TrackIR data through the shared C session lay
 
 - a live grayscale preview rendered with native Apple image APIs
 - centroid, frame-rate, packet-type, and phase telemetry in the dashboard
-- preview publishing that pauses when the window is hidden or inactive, with snapshot polling kept alive only when mouse movement or keep-awake behavior still needs it
+- preview publishing that pauses when the window is hidden or inactive, with keep-awake-only background polling skipping snapshot reads and a host-side low-power mode engaging after 60 seconds of continuous hidden-window plus mouse-disabled idle time
 - controls for TrackIR enablement, preview visibility, FPS caps, blob filtering, video transforms, keep-awake, and timeout behavior
 - mouse movement driven by shared C tracking logic with a macOS Quartz event bridge
 - a global keyboard shortcut to toggle mouse movement
@@ -133,6 +133,13 @@ cd /Users/philip/src/OpenTrackIR
 xcodebuild -project mac/OpenTrackIR.xcodeproj -scheme OpenTrackIR -destination 'platform=macOS' test -only-testing:OpenTrackIRTests
 ```
 
+To run the full macOS suite, including UI tests:
+
+```sh
+cd /Users/philip/src/OpenTrackIR
+xcodebuild -project mac/OpenTrackIR.xcodeproj -scheme OpenTrackIR -destination 'platform=macOS' test
+```
+
 To run the built app from Finder, use Xcode's Product > Show Build Folder, then open `OpenTrackIR.app`.
 
 If you want to launch it from the terminal after building:
@@ -152,6 +159,14 @@ cd /Users/philip/src/OpenTrackIR
 cmake -S . -B build
 cmake --build build --target test_tir5
 ./build/c/test_tir5
+```
+
+Run the Python unit tests from the managed environment:
+
+```sh
+cd /Users/philip/src/OpenTrackIR/python
+uv sync
+uv run python -m unittest discover -s tests -v
 ```
 
 Run the C text streaming harness:

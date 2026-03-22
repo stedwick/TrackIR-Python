@@ -37,6 +37,7 @@ static void test_normalize_maximum_frames_per_second_rejects_invalid_values(void
 static void test_should_process_frame_respects_processing_cap(void);
 static void test_should_publish_frame_respects_maximum_rate(void);
 static void test_session_processing_mode_prefers_low_power_and_preview_only(void);
+static void test_session_source_rate_sample_disables_measurement_in_low_power(void);
 static void test_mouse_transform_delta_applies_flip_and_rotation(void);
 static void test_mouse_vertical_gain_scales_y_axis(void);
 static void test_mouse_smoothing_mode_matches_python_thresholds(void);
@@ -66,6 +67,7 @@ int main(void) {
     test_should_process_frame_respects_processing_cap();
     test_should_publish_frame_respects_maximum_rate();
     test_session_processing_mode_prefers_low_power_and_preview_only();
+    test_session_source_rate_sample_disables_measurement_in_low_power();
     test_mouse_transform_delta_applies_flip_and_rotation();
     test_mouse_vertical_gain_scales_y_axis();
     test_mouse_smoothing_mode_matches_python_thresholds();
@@ -458,6 +460,27 @@ static void test_session_processing_mode_prefers_low_power_and_preview_only(void
         otir_trackir_session_select_processing_mode(false, true, false, false) ==
         OTIR_TRACKIR_SESSION_PROCESSING_MODE_FULL_TRACKING
     );
+}
+
+static void test_session_source_rate_sample_disables_measurement_in_low_power(void) {
+    otir_trackir_session_source_rate_sample sample = {
+        .frame_rate = 120.0,
+        .has_frame_rate = true,
+        .sampled_frame_count = 3,
+        .sample_start_time = 1.0,
+    };
+
+    sample = otir_trackir_session_next_source_rate_sample(false, sample, 1.30);
+    assert(sample.has_frame_rate);
+    assert(fabs(sample.frame_rate - 13.3333333333) < 0.0001);
+    assert(sample.sampled_frame_count == 0);
+    assert(fabs(sample.sample_start_time - 1.30) < 0.0001);
+
+    sample = otir_trackir_session_next_source_rate_sample(true, sample, 2.0);
+    assert(!sample.has_frame_rate);
+    assert(sample.frame_rate == 0.0);
+    assert(sample.sampled_frame_count == 0);
+    assert(fabs(sample.sample_start_time - 2.0) < 0.0001);
 }
 
 static void test_mouse_transform_delta_applies_flip_and_rotation(void) {

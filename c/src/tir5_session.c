@@ -242,6 +242,32 @@ otir_trackir_session_processing_mode otir_trackir_session_select_processing_mode
     return OTIR_TRACKIR_SESSION_PROCESSING_MODE_FULL_TRACKING;
 }
 
+otir_trackir_session_source_rate_sample otir_trackir_session_next_source_rate_sample(
+    bool low_power_mode_enabled,
+    otir_trackir_session_source_rate_sample current_sample,
+    double now
+) {
+    if (low_power_mode_enabled) {
+        return (otir_trackir_session_source_rate_sample){
+            .frame_rate = 0.0,
+            .has_frame_rate = false,
+            .sampled_frame_count = 0,
+            .sample_start_time = now,
+        };
+    }
+
+    current_sample.sampled_frame_count += 1;
+    if (now - current_sample.sample_start_time >= 0.25) {
+        current_sample.frame_rate =
+            (double)current_sample.sampled_frame_count / (now - current_sample.sample_start_time);
+        current_sample.has_frame_rate = true;
+        current_sample.sampled_frame_count = 0;
+        current_sample.sample_start_time = now;
+    }
+
+    return current_sample;
+}
+
 void otir_trackir_session_copy_snapshot(
     otir_trackir_session *session,
     otir_trackir_session_snapshot *out_snapshot
@@ -288,10 +314,12 @@ static void *trackir_session_worker_main(void *context) {
     otir_tir5v3_packet *packet = malloc(sizeof(*packet));
     otir_status status;
     uint64_t frame_index = 0;
-    double measured_source_frame_rate = 0.0;
-    bool has_source_frame_rate = false;
-    int sampled_source_frame_count = 0;
-    double source_sample_start_time = trackir_session_now_seconds();
+    otir_trackir_session_source_rate_sample source_rate_sample = {
+        .frame_rate = 0.0,
+        .has_frame_rate = false,
+        .sampled_frame_count = 0,
+        .sample_start_time = trackir_session_now_seconds(),
+    };
     double last_tracking_process_time = 0.0;
     bool has_tracking_process_time = false;
     double last_preview_publish_time = 0.0;
@@ -382,21 +410,17 @@ static void *trackir_session_worker_main(void *context) {
                 continue;
             }
 
-            sampled_source_frame_count += 1;
             now = trackir_session_now_seconds();
-
-            if (now - source_sample_start_time >= 0.25) {
-                measured_source_frame_rate =
-                    (double)sampled_source_frame_count / (now - source_sample_start_time);
-                has_source_frame_rate = true;
-                sampled_source_frame_count = 0;
-                source_sample_start_time = now;
-            }
+            runtime_config = trackir_session_runtime_config_snapshot(session);
+            source_rate_sample = otir_trackir_session_next_source_rate_sample(
+                runtime_config.low_power_mode_enabled,
+                source_rate_sample,
+                now
+            );
 
             if (has_tracking_process_time) {
                 elapsed_since_last_tracking_process = now - last_tracking_process_time;
             }
-            runtime_config = trackir_session_runtime_config_snapshot(session);
             effective_tracking_frames_per_second = runtime_config.low_power_mode_enabled
                 ? OTIR_TRACKIR_SESSION_LOW_POWER_FRAMES_PER_SECOND
                 : runtime_config.maximum_tracking_frames_per_second;
@@ -422,8 +446,8 @@ static void *trackir_session_worker_main(void *context) {
 
             tracking_is_rate_limited = !runtime_config.low_power_mode_enabled &&
                 effective_tracking_frames_per_second > 0.0 &&
-                has_source_frame_rate &&
-                effective_tracking_frames_per_second < measured_source_frame_rate;
+                source_rate_sample.has_frame_rate &&
+                effective_tracking_frames_per_second < source_rate_sample.frame_rate;
             processing_mode = otir_trackir_session_select_processing_mode(
                 runtime_config.low_power_mode_enabled,
                 should_process_tracking,
@@ -466,8 +490,8 @@ static void *trackir_session_worker_main(void *context) {
                 session->snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_STREAMING;
                 session->snapshot.status = OTIR_STATUS_OK;
                 session->snapshot.frame_index = frame_index;
-                session->snapshot.has_frame_rate = has_source_frame_rate;
-                session->snapshot.frame_rate = measured_source_frame_rate;
+                session->snapshot.has_frame_rate = source_rate_sample.has_frame_rate;
+                session->snapshot.frame_rate = source_rate_sample.frame_rate;
                 session->snapshot.has_centroid = has_centroid;
                 session->snapshot.centroid_x = centroid_x;
                 session->snapshot.centroid_y = centroid_y;
@@ -483,8 +507,8 @@ static void *trackir_session_worker_main(void *context) {
                 pthread_mutex_lock(&session->mutex);
                 session->snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_STREAMING;
                 session->snapshot.status = OTIR_STATUS_OK;
-                session->snapshot.has_frame_rate = has_source_frame_rate;
-                session->snapshot.frame_rate = measured_source_frame_rate;
+                session->snapshot.has_frame_rate = source_rate_sample.has_frame_rate;
+                session->snapshot.frame_rate = source_rate_sample.frame_rate;
                 session->snapshot.has_packet_type = true;
                 session->snapshot.packet_type = packet->packet_type;
                 session->snapshot.is_low_power_mode = false;
