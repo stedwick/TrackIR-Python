@@ -30,7 +30,9 @@ final class AppLifecycleController: NSObject, NSApplicationDelegate {
     weak var cameraController: TrackIRCameraController?
 
     func applicationWillTerminate(_ notification: Notification) {
-        cameraController?.shutdownAndWait()
+        if shouldShutdownTrackIRRuntime(for: .appWillTerminate) {
+            cameraController?.shutdownAndWait()
+        }
     }
 }
 

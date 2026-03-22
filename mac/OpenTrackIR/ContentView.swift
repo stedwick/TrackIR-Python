@@ -67,7 +67,9 @@ struct ContentView: View {
             syncTrackIRCamera()
         }
         .onDisappear {
-            cameraController.shutdown()
+            if shouldShutdownTrackIRRuntime(for: .windowClosed) {
+                cameraController.shutdown()
+            }
         }
     }
 
@@ -715,6 +717,20 @@ func trackIRRateSummaryLabel(maximumFramesPerSecond: Double, sourceFrameRate: Do
 
 extension KeyboardShortcuts.Name {
     static let toggleMouseMovement = Self("toggleMouseMovement", default: defaultMouseMovementShortcut())
+}
+
+enum TrackIRRuntimeLifecycleEvent {
+    case windowClosed
+    case appWillTerminate
+}
+
+func shouldShutdownTrackIRRuntime(for event: TrackIRRuntimeLifecycleEvent) -> Bool {
+    switch event {
+        case .windowClosed:
+            return false
+        case .appWillTerminate:
+            return true
+    }
 }
 
 func dashboardLayout(for width: CGFloat) -> DashboardLayoutMode {

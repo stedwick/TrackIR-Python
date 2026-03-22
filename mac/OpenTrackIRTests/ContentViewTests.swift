@@ -144,6 +144,11 @@ struct ContentViewTests {
         #expect(!shouldStreamTrackIRSession(isTrackIREnabled: false, isVideoEnabled: true))
     }
 
+    @Test func trackIRRuntimeShutdownPolicyDependsOnAppLifecycleEvent() {
+        #expect(!shouldShutdownTrackIRRuntime(for: .windowClosed))
+        #expect(shouldShutdownTrackIRRuntime(for: .appWillTerminate))
+    }
+
     @Test func xcodePreviewEnvironmentDetectionMatchesKnownFlags() {
         #expect(isRunningInXcodePreview(environment: ["XCODE_RUNNING_FOR_PREVIEWS": "1"]))
         #expect(isRunningInXcodePreview(environment: ["XCODE_RUNNING_FOR_PLAYGROUNDS": "1"]))
