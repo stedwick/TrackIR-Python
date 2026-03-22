@@ -422,15 +422,15 @@ struct ContentView: View {
         VStack(spacing: 4) {
             Text(title.uppercased())
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.secondary)
             Text(value)
                 .font(.callout.weight(.medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
         .padding(.horizontal, 10)
-        .background(Color.white.opacity(0.08))
+        .background(rowFillColor)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
