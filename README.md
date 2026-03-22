@@ -145,6 +145,7 @@ cd /Users/philip/src/OpenTrackIR
 cmake -S . -B build
 cmake --build build --target opentrackir_stream_dump
 ./build/c/opentrackir_stream_dump
+./build/c/opentrackir_stream_dump --fps 60
 ```
 
 Run the C++ OpenCV preview harness:
@@ -154,4 +155,5 @@ cd /Users/philip/src/OpenTrackIR
 cmake -S . -B build
 cmake --build build --target opentrackir_preview
 ./build/cpp/opentrackir_preview
+./build/cpp/opentrackir_preview --fps 60
 ```

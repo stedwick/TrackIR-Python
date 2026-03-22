@@ -62,6 +62,25 @@ double otir_tir5v3_normalize_maximum_frames_per_second(double maximum_frames_per
     return maximum_frames_per_second;
 }
 
+bool otir_tir5v3_should_process_frame(
+    double current_time_seconds,
+    double last_processed_time_seconds,
+    bool has_last_processed_time,
+    double maximum_frames_per_second
+) {
+    if (!has_last_processed_time) {
+        return true;
+    }
+    if (otir_tir5v3_normalize_maximum_frames_per_second(maximum_frames_per_second) <= 0.0) {
+        return true;
+    }
+
+    return otir_tir5v3_should_publish_frame(
+        current_time_seconds - last_processed_time_seconds,
+        maximum_frames_per_second
+    );
+}
+
 bool otir_tir5v3_should_publish_frame(
     double elapsed_since_last_frame,
     double maximum_frames_per_second

@@ -4,3 +4,4 @@
 #include "../../c/src/tir5_protocol.c"
 #include "../../c/src/tir5_frame.c"
 #include "../../c/src/tir5_device.c"
+#include "../../c/src/tir5_session.c"

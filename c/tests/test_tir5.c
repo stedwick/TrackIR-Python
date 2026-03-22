@@ -1,4 +1,5 @@
 #include "opentrackir/tir5.h"
+#include "opentrackir/tir5_tooling.h"
 
 #include <assert.h>
 #include <math.h>
@@ -26,7 +27,9 @@ static void test_compute_weighted_centroid_matches_linuxtrack_formula(void);
 static void test_shutdown_steps_turns_led_off_even_without_streaming(void);
 static void test_build_frame_marks_stripes_and_stats(void);
 static void test_normalize_maximum_frames_per_second_rejects_invalid_values(void);
+static void test_should_process_frame_respects_processing_cap(void);
 static void test_should_publish_frame_respects_maximum_rate(void);
+static void test_cli_read_maximum_frames_per_second_accepts_optional_argument(void);
 
 int main(void) {
     test_apply_transport_obfuscates_header_and_nonce();
@@ -40,7 +43,9 @@ int main(void) {
     test_shutdown_steps_turns_led_off_even_without_streaming();
     test_build_frame_marks_stripes_and_stats();
     test_normalize_maximum_frames_per_second_rejects_invalid_values();
+    test_should_process_frame_respects_processing_cap();
     test_should_publish_frame_respects_maximum_rate();
+    test_cli_read_maximum_frames_per_second_accepts_optional_argument();
     puts("c/tests/test_tir5: all tests passed");
     return 0;
 }
@@ -279,4 +284,30 @@ static void test_normalize_maximum_frames_per_second_rejects_invalid_values(void
     assert(otir_tir5v3_normalize_maximum_frames_per_second(0.0) == 0.0);
     assert(otir_tir5v3_normalize_maximum_frames_per_second(-15.0) == 0.0);
     assert(otir_tir5v3_normalize_maximum_frames_per_second(NAN) == 0.0);
+}
+
+static void test_should_process_frame_respects_processing_cap(void) {
+    assert(otir_tir5v3_should_process_frame(10.0, 0.0, false, 60.0));
+    assert(otir_tir5v3_should_process_frame(10.0, 9.0, true, 0.0));
+    assert(!otir_tir5v3_should_process_frame(10.01, 10.0, true, 60.0));
+    assert(otir_tir5v3_should_process_frame(10.02, 10.0, true, 60.0));
+}
+
+static void test_cli_read_maximum_frames_per_second_accepts_optional_argument(void) {
+    const char *without_flag[] = {"stream_dump"};
+    const char *separate_flag[] = {"stream_dump", "--fps", "60"};
+    const char *inline_flag[] = {"stream_dump", "--fps=30"};
+    const char *invalid_flag[] = {"stream_dump", "--fps", "-1"};
+    double frames_per_second = -1.0;
+
+    assert(otir_cli_read_maximum_frames_per_second(1, without_flag, &frames_per_second) == OTIR_STATUS_OK);
+    assert(frames_per_second == 0.0);
+
+    assert(otir_cli_read_maximum_frames_per_second(3, separate_flag, &frames_per_second) == OTIR_STATUS_OK);
+    assert(frames_per_second == 60.0);
+
+    assert(otir_cli_read_maximum_frames_per_second(2, inline_flag, &frames_per_second) == OTIR_STATUS_OK);
+    assert(frames_per_second == 30.0);
+
+    assert(otir_cli_read_maximum_frames_per_second(3, invalid_flag, &frames_per_second) == OTIR_STATUS_INVALID_ARGUMENT);
 }

@@ -1,10 +1,10 @@
-#include "TrackIRNativeSession.h"
+#include "opentrackir/tir5_session.h"
 
-#include <CoreFoundation/CoreFoundation.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define OTIR_TRACKIR_SESSION_MAX_PREVIEW_FRAMES_PER_SECOND 30.0
 
@@ -40,6 +40,7 @@ static void trackir_session_format_failure_message(
     char *buffer,
     size_t capacity
 );
+static double trackir_session_now_seconds(void);
 
 otir_trackir_session *otir_trackir_session_create(void) {
     otir_trackir_session *session = calloc(1, sizeof(*session));
@@ -212,10 +213,10 @@ static void *trackir_session_worker_main(void *context) {
     double measured_source_frame_rate = 0.0;
     bool has_source_frame_rate = false;
     int sampled_source_frame_count = 0;
-    CFAbsoluteTime source_sample_start_time = CFAbsoluteTimeGetCurrent();
-    CFAbsoluteTime last_tracking_process_time = 0.0;
+    double source_sample_start_time = trackir_session_now_seconds();
+    double last_tracking_process_time = 0.0;
     bool has_tracking_process_time = false;
-    CFAbsoluteTime last_preview_publish_time = 0.0;
+    double last_preview_publish_time = 0.0;
     bool has_preview_publish_time = false;
     uint8_t *frame_buffer = malloc(OTIR_TRACKIR_SESSION_FRAME_BYTES);
 
@@ -235,6 +236,7 @@ static void *trackir_session_worker_main(void *context) {
         trackir_session_set_failure_locked(session, status, "Open");
         session->worker_exited = true;
         pthread_mutex_unlock(&session->mutex);
+        free(packet);
         free(frame_buffer);
         return NULL;
     }
@@ -277,9 +279,9 @@ static void *trackir_session_worker_main(void *context) {
             bool has_centroid = false;
             bool should_process_tracking = false;
             bool should_publish_preview = false;
-            CFAbsoluteTime now;
-            CFAbsoluteTime elapsed_since_last_tracking_process = 0.0;
-            CFAbsoluteTime elapsed_since_last_publish = 0.0;
+            double now;
+            double elapsed_since_last_tracking_process = 0.0;
+            double elapsed_since_last_publish = 0.0;
 
             status = otir_tir5v3_read_packet(device, 50, packet);
 
@@ -294,7 +296,7 @@ static void *trackir_session_worker_main(void *context) {
             }
 
             sampled_source_frame_count += 1;
-            now = CFAbsoluteTimeGetCurrent();
+            now = trackir_session_now_seconds();
 
             if (now - source_sample_start_time >= 0.25) {
                 measured_source_frame_rate =
@@ -520,20 +522,22 @@ static void trackir_session_format_failure_message(
         );
         return;
     }
-    if (status == OTIR_STATUS_IO && operation != NULL && strcmp(operation, "Open") == 0) {
-        trackir_copy_string(
-            buffer,
-            capacity,
-            "Open failed: io. TrackIR may be busy in another app. Quit other TrackIR tools, then Refresh."
-        );
-        return;
-    }
 
     status_description = otir_status_string(status);
-    if (operation == NULL || status_description == NULL) {
-        trackir_copy_string(buffer, capacity, "TrackIR failed.");
+    if (operation == NULL || operation[0] == '\0') {
+        snprintf(buffer, capacity, "%s.", status_description);
         return;
     }
 
     snprintf(buffer, capacity, "%s failed: %s.", operation, status_description);
+}
+
+static double trackir_session_now_seconds(void) {
+    struct timespec time_spec;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &time_spec) != 0) {
+        return 0.0;
+    }
+
+    return (double)time_spec.tv_sec + ((double)time_spec.tv_nsec / 1000000000.0);
 }

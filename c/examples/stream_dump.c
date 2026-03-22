@@ -1,4 +1,5 @@
 #include <opentrackir/tir5.h>
+#include <opentrackir/tir5_tooling.h>
 
 #include <signal.h>
 #include <stdbool.h>
@@ -18,15 +19,31 @@ static void fail(otir_status status, const char *message) {
     exit(1);
 }
 
-int main(void) {
+static void print_usage(const char *program_name) {
+    fprintf(stderr, "Usage: %s [--fps <value>|--fps=<value>]\n", program_name);
+}
+
+int main(int argc, char **argv) {
     otir_tir5v3_device *device = NULL;
     otir_tir5v3_status statuses[OTIR_TIR5V3_INIT_STATUS_COUNT];
     otir_tir5v3_device_summary summary;
     size_t status_count = 0;
     uint64_t frame_index = 0;
+    double maximum_frames_per_second = 0.0;
+    double last_processed_time_seconds = 0.0;
+    bool has_last_processed_time = false;
     otir_status status;
 
     signal(SIGINT, handle_signal);
+    status = otir_cli_read_maximum_frames_per_second(
+        argc,
+        (const char *const *)argv,
+        &maximum_frames_per_second
+    );
+    if (status != OTIR_STATUS_OK) {
+        print_usage(argv[0]);
+        fail(status, "Invalid FPS argument");
+    }
 
     status = otir_tir5v3_open(&device);
     if (status != OTIR_STATUS_OK) {
@@ -70,10 +87,15 @@ int main(void) {
         fail(status, "Failed to start streaming");
     }
 
-    puts("Streaming. Press Ctrl+C to quit.");
+    if (maximum_frames_per_second > 0.0) {
+        printf("Streaming at max %.0f fps. Press Ctrl+C to quit.\n", maximum_frames_per_second);
+    } else {
+        puts("Streaming uncapped. Press Ctrl+C to quit.");
+    }
     while (!g_stop_requested) {
         otir_tir5v3_packet packet;
         otir_tir5v3_frame_stats stats;
+        double current_time_seconds;
 
         status = otir_tir5v3_read_packet(device, 50, &packet);
         if (status == OTIR_STATUS_TIMEOUT) {
@@ -86,7 +108,18 @@ int main(void) {
         if (packet.packet_type != 0x00 && packet.packet_type != 0x05) {
             continue;
         }
+        current_time_seconds = otir_monotonic_time_seconds();
+        if (!otir_tir5v3_should_process_frame(
+            current_time_seconds,
+            last_processed_time_seconds,
+            has_last_processed_time,
+            maximum_frames_per_second
+        )) {
+            continue;
+        }
 
+        last_processed_time_seconds = current_time_seconds;
+        has_last_processed_time = true;
         frame_index += 1;
         otir_tir5v3_packet_stats(&packet, frame_index, &stats);
         if (stats.has_centroid) {

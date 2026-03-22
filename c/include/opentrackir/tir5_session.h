@@ -1,11 +1,11 @@
-#ifndef OPENTRACKIR_TRACKIRNATIVESESSION_H
-#define OPENTRACKIR_TRACKIRNATIVESESSION_H
+#ifndef OPENTRACKIR_TIR5_SESSION_H
+#define OPENTRACKIR_TIR5_SESSION_H
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../../c/include/opentrackir/tir5.h"
+#include "tir5.h"
 
 #ifdef __cplusplus
 extern "C" {

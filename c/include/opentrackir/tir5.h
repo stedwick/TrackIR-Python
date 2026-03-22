@@ -166,6 +166,12 @@ void otir_tir5v3_build_frame(
     size_t stride
 );
 double otir_tir5v3_normalize_maximum_frames_per_second(double maximum_frames_per_second);
+bool otir_tir5v3_should_process_frame(
+    double current_time_seconds,
+    double last_processed_time_seconds,
+    bool has_last_processed_time,
+    double maximum_frames_per_second
+);
 bool otir_tir5v3_should_publish_frame(
     double elapsed_since_last_frame,
     double maximum_frames_per_second

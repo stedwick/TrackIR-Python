@@ -1,4 +1,5 @@
 #include <opentrackir/tir5.h>
+#include <opentrackir/tir5_tooling.h>
 
 #include <algorithm>
 #include <cmath>
@@ -29,16 +30,34 @@ void fail(otir_status status, const std::string &message) {
     std::exit(1);
 }
 
+void print_usage(const char *program_name) {
+    std::cerr << "Usage: " << program_name << " [--fps <value>|--fps=<value>]\n";
+}
+
 }  // namespace
 
-int main() {
+int main(int argc, char **argv) {
     DeviceCloser handle;
     otir_tir5v3_status statuses[OTIR_TIR5V3_INIT_STATUS_COUNT];
     otir_tir5v3_device_summary summary;
     size_t status_count = 0;
     uint64_t frame_index = 0;
+    double maximum_frames_per_second = 0.0;
+    double last_processed_time_seconds = 0.0;
+    bool has_last_processed_time = false;
     std::vector<uint8_t> frame(OTIR_TIR5V3_FRAME_WIDTH * OTIR_TIR5V3_FRAME_HEIGHT);
-    otir_status status = otir_tir5v3_open(&handle.device);
+    otir_status status = otir_cli_read_maximum_frames_per_second(
+        argc,
+        const_cast<const char *const *>(argv),
+        &maximum_frames_per_second
+    );
+
+    if (status != OTIR_STATUS_OK) {
+        print_usage(argv[0]);
+        fail(status, "Invalid FPS argument");
+    }
+
+    status = otir_tir5v3_open(&handle.device);
 
     if (status != OTIR_STATUS_OK) {
         fail(status, "Failed to open TrackIR device");
@@ -76,7 +95,11 @@ int main() {
     }
 
     cv::namedWindow("TrackIR TIR5V3 Preview", cv::WINDOW_NORMAL);
-    std::cout << "Controls: q to quit\n";
+    if (maximum_frames_per_second > 0.0) {
+        std::cout << "Controls: q to quit, max " << static_cast<int>(maximum_frames_per_second) << " fps\n";
+    } else {
+        std::cout << "Controls: q to quit, uncapped\n";
+    }
 
     while (true) {
         otir_tir5v3_packet packet;
@@ -84,6 +107,7 @@ int main() {
         cv::Mat gray(OTIR_TIR5V3_FRAME_HEIGHT, OTIR_TIR5V3_FRAME_WIDTH, CV_8UC1, frame.data());
         cv::Mat image;
         std::ostringstream overlay;
+        double current_time_seconds;
 
         status = otir_tir5v3_read_packet(handle.device, 50, &packet);
         if (status == OTIR_STATUS_TIMEOUT) {
@@ -99,7 +123,22 @@ int main() {
         if (packet.packet_type != 0x00 && packet.packet_type != 0x05) {
             continue;
         }
+        current_time_seconds = otir_monotonic_time_seconds();
+        if (!otir_tir5v3_should_process_frame(
+            current_time_seconds,
+            last_processed_time_seconds,
+            has_last_processed_time,
+            maximum_frames_per_second
+        )) {
+            const int key = cv::waitKey(1) & 0xFF;
+            if (key == 'q') {
+                break;
+            }
+            continue;
+        }
 
+        last_processed_time_seconds = current_time_seconds;
+        has_last_processed_time = true;
         frame_index += 1;
         otir_tir5v3_build_frame(&packet, frame.data(), OTIR_TIR5V3_FRAME_WIDTH);
         otir_tir5v3_packet_stats(&packet, frame_index, &stats);
