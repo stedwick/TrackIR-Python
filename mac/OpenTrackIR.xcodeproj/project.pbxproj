@@ -435,7 +435,7 @@
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-lusb-1.0",
+					/opt/homebrew/opt/libusb/lib/libusb-1.0.a,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = philsapps.OpenTrackIR;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -492,7 +492,7 @@
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-lusb-1.0",
+					/opt/homebrew/opt/libusb/lib/libusb-1.0.a,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = philsapps.OpenTrackIR;
 				PRODUCT_NAME = "$(TARGET_NAME)";

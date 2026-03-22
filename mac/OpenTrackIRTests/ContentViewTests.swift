@@ -157,10 +157,11 @@ struct ContentViewTests {
     }
 
     @Test func trackIRPresentationRequiresActiveSceneAndVisibleWindow() {
-        #expect(trackIRPresentationIsActive(scenePhase: .active, isWindowVisible: true))
-        #expect(!trackIRPresentationIsActive(scenePhase: .inactive, isWindowVisible: true))
-        #expect(!trackIRPresentationIsActive(scenePhase: .background, isWindowVisible: true))
-        #expect(!trackIRPresentationIsActive(scenePhase: .active, isWindowVisible: false))
+        #expect(trackIRPresentationIsActive(scenePhase: .active, controlActiveState: .key, isWindowVisible: true))
+        #expect(!trackIRPresentationIsActive(scenePhase: .active, controlActiveState: .active, isWindowVisible: true))
+        #expect(!trackIRPresentationIsActive(scenePhase: .inactive, controlActiveState: .key, isWindowVisible: true))
+        #expect(!trackIRPresentationIsActive(scenePhase: .background, controlActiveState: .key, isWindowVisible: true))
+        #expect(!trackIRPresentationIsActive(scenePhase: .active, controlActiveState: .key, isWindowVisible: false))
     }
 
     @Test func xcodePreviewEnvironmentDetectionMatchesKnownFlags() {

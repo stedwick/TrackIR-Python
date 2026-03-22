@@ -12,6 +12,7 @@ private let defaultControlValues = controlDefaultValues()
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.controlActiveState) private var controlActiveState
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var cameraController: TrackIRCameraController
     @AppStorage(ControlPreferenceKey.videoEnabled.rawValue) private var isVideoEnabled = defaultControlValues.videoEnabled
@@ -70,6 +71,9 @@ struct ContentView: View {
             syncTrackIRCamera()
         }
         .onChange(of: scenePhase) { _, _ in
+            syncTrackIRCamera()
+        }
+        .onChange(of: controlActiveState) { _, _ in
             syncTrackIRCamera()
         }
         .onDisappear {
@@ -587,6 +591,7 @@ struct ContentView: View {
             maximumTrackingFramesPerSecond: videoFramesPerSecond,
             isWindowVisible: trackIRPresentationIsActive(
                 scenePhase: scenePhase,
+                controlActiveState: controlActiveState,
                 isWindowVisible: isWindowVisible
             )
         )
@@ -746,8 +751,12 @@ func shouldShutdownTrackIRRuntime(for event: TrackIRRuntimeLifecycleEvent) -> Bo
     }
 }
 
-func trackIRPresentationIsActive(scenePhase: ScenePhase, isWindowVisible: Bool) -> Bool {
-    isWindowVisible && scenePhase == .active
+func trackIRPresentationIsActive(
+    scenePhase: ScenePhase,
+    controlActiveState: ControlActiveState,
+    isWindowVisible: Bool
+) -> Bool {
+    isWindowVisible && scenePhase == .active && controlActiveState == .key
 }
 
 func dashboardLayout(for width: CGFloat) -> DashboardLayoutMode {
