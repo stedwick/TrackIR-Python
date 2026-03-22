@@ -12,7 +12,7 @@ import SwiftUI
 @main
 struct OpenTrackIRApp: App {
     @NSApplicationDelegateAdaptor(AppLifecycleController.self) private var appLifecycleController
-    @StateObject private var cameraController = TrackIRCameraController()
+    @StateObject private var runtimeController = TrackIRRuntimeController()
     @State private var mouseMovementHotkeyController = MouseMovementHotkeyController()
 
     init() {
@@ -21,9 +21,10 @@ struct OpenTrackIRApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(cameraController: cameraController)
+            ContentView(runtimeController: runtimeController)
                 .onAppear {
-                    appLifecycleController.cameraController = cameraController
+                    appLifecycleController.runtimeController = runtimeController
+                    mouseMovementHotkeyController.runtimeController = runtimeController
                 }
         }
     }
@@ -31,29 +32,23 @@ struct OpenTrackIRApp: App {
 
 @MainActor
 final class AppLifecycleController: NSObject, NSApplicationDelegate {
-    weak var cameraController: TrackIRCameraController?
+    weak var runtimeController: TrackIRRuntimeController?
 
     func applicationWillTerminate(_ notification: Notification) {
         if shouldShutdownTrackIRRuntime(for: .appWillTerminate) {
-            cameraController?.shutdownAndWait()
+            runtimeController?.shutdownAndWait()
         }
     }
 }
 
 @MainActor
 final class MouseMovementHotkeyController {
-    private let userDefaults: UserDefaults
+    weak var runtimeController: TrackIRRuntimeController?
 
-    init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
-
+    init() {
         KeyboardShortcuts.removeHandler(for: .toggleMouseMovement)
-        KeyboardShortcuts.onKeyUp(for: .toggleMouseMovement) { [userDefaults] in
-            let isMouseMovementEnabled = userDefaults.bool(forKey: ControlPreferenceKey.mouseMovementEnabled.rawValue)
-            userDefaults.set(
-                toggledMouseMovementState(isEnabled: isMouseMovementEnabled),
-                forKey: ControlPreferenceKey.mouseMovementEnabled.rawValue
-            )
+        KeyboardShortcuts.onKeyUp(for: .toggleMouseMovement) { [weak self] in
+            self?.runtimeController?.toggleMouseMovement()
         }
     }
 }

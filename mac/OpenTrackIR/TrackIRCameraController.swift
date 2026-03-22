@@ -11,16 +11,20 @@ enum TrackIRCameraPhase: Equatable {
     case failed
 }
 
+struct TrackIRCameraDisplayState: Equatable {
+    var phase: TrackIRCameraPhase = .idle
+    var lastErrorDescription: String?
+    var frameIndex: UInt64 = 0
+    var frameRate: Double?
+    var centroidX: Double?
+    var centroidY: Double?
+    var lastPacketType: UInt8?
+}
+
 @MainActor
 final class TrackIRCameraController: ObservableObject {
     @Published private(set) var previewImage: CGImage?
-    @Published private(set) var phase: TrackIRCameraPhase = .idle
-    @Published private(set) var lastErrorDescription: String?
-    @Published private(set) var frameIndex: UInt64 = 0
-    @Published private(set) var frameRate: Double?
-    @Published private(set) var centroidX: Double?
-    @Published private(set) var centroidY: Double?
-    @Published private(set) var lastPacketType: UInt8?
+    @Published private(set) var displayState = TrackIRCameraDisplayState()
 
     let backendLabel = "C + libusb"
 
@@ -30,7 +34,7 @@ final class TrackIRCameraController: ObservableObject {
     private var pollingConfiguration: TrackIRPollingConfiguration?
 
     var sourceLabel: String {
-        switch phase {
+        switch displayState.phase {
             case .idle:
                 return "Idle"
             case .starting:
@@ -45,23 +49,51 @@ final class TrackIRCameraController: ObservableObject {
     }
 
     var frameLabel: String {
-        frameIndex == 0 ? "-" : "#\(frameIndex)"
+        displayState.frameIndex == 0 ? "-" : "#\(displayState.frameIndex)"
     }
 
     var frameRateLabel: String {
-        trackIRFrameRateLabel(for: frameRate)
+        trackIRFrameRateLabel(for: displayState.frameRate)
     }
 
     var centroidPairLabel: String {
-        trackIRCoordinatePairLabel(x: centroidX, y: centroidY)
+        trackIRCoordinatePairLabel(x: displayState.centroidX, y: displayState.centroidY)
     }
 
     var packetTypeLabel: String {
-        guard let lastPacketType else {
+        guard let lastPacketType = displayState.lastPacketType else {
             return "-"
         }
 
         return String(format: "0x%02X", lastPacketType)
+    }
+
+    var phase: TrackIRCameraPhase {
+        displayState.phase
+    }
+
+    var lastErrorDescription: String? {
+        displayState.lastErrorDescription
+    }
+
+    var frameIndex: UInt64 {
+        displayState.frameIndex
+    }
+
+    var frameRate: Double? {
+        displayState.frameRate
+    }
+
+    var centroidX: Double? {
+        displayState.centroidX
+    }
+
+    var centroidY: Double? {
+        displayState.centroidY
+    }
+
+    var lastPacketType: UInt8? {
+        displayState.lastPacketType
     }
 
     func syncStreaming(
@@ -91,6 +123,7 @@ final class TrackIRCameraController: ObservableObject {
                 isVideoEnabled: effectiveVideoEnabled,
                 maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond,
                 shouldPollSnapshots: shouldPollSnapshots,
+                shouldPublishUI: isWindowVisible,
                 isMouseMovementEnabled: isMouseMovementEnabled,
                 mouseMovementSpeed: mouseMovementSpeed,
                 mouseTransform: mouseTransform
@@ -139,6 +172,7 @@ final class TrackIRCameraController: ObservableObject {
             isVideoEnabled: isVideoEnabled,
             maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond,
             shouldPollSnapshots: shouldPollSnapshots,
+            shouldPublishUI: isWindowVisible,
             isMouseMovementEnabled: isMouseMovementEnabled,
             mouseMovementSpeed: mouseMovementSpeed,
             mouseTransform: mouseTransform
@@ -157,13 +191,16 @@ final class TrackIRCameraController: ObservableObject {
         isVideoEnabled: Bool,
         maximumTrackingFramesPerSecond: Double,
         shouldPollSnapshots: Bool,
+        shouldPublishUI: Bool,
         isMouseMovementEnabled: Bool,
         mouseMovementSpeed: Double,
         mouseTransform: VideoPreviewTransform
     ) {
         guard let session = ensureSession() else {
-            phase = .failed
-            lastErrorDescription = "Failed to create TrackIR session."
+            displayState = TrackIRCameraDisplayState(
+                phase: .failed,
+                lastErrorDescription: "Failed to create TrackIR session."
+            )
             return
         }
 
@@ -179,19 +216,18 @@ final class TrackIRCameraController: ObservableObject {
 
         let startStatus = otir_trackir_session_start(session)
         guard startStatus == OTIR_STATUS_OK else {
-            phase = .failed
-            lastErrorDescription = trackIRFailureMessage(for: startStatus, operation: "Start session")
+            displayState = TrackIRCameraDisplayState(
+                phase: .failed,
+                lastErrorDescription: trackIRFailureMessage(
+                    for: startStatus,
+                    operation: "Start session"
+                )
+            )
             return
         }
 
         if pollTask == nil {
-            phase = .starting
-            lastErrorDescription = nil
-            frameIndex = 0
-            frameRate = nil
-            centroidX = nil
-            centroidY = nil
-            lastPacketType = nil
+            displayState = TrackIRCameraDisplayState(phase: .starting)
             previewImage = nil
         }
 
@@ -213,7 +249,9 @@ final class TrackIRCameraController: ObservableObject {
             isMouseMovementEnabled: isMouseMovementEnabled,
             mouseMovementSpeed: mouseMovementSpeed,
             mouseTransform: mouseTransform,
+            shouldPublishUI: shouldPublishUI,
             maximumPreviewFramesPerSecond: 30.0,
+            maximumTelemetryFramesPerSecond: 10.0,
             pollInterval: trackIRPollingInterval(
                 isVideoEnabled: isVideoEnabled,
                 isMouseMovementEnabled: isMouseMovementEnabled,
@@ -242,13 +280,7 @@ final class TrackIRCameraController: ObservableObject {
         }
 
         otir_mac_mouse_controller_reset(mouseController)
-        phase = .idle
-        lastErrorDescription = nil
-        frameIndex = 0
-        frameRate = nil
-        centroidX = nil
-        centroidY = nil
-        lastPacketType = nil
+        displayState = TrackIRCameraDisplayState()
         pollingConfiguration = nil
 
         if clearPreview {
@@ -274,6 +306,9 @@ final class TrackIRCameraController: ObservableObject {
         pollTask = Task.detached(priority: .utility) { [weak self] in
             var lastPreviewFrameGeneration: UInt64 = 0
             var lastPreviewUpdateTime: TimeInterval?
+            var lastDisplayUpdateTime: TimeInterval?
+            var lastPublishedDisplayState: TrackIRCameraDisplayState?
+            var hasPublishedPreviewImage = false
 
             while !Task.isCancelled {
                 var snapshot = otir_trackir_session_snapshot()
@@ -320,6 +355,20 @@ final class TrackIRCameraController: ObservableObject {
 
                 let snapshotCopy = snapshot
                 let previewImageCopy = latestPreviewImage
+                let nextDisplayState = trackIRDisplayState(snapshot: snapshotCopy)
+                let elapsedDisplayTime = lastDisplayUpdateTime.map { currentTime - $0 }
+                let shouldPublishDisplayState = trackIRShouldPublishDisplayState(
+                    shouldPublishUI: configuration.shouldPublishUI,
+                    currentDisplayState: nextDisplayState,
+                    lastPublishedDisplayState: lastPublishedDisplayState,
+                    elapsedTimeSinceLastDisplay: elapsedDisplayTime,
+                    maximumDisplayFramesPerSecond: configuration.maximumTelemetryFramesPerSecond
+                )
+                let shouldClearPreviewImage = configuration.shouldPublishUI &&
+                    hasPublishedPreviewImage &&
+                    (!configuration.isVideoEnabled ||
+                        !snapshotCopy.has_preview_frame ||
+                        snapshotCopy.phase != OTIR_TRACKIR_SESSION_PHASE_STREAMING)
 
                 trackIRApplyMouseMovement(
                     controller: mouseController,
@@ -327,12 +376,26 @@ final class TrackIRCameraController: ObservableObject {
                     configuration: configuration
                 )
 
-                await MainActor.run { [weak self, snapshotCopy, previewImageCopy] in
-                    self?.apply(
-                        snapshotCopy,
-                        previewImage: previewImageCopy,
-                        configuration: configuration
-                    )
+                if shouldPublishDisplayState || previewImageCopy != nil || shouldClearPreviewImage {
+                    let cameraController = self
+                    await MainActor.run {
+                        cameraController?.apply(
+                            displayState: nextDisplayState,
+                            previewImage: previewImageCopy,
+                            shouldUpdateDisplayState: shouldPublishDisplayState,
+                            shouldClearPreviewImage: shouldClearPreviewImage
+                        )
+                    }
+                }
+
+                if shouldPublishDisplayState {
+                    lastPublishedDisplayState = nextDisplayState
+                    lastDisplayUpdateTime = currentTime
+                }
+                if previewImageCopy != nil {
+                    hasPublishedPreviewImage = true
+                } else if shouldClearPreviewImage {
+                    hasPublishedPreviewImage = false
                 }
 
                 let nanoseconds = UInt64(configuration.pollInterval * 1_000_000_000)
@@ -342,21 +405,18 @@ final class TrackIRCameraController: ObservableObject {
     }
 
     private func apply(
-        _ snapshot: otir_trackir_session_snapshot,
+        displayState: TrackIRCameraDisplayState,
         previewImage: CGImage?,
-        configuration: TrackIRPollingConfiguration
+        shouldUpdateDisplayState: Bool,
+        shouldClearPreviewImage: Bool
     ) {
-        phase = trackIRCameraPhase(sessionPhase: snapshot.phase)
-        lastErrorDescription = trackIRSessionErrorDescription(snapshot: snapshot)
-        frameIndex = snapshot.frame_index
-        frameRate = snapshot.has_frame_rate ? snapshot.frame_rate : nil
-        centroidX = snapshot.has_centroid ? snapshot.centroid_x : nil
-        centroidY = snapshot.has_centroid ? snapshot.centroid_y : nil
-        lastPacketType = snapshot.has_packet_type ? snapshot.packet_type : nil
+        if shouldUpdateDisplayState, self.displayState != displayState {
+            self.displayState = displayState
+        }
 
         if let previewImage {
             self.previewImage = previewImage
-        } else if !configuration.isVideoEnabled || !snapshot.has_preview_frame || phase != .streaming {
+        } else if shouldClearPreviewImage {
             self.previewImage = nil
         }
     }
@@ -383,7 +443,9 @@ private struct TrackIRPollingConfiguration: Equatable {
     let isMouseMovementEnabled: Bool
     let mouseMovementSpeed: Double
     let mouseTransform: VideoPreviewTransform
+    let shouldPublishUI: Bool
     let maximumPreviewFramesPerSecond: Double
+    let maximumTelemetryFramesPerSecond: Double
     let pollInterval: TimeInterval
 }
 
@@ -490,6 +552,47 @@ nonisolated func trackIRSessionErrorDescription(snapshot: otir_trackir_session_s
     }
 
     return String(bytes: bytes, encoding: .utf8)
+}
+
+nonisolated func trackIRDisplayState(
+    snapshot: otir_trackir_session_snapshot
+) -> TrackIRCameraDisplayState {
+    TrackIRCameraDisplayState(
+        phase: trackIRCameraPhase(sessionPhase: snapshot.phase),
+        lastErrorDescription: trackIRSessionErrorDescription(snapshot: snapshot),
+        frameIndex: snapshot.frame_index,
+        frameRate: snapshot.has_frame_rate ? snapshot.frame_rate : nil,
+        centroidX: snapshot.has_centroid ? snapshot.centroid_x : nil,
+        centroidY: snapshot.has_centroid ? snapshot.centroid_y : nil,
+        lastPacketType: snapshot.has_packet_type ? snapshot.packet_type : nil
+    )
+}
+
+nonisolated func trackIRShouldPublishDisplayState(
+    shouldPublishUI: Bool,
+    currentDisplayState: TrackIRCameraDisplayState,
+    lastPublishedDisplayState: TrackIRCameraDisplayState?,
+    elapsedTimeSinceLastDisplay: TimeInterval?,
+    maximumDisplayFramesPerSecond: Double
+) -> Bool {
+    guard shouldPublishUI else {
+        return false
+    }
+
+    if lastPublishedDisplayState?.phase != currentDisplayState.phase ||
+        lastPublishedDisplayState?.lastErrorDescription != currentDisplayState.lastErrorDescription {
+        return true
+    }
+
+    guard maximumDisplayFramesPerSecond > 0 else {
+        return true
+    }
+
+    guard let elapsedTimeSinceLastDisplay else {
+        return true
+    }
+
+    return elapsedTimeSinceLastDisplay >= (1.0 / maximumDisplayFramesPerSecond)
 }
 
 nonisolated func trackIRFrameRateLabel(for frameRate: Double?) -> String {

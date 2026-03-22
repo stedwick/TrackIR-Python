@@ -8,30 +8,23 @@
 import KeyboardShortcuts
 import SwiftUI
 
-private let defaultControlValues = controlDefaultValues()
-
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.controlActiveState) private var controlActiveState
     @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var runtimeController: TrackIRRuntimeController
     @ObservedObject private var cameraController: TrackIRCameraController
-    @AppStorage(ControlPreferenceKey.videoEnabled.rawValue) private var isVideoEnabled = defaultControlValues.videoEnabled
-    @AppStorage(ControlPreferenceKey.trackIREnabled.rawValue) private var isTrackIREnabled = defaultControlValues.trackIREnabled
-    @AppStorage(ControlPreferenceKey.mouseMovementEnabled.rawValue) private var isMouseMovementEnabled = defaultControlValues.mouseMovementEnabled
-    @AppStorage(ControlPreferenceKey.mouseMovementSpeed.rawValue) private var mouseMovementSpeed = defaultControlValues.mouseMovementSpeed
-    @AppStorage(ControlPreferenceKey.videoFlipHorizontal.rawValue) private var isVideoFlipHorizontalEnabled = defaultControlValues.videoFlipHorizontalEnabled
-    @AppStorage(ControlPreferenceKey.videoFlipVertical.rawValue) private var isVideoFlipVerticalEnabled = defaultControlValues.videoFlipVerticalEnabled
-    @AppStorage(ControlPreferenceKey.videoRotationDegrees.rawValue) private var videoRotationDegrees = defaultControlValues.videoRotationDegrees
-    @AppStorage(ControlPreferenceKey.videoFramesPerSecond.rawValue) private var videoFramesPerSecond = defaultControlValues.videoFramesPerSecond
-    @State private var isWindowVisible = false
 
     @MainActor
     init() {
-        _cameraController = ObservedObject(wrappedValue: TrackIRCameraController())
+        let runtimeController = TrackIRRuntimeController()
+        _runtimeController = ObservedObject(wrappedValue: runtimeController)
+        _cameraController = ObservedObject(wrappedValue: runtimeController.cameraController)
     }
 
-    init(cameraController: TrackIRCameraController) {
-        _cameraController = ObservedObject(wrappedValue: cameraController)
+    init(runtimeController: TrackIRRuntimeController) {
+        _runtimeController = ObservedObject(wrappedValue: runtimeController)
+        _cameraController = ObservedObject(wrappedValue: runtimeController.cameraController)
     }
 
     var body: some View {
@@ -58,38 +51,55 @@ struct ContentView: View {
         }
         .frame(minWidth: 760, minHeight: 560)
         .onAppear {
-            isWindowVisible = true
-            syncTrackIRCamera()
-        }
-        .onChange(of: isTrackIREnabled) { _, _ in
-            syncTrackIRCamera()
-        }
-        .onChange(of: isVideoEnabled) { _, _ in
-            syncTrackIRCamera()
-        }
-        .onChange(of: isMouseMovementEnabled) { _, _ in
-            syncTrackIRCamera()
-        }
-        .onChange(of: mouseMovementSpeed) { _, _ in
-            syncTrackIRCamera()
-        }
-        .onChange(of: videoFramesPerSecond) { _, _ in
-            syncTrackIRCamera()
+            runtimeController.setWindowVisible(true)
+            runtimeController.setScenePhase(scenePhase)
+            runtimeController.setControlActiveState(controlActiveState)
         }
         .onChange(of: scenePhase) { _, _ in
-            syncTrackIRCamera()
+            runtimeController.setScenePhase(scenePhase)
         }
         .onChange(of: controlActiveState) { _, _ in
-            syncTrackIRCamera()
+            runtimeController.setControlActiveState(controlActiveState)
         }
         .onDisappear {
-            if shouldShutdownTrackIRRuntime(for: .windowClosed) {
-                cameraController.shutdown()
-            } else {
-                isWindowVisible = false
-                syncTrackIRCamera()
-            }
+            runtimeController.shutdownForWindowClose()
         }
+    }
+
+    private var controlState: TrackIRControlState {
+        runtimeController.controlState
+    }
+
+    private var isVideoEnabled: Bool {
+        controlState.isVideoEnabled
+    }
+
+    private var isTrackIREnabled: Bool {
+        controlState.isTrackIREnabled
+    }
+
+    private var isMouseMovementEnabled: Bool {
+        controlState.isMouseMovementEnabled
+    }
+
+    private var mouseMovementSpeed: Double {
+        controlState.mouseMovementSpeed
+    }
+
+    private var isVideoFlipHorizontalEnabled: Bool {
+        controlState.isVideoFlipHorizontalEnabled
+    }
+
+    private var isVideoFlipVerticalEnabled: Bool {
+        controlState.isVideoFlipVerticalEnabled
+    }
+
+    private var videoRotationDegrees: Double {
+        controlState.videoRotationDegrees
+    }
+
+    private var videoFramesPerSecond: Double {
+        controlState.videoFramesPerSecond
     }
 
     private var isDarkMode: Bool {
@@ -110,7 +120,7 @@ struct ContentView: View {
 
                 Spacer(minLength: 16)
 
-                Button(action: refreshTrackIRCamera) {
+                Button(action: runtimeController.refreshTrackIRCamera) {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.borderedProminent)
@@ -239,21 +249,21 @@ struct ContentView: View {
                     title: "Enable TrackIR",
                     detail: "Toggle TrackIR.",
                     systemImage: "dot.radiowaves.left.and.right",
-                    isOn: $isTrackIREnabled
+                    isOn: isTrackIREnabledBinding
                 )
 
                 controlRow(
                     title: "Show Video",
                     detail: "Show the camera preview.",
                     systemImage: "video",
-                    isOn: $isVideoEnabled
+                    isOn: isVideoEnabledBinding
                 )
 
                 controlRow(
                     title: "Enable Mouse Movement",
                     detail: "Toggle mouse movement.",
                     systemImage: "cursorarrow.motionlines",
-                    isOn: $isMouseMovementEnabled
+                    isOn: isMouseMovementEnabledBinding
                 )
 
                 mouseSpeedControlRow
@@ -475,7 +485,7 @@ struct ContentView: View {
                 KeyboardShortcuts.Recorder(for: .toggleMouseMovement)
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                Text("Shortcut hookup comes later.")
+                Text("The shortcut stays active even when the window is closed.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -492,10 +502,10 @@ struct ContentView: View {
                 )
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Toggle("Flip Horizontal", isOn: $isVideoFlipHorizontalEnabled)
+                    Toggle("Flip Horizontal", isOn: isVideoFlipHorizontalEnabledBinding)
                         .toggleStyle(.checkbox)
 
-                    Toggle("Flip Vertical", isOn: $isVideoFlipVerticalEnabled)
+                    Toggle("Flip Vertical", isOn: isVideoFlipVerticalEnabledBinding)
                         .toggleStyle(.checkbox)
                 }
 
@@ -515,7 +525,7 @@ struct ContentView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Slider(value: $videoRotationDegrees, in: 0 ... 360, step: 1)
+                        Slider(value: videoRotationDegreesBinding, in: 0 ... 360, step: 1)
 
                         HStack {
                             Text("0°")
@@ -543,7 +553,7 @@ struct ContentView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Slider(value: $videoFramesPerSecond, in: 0 ... 125, step: 1)
+                        Slider(value: videoFramesPerSecondBinding, in: 0 ... 125, step: 1)
 
                         HStack {
                             Text("0")
@@ -590,54 +600,59 @@ struct ContentView: View {
             )
     }
 
-    private func syncTrackIRCamera() {
-        let mouseTransform = previewVideoTransform(
-            flipHorizontal: isVideoFlipHorizontalEnabled,
-            flipVertical: isVideoFlipVerticalEnabled,
-            rotationDegrees: videoRotationDegrees
-        )
-
-        cameraController.syncStreaming(
-            isTrackIREnabled: isTrackIREnabled,
-            isVideoEnabled: isVideoEnabled,
-            maximumTrackingFramesPerSecond: videoFramesPerSecond,
-            isWindowVisible: trackIRPresentationIsActive(
-                scenePhase: scenePhase,
-                controlActiveState: controlActiveState,
-                isWindowVisible: isWindowVisible
-            ),
-            isMouseMovementEnabled: isMouseMovementEnabled,
-            mouseMovementSpeed: trackIRMouseBackendSpeed(controlSpeed: mouseMovementSpeed),
-            mouseTransform: mouseTransform
-        )
-    }
-
-    private func refreshTrackIRCamera() {
-        let mouseTransform = previewVideoTransform(
-            flipHorizontal: isVideoFlipHorizontalEnabled,
-            flipVertical: isVideoFlipVerticalEnabled,
-            rotationDegrees: videoRotationDegrees
-        )
-
-        cameraController.refresh(
-            isTrackIREnabled: isTrackIREnabled,
-            isVideoEnabled: isVideoEnabled,
-            maximumTrackingFramesPerSecond: videoFramesPerSecond,
-            isWindowVisible: trackIRPresentationIsActive(
-                scenePhase: scenePhase,
-                controlActiveState: controlActiveState,
-                isWindowVisible: isWindowVisible
-            ),
-            isMouseMovementEnabled: isMouseMovementEnabled,
-            mouseMovementSpeed: trackIRMouseBackendSpeed(controlSpeed: mouseMovementSpeed),
-            mouseTransform: mouseTransform
-        )
-    }
-
     private var mouseMovementSpeedBinding: Binding<Double> {
         Binding(
             get: { normalizedMouseMovementControlSpeed(mouseMovementSpeed) },
-            set: { mouseMovementSpeed = normalizedMouseMovementControlSpeed($0) }
+            set: { runtimeController.setMouseMovementSpeed(normalizedMouseMovementControlSpeed($0)) }
+        )
+    }
+
+    private var isTrackIREnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isTrackIREnabled },
+            set: { runtimeController.setTrackIREnabled($0) }
+        )
+    }
+
+    private var isVideoEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isVideoEnabled },
+            set: { runtimeController.setVideoEnabled($0) }
+        )
+    }
+
+    private var isMouseMovementEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isMouseMovementEnabled },
+            set: { runtimeController.setMouseMovementEnabled($0) }
+        )
+    }
+
+    private var isVideoFlipHorizontalEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isVideoFlipHorizontalEnabled },
+            set: { runtimeController.setVideoFlipHorizontalEnabled($0) }
+        )
+    }
+
+    private var isVideoFlipVerticalEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isVideoFlipVerticalEnabled },
+            set: { runtimeController.setVideoFlipVerticalEnabled($0) }
+        )
+    }
+
+    private var videoRotationDegreesBinding: Binding<Double> {
+        Binding(
+            get: { videoRotationDegrees },
+            set: { runtimeController.setVideoRotationDegrees($0) }
+        )
+    }
+
+    private var videoFramesPerSecondBinding: Binding<Double> {
+        Binding(
+            get: { videoFramesPerSecond },
+            set: { runtimeController.setVideoFramesPerSecond($0) }
         )
     }
 

@@ -78,6 +78,28 @@ struct ContentViewTests {
         #expect(preferences[ControlPreferenceKey.videoFramesPerSecond.rawValue] as? Double == 60.0)
     }
 
+    @Test func trackIRControlStateRoundTripsThroughUserDefaults() {
+        let suiteName = "OpenTrackIRTests.\(UUID().uuidString)"
+        let userDefaults = UserDefaults(suiteName: suiteName)!
+        let controlState = TrackIRControlState(
+            isVideoEnabled: false,
+            isTrackIREnabled: true,
+            isMouseMovementEnabled: false,
+            mouseMovementSpeed: 3.4,
+            isVideoFlipHorizontalEnabled: true,
+            isVideoFlipVerticalEnabled: true,
+            videoRotationDegrees: 270,
+            videoFramesPerSecond: 75
+        )
+
+        userDefaults.removePersistentDomain(forName: suiteName)
+        persistControlState(controlState, userDefaults: userDefaults)
+
+        #expect(trackIRControlState(userDefaults: userDefaults) == controlState)
+
+        userDefaults.removePersistentDomain(forName: suiteName)
+    }
+
     @Test func defaultMouseMovementShortcutUsesShiftF7() {
         #expect(defaultMouseMovementShortcut() == KeyboardShortcuts.Shortcut(.f7, modifiers: [.shift]))
         #expect(KeyboardShortcuts.Name.toggleMouseMovement.rawValue == "toggleMouseMovement")
@@ -313,6 +335,85 @@ struct ContentViewTests {
         }
 
         #expect(trackIRSessionErrorDescription(snapshot: snapshot) == "TrackIR busy")
+    }
+
+    @Test func trackIRDisplayStateMapsNativeSnapshot() {
+        var snapshot = otir_trackir_session_snapshot()
+
+        snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_STREAMING
+        snapshot.frame_index = 42
+        snapshot.has_frame_rate = true
+        snapshot.frame_rate = 123.4
+        snapshot.has_centroid = true
+        snapshot.centroid_x = 321
+        snapshot.centroid_y = 123
+        snapshot.has_packet_type = true
+        snapshot.packet_type = 0x05
+        snapshot.has_error_message = true
+        withUnsafeMutableBytes(of: &snapshot.error_message) { buffer in
+            _ = buffer.copyBytes(from: Array("TrackIR busy".utf8))
+        }
+
+        #expect(trackIRDisplayState(snapshot: snapshot) == TrackIRCameraDisplayState(
+            phase: .streaming,
+            lastErrorDescription: "TrackIR busy",
+            frameIndex: 42,
+            frameRate: 123.4,
+            centroidX: 321,
+            centroidY: 123,
+            lastPacketType: 0x05
+        ))
+    }
+
+    @Test func trackIRDisplayStatePublishesOnlyWhenVisibleAndWithinCap() {
+        let displayState = TrackIRCameraDisplayState(
+            phase: .streaming,
+            lastErrorDescription: nil,
+            frameIndex: 5,
+            frameRate: 120,
+            centroidX: 300,
+            centroidY: 200,
+            lastPacketType: 0x05
+        )
+
+        #expect(!trackIRShouldPublishDisplayState(
+            shouldPublishUI: false,
+            currentDisplayState: displayState,
+            lastPublishedDisplayState: nil,
+            elapsedTimeSinceLastDisplay: nil,
+            maximumDisplayFramesPerSecond: 10
+        ))
+        #expect(trackIRShouldPublishDisplayState(
+            shouldPublishUI: true,
+            currentDisplayState: displayState,
+            lastPublishedDisplayState: nil,
+            elapsedTimeSinceLastDisplay: nil,
+            maximumDisplayFramesPerSecond: 10
+        ))
+        #expect(!trackIRShouldPublishDisplayState(
+            shouldPublishUI: true,
+            currentDisplayState: displayState,
+            lastPublishedDisplayState: displayState,
+            elapsedTimeSinceLastDisplay: 0.02,
+            maximumDisplayFramesPerSecond: 10
+        ))
+        #expect(trackIRShouldPublishDisplayState(
+            shouldPublishUI: true,
+            currentDisplayState: displayState,
+            lastPublishedDisplayState: displayState,
+            elapsedTimeSinceLastDisplay: 0.1,
+            maximumDisplayFramesPerSecond: 10
+        ))
+        #expect(trackIRShouldPublishDisplayState(
+            shouldPublishUI: true,
+            currentDisplayState: TrackIRCameraDisplayState(
+                phase: .failed,
+                lastErrorDescription: "TrackIR busy"
+            ),
+            lastPublishedDisplayState: displayState,
+            elapsedTimeSinceLastDisplay: 0.01,
+            maximumDisplayFramesPerSecond: 10
+        ))
     }
 
     @Test func trackIRPreviewImageUsesProvidedDimensions() {
