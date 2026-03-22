@@ -14,7 +14,7 @@ struct TrackIRControlState: Equatable {
     var isAvoidMouseJumpsEnabled: Bool
     var mouseJumpThresholdPixels: Int
     var minimumBlobAreaPoints: Int
-    var isConvexHullCentroidEnabled: Bool
+    var blobCentroidMode: TrackIRBlobCentroidMode
     var keepAwakeSeconds: Int
     var isTimeoutEnabled: Bool
     var timeoutSeconds: Int
@@ -95,7 +95,7 @@ final class TrackIRRuntimeController: ObservableObject {
             isAvoidMouseJumpsEnabled: controlState.isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: controlState.mouseJumpThresholdPixels,
             minimumBlobAreaPoints: controlState.minimumBlobAreaPoints,
-            isConvexHullCentroidEnabled: controlState.isConvexHullCentroidEnabled,
+            blobCentroidMode: controlState.blobCentroidMode,
             keepAwakeSeconds: controlState.keepAwakeSeconds,
             mouseTransform: currentMouseTransform()
         )
@@ -167,9 +167,9 @@ final class TrackIRRuntimeController: ObservableObject {
         }
     }
 
-    func setConvexHullCentroidEnabled(_ isConvexHullCentroidEnabled: Bool) {
+    func setBlobCentroidMode(_ blobCentroidMode: TrackIRBlobCentroidMode) {
         updateControlState {
-            $0.isConvexHullCentroidEnabled = isConvexHullCentroidEnabled
+            $0.blobCentroidMode = blobCentroidMode
         }
     }
 
@@ -260,7 +260,7 @@ final class TrackIRRuntimeController: ObservableObject {
             isAvoidMouseJumpsEnabled: controlState.isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: controlState.mouseJumpThresholdPixels,
             minimumBlobAreaPoints: controlState.minimumBlobAreaPoints,
-            isConvexHullCentroidEnabled: controlState.isConvexHullCentroidEnabled,
+            blobCentroidMode: controlState.blobCentroidMode,
             keepAwakeSeconds: controlState.keepAwakeSeconds,
             mouseTransform: currentMouseTransform()
         )
@@ -338,9 +338,12 @@ func trackIRControlState(userDefaults: UserDefaults) -> TrackIRControlState {
         minimumBlobAreaPoints: userDefaults.object(
             forKey: ControlPreferenceKey.minimumBlobAreaPoints.rawValue
         ) as? Int ?? defaults.minimumBlobAreaPoints,
-        isConvexHullCentroidEnabled: userDefaults.object(
-            forKey: ControlPreferenceKey.convexHullCentroidEnabled.rawValue
-        ) as? Bool ?? defaults.isConvexHullCentroidEnabled,
+        blobCentroidMode: migratedTrackIRBlobCentroidMode(
+            storedValue: userDefaults.object(
+                forKey: ControlPreferenceKey.convexHullCentroidEnabled.rawValue
+            ),
+            defaultMode: defaults.blobCentroidMode
+        ),
         keepAwakeSeconds: userDefaults.object(forKey: ControlPreferenceKey.keepAwakeSeconds.rawValue)
             as? Int ?? defaults.keepAwakeSeconds,
         isTimeoutEnabled: userDefaults.object(forKey: ControlPreferenceKey.timeoutEnabled.rawValue)
@@ -385,7 +388,7 @@ func persistControlState(_ controlState: TrackIRControlState, userDefaults: User
         forKey: ControlPreferenceKey.minimumBlobAreaPoints.rawValue
     )
     userDefaults.set(
-        controlState.isConvexHullCentroidEnabled,
+        controlState.blobCentroidMode.rawValue,
         forKey: ControlPreferenceKey.convexHullCentroidEnabled.rawValue
     )
     userDefaults.set(controlState.keepAwakeSeconds, forKey: ControlPreferenceKey.keepAwakeSeconds.rawValue)

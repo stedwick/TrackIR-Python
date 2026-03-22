@@ -30,6 +30,9 @@ static void test_normalize_minimum_blob_area_points_clamps_to_positive_values(vo
 static void test_compute_blob_result_selects_largest_blob(void);
 static void test_compute_blob_result_uses_previous_centroid_to_break_ties(void);
 static void test_compute_blob_result_can_use_scaled_hull_centroid(void);
+static void test_compute_blob_result_can_use_binary_centroid(void);
+static void test_compute_blob_result_can_use_blended_centroid(void);
+static void test_compute_blob_result_can_use_regularized_binary_centroid(void);
 static void test_compute_blob_result_row_bucket_grouping_respects_row_adjacency(void);
 static void test_shutdown_steps_turns_led_off_even_without_streaming(void);
 static void test_build_frame_marks_stripes_and_stats(void);
@@ -60,6 +63,9 @@ int main(void) {
     test_compute_blob_result_selects_largest_blob();
     test_compute_blob_result_uses_previous_centroid_to_break_ties();
     test_compute_blob_result_can_use_scaled_hull_centroid();
+    test_compute_blob_result_can_use_binary_centroid();
+    test_compute_blob_result_can_use_blended_centroid();
+    test_compute_blob_result_can_use_regularized_binary_centroid();
     test_compute_blob_result_row_bucket_grouping_respects_row_adjacency();
     test_shutdown_steps_turns_led_off_even_without_streaming();
     test_build_frame_marks_stripes_and_stats();
@@ -279,6 +285,7 @@ static void test_compute_blob_result_selects_largest_blob(void) {
 
     config.minimum_area_points = 1;
     config.use_scaled_hull_centroid = false;
+    config.centroid_mode = OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB;
 
     assert(otir_tir5v3_compute_blob_result(
         stripes,
@@ -309,6 +316,7 @@ static void test_compute_blob_result_uses_previous_centroid_to_break_ties(void) 
 
     config.minimum_area_points = 1;
     config.use_scaled_hull_centroid = false;
+    config.centroid_mode = OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB;
 
     assert(otir_tir5v3_compute_blob_result(
         stripes,
@@ -337,8 +345,10 @@ static void test_compute_blob_result_can_use_scaled_hull_centroid(void) {
 
     raw_config.minimum_area_points = 1;
     raw_config.use_scaled_hull_centroid = false;
+    raw_config.centroid_mode = OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB;
     hull_config.minimum_area_points = 1;
     hull_config.use_scaled_hull_centroid = true;
+    hull_config.centroid_mode = OTIR_TIR5V3_CENTROID_MODE_FILLED_HULL;
 
     assert(otir_tir5v3_compute_blob_result(
         stripes,
@@ -364,6 +374,78 @@ static void test_compute_blob_result_can_use_scaled_hull_centroid(void) {
     assert(fabs(hull_result.centroid_y - raw_result.centroid_y) < 0.0001);
 }
 
+static void test_compute_blob_result_can_use_binary_centroid(void) {
+    otir_tir5v3_stripe stripes[] = {
+        {.hstart = 0, .hstop = 1, .vline = 10, .points = 2, .sum_x = 5, .sum = 6},
+    };
+    otir_tir5v3_blob_tracking_config config = otir_tir5v3_default_blob_tracking_config();
+    otir_tir5v3_blob_result result = {0};
+
+    config.minimum_area_points = 1;
+    config.centroid_mode = OTIR_TIR5V3_CENTROID_MODE_BINARY_BLOB;
+
+    assert(otir_tir5v3_compute_blob_result(
+        stripes,
+        1,
+        config,
+        false,
+        0.0,
+        0.0,
+        &result
+    ));
+    assert(result.centroid_mode == OTIR_TIR5V3_CENTROID_MODE_BINARY_BLOB);
+    assert(fabs(result.centroid_x - 0.5) < 0.0001);
+    assert(fabs(result.centroid_y - 10.0) < 0.0001);
+}
+
+static void test_compute_blob_result_can_use_blended_centroid(void) {
+    otir_tir5v3_stripe stripes[] = {
+        {.hstart = 0, .hstop = 1, .vline = 10, .points = 2, .sum_x = 5, .sum = 6},
+    };
+    otir_tir5v3_blob_tracking_config config = otir_tir5v3_default_blob_tracking_config();
+    otir_tir5v3_blob_result result = {0};
+
+    config.minimum_area_points = 1;
+    config.centroid_mode = OTIR_TIR5V3_CENTROID_MODE_BLENDED_BINARY_WEIGHTED;
+
+    assert(otir_tir5v3_compute_blob_result(
+        stripes,
+        1,
+        config,
+        false,
+        0.0,
+        0.0,
+        &result
+    ));
+    assert(result.centroid_mode == OTIR_TIR5V3_CENTROID_MODE_BLENDED_BINARY_WEIGHTED);
+    assert(fabs(result.centroid_x - 0.5666666667) < 0.0001);
+    assert(fabs(result.centroid_y - 10.0) < 0.0001);
+}
+
+static void test_compute_blob_result_can_use_regularized_binary_centroid(void) {
+    otir_tir5v3_stripe stripes[] = {
+        {.hstart = 0, .hstop = 1, .vline = 10, .points = 2, .sum_x = 5, .sum = 6},
+    };
+    otir_tir5v3_blob_tracking_config config = otir_tir5v3_default_blob_tracking_config();
+    otir_tir5v3_blob_result result = {0};
+
+    config.minimum_area_points = 1;
+    config.centroid_mode = OTIR_TIR5V3_CENTROID_MODE_REGULARIZED_BINARY;
+
+    assert(otir_tir5v3_compute_blob_result(
+        stripes,
+        1,
+        config,
+        true,
+        2.5,
+        10.0,
+        &result
+    ));
+    assert(result.centroid_mode == OTIR_TIR5V3_CENTROID_MODE_REGULARIZED_BINARY);
+    assert(fabs(result.centroid_x - 1.7) < 0.0001);
+    assert(fabs(result.centroid_y - 10.0) < 0.0001);
+}
+
 static void test_compute_blob_result_row_bucket_grouping_respects_row_adjacency(void) {
     otir_tir5v3_stripe stripes[] = {
         {.hstart = 10, .hstop = 12, .vline = 10, .points = 3, .sum_x = 3, .sum = 3},
@@ -375,6 +457,7 @@ static void test_compute_blob_result_row_bucket_grouping_respects_row_adjacency(
 
     config.minimum_area_points = 1;
     config.use_scaled_hull_centroid = false;
+    config.centroid_mode = OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB;
     config.row_adjacency = 1;
 
     assert(otir_tir5v3_compute_blob_result(

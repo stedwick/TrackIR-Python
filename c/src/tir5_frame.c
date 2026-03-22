@@ -9,6 +9,8 @@ typedef struct otir_tir5v3_blob_accumulator {
     long long total_weight;
     long long sum_x;
     long long sum_y;
+    long long binary_sum_x;
+    long long binary_sum_y;
     int area_points;
     int brightness_sum;
     int min_x;
@@ -30,8 +32,54 @@ typedef struct otir_tir5v3_blob_workspace {
     otir_tir5v3_polygon_point hull[OTIR_TIR5V3_MAX_STRIPES * 4];
 } otir_tir5v3_blob_workspace;
 
+#define OTIR_TIR5V3_BINARY_BLEND_ALPHA 0.8
+#define OTIR_TIR5V3_REGULARIZED_BINARY_ALPHA 0.4
+
 static size_t blob_root(size_t *parents, size_t index);
 static void merge_blob_roots(size_t *parents, size_t left_index, size_t right_index);
+static bool blob_binary_centroid(
+    const otir_tir5v3_blob_accumulator *blob,
+    double *out_x,
+    double *out_y
+);
+static bool blend_centroids(
+    double alpha,
+    double primary_x,
+    double primary_y,
+    double secondary_x,
+    double secondary_y,
+    double *out_x,
+    double *out_y
+);
+static bool blob_blended_centroid(
+    const otir_tir5v3_blob_accumulator *blob,
+    double *out_x,
+    double *out_y
+);
+static bool blob_regularized_binary_centroid(
+    const otir_tir5v3_blob_accumulator *blob,
+    bool has_previous_centroid,
+    double previous_centroid_x,
+    double previous_centroid_y,
+    double *out_x,
+    double *out_y
+);
+static bool selected_blob_centroid(
+    const otir_tir5v3_stripe *stripes,
+    size_t stripe_count,
+    const size_t *parents,
+    const int *blob_for_root,
+    size_t selected_blob_index,
+    const otir_tir5v3_blob_accumulator *blob,
+    otir_tir5v3_centroid_mode centroid_mode,
+    bool has_previous_centroid,
+    double previous_centroid_x,
+    double previous_centroid_y,
+    otir_tir5v3_blob_workspace *workspace,
+    double hull_scale,
+    double *out_x,
+    double *out_y
+);
 
 static int clamp_int(int value, int low, int high) {
     if (value < low) {
@@ -166,11 +214,16 @@ static void accumulate_blob_stripe(
     otir_tir5v3_blob_accumulator *blob,
     const otir_tir5v3_stripe *stripe
 ) {
+    const long long stripe_binary_sum_x =
+        ((long long)(stripe->hstart + stripe->hstop) * (long long)stripe->points) / 2;
+
     if (blob == NULL || stripe == NULL) {
         return;
     }
 
     blob->area_points += stripe->points;
+    blob->binary_sum_x += stripe_binary_sum_x;
+    blob->binary_sum_y += (long long)stripe->vline * (long long)stripe->points;
     if (stripe->sum > 0) {
         blob->brightness_sum += stripe->sum;
         blob->total_weight += stripe->sum;
@@ -203,6 +256,101 @@ static bool blob_centroid(
     *out_x = (double)blob->sum_x / (double)blob->total_weight;
     *out_y = (double)blob->sum_y / (double)blob->total_weight;
     return true;
+}
+
+static bool blob_binary_centroid(
+    const otir_tir5v3_blob_accumulator *blob,
+    double *out_x,
+    double *out_y
+) {
+    if (blob == NULL || out_x == NULL || out_y == NULL || blob->area_points <= 0) {
+        return false;
+    }
+
+    *out_x = (double)blob->binary_sum_x / (double)blob->area_points;
+    *out_y = (double)blob->binary_sum_y / (double)blob->area_points;
+    return true;
+}
+
+static bool blend_centroids(
+    double alpha,
+    double primary_x,
+    double primary_y,
+    double secondary_x,
+    double secondary_y,
+    double *out_x,
+    double *out_y
+) {
+    if (out_x == NULL || out_y == NULL || !isfinite(alpha)) {
+        return false;
+    }
+
+    if (alpha < 0.0) {
+        alpha = 0.0;
+    } else if (alpha > 1.0) {
+        alpha = 1.0;
+    }
+
+    *out_x = (alpha * primary_x) + ((1.0 - alpha) * secondary_x);
+    *out_y = (alpha * primary_y) + ((1.0 - alpha) * secondary_y);
+    return true;
+}
+
+static bool blob_blended_centroid(
+    const otir_tir5v3_blob_accumulator *blob,
+    double *out_x,
+    double *out_y
+) {
+    double binary_x = 0.0;
+    double binary_y = 0.0;
+    double weighted_x = 0.0;
+    double weighted_y = 0.0;
+
+    if (!blob_binary_centroid(blob, &binary_x, &binary_y) ||
+        !blob_centroid(blob, &weighted_x, &weighted_y)) {
+        return false;
+    }
+
+    return blend_centroids(
+        OTIR_TIR5V3_BINARY_BLEND_ALPHA,
+        binary_x,
+        binary_y,
+        weighted_x,
+        weighted_y,
+        out_x,
+        out_y
+    );
+}
+
+static bool blob_regularized_binary_centroid(
+    const otir_tir5v3_blob_accumulator *blob,
+    bool has_previous_centroid,
+    double previous_centroid_x,
+    double previous_centroid_y,
+    double *out_x,
+    double *out_y
+) {
+    double binary_x = 0.0;
+    double binary_y = 0.0;
+
+    if (!blob_binary_centroid(blob, &binary_x, &binary_y)) {
+        return false;
+    }
+    if (!has_previous_centroid) {
+        *out_x = binary_x;
+        *out_y = binary_y;
+        return true;
+    }
+
+    return blend_centroids(
+        OTIR_TIR5V3_REGULARIZED_BINARY_ALPHA,
+        binary_x,
+        binary_y,
+        previous_centroid_x,
+        previous_centroid_y,
+        out_x,
+        out_y
+    );
 }
 
 static double squared_distance(
@@ -440,6 +588,54 @@ static bool collect_blob_hull_centroid(
     return hull_count >= 3 && polygon_centroid(hull, hull_count, out_x, out_y);
 }
 
+static bool selected_blob_centroid(
+    const otir_tir5v3_stripe *stripes,
+    size_t stripe_count,
+    const size_t *parents,
+    const int *blob_for_root,
+    size_t selected_blob_index,
+    const otir_tir5v3_blob_accumulator *blob,
+    otir_tir5v3_centroid_mode centroid_mode,
+    bool has_previous_centroid,
+    double previous_centroid_x,
+    double previous_centroid_y,
+    otir_tir5v3_blob_workspace *workspace,
+    double hull_scale,
+    double *out_x,
+    double *out_y
+) {
+    switch (centroid_mode) {
+        case OTIR_TIR5V3_CENTROID_MODE_BINARY_BLOB:
+            return blob_binary_centroid(blob, out_x, out_y);
+        case OTIR_TIR5V3_CENTROID_MODE_FILLED_HULL:
+            return collect_blob_hull_centroid(
+                stripes,
+                stripe_count,
+                parents,
+                blob_for_root,
+                selected_blob_index,
+                hull_scale,
+                workspace,
+                out_x,
+                out_y
+            );
+        case OTIR_TIR5V3_CENTROID_MODE_BLENDED_BINARY_WEIGHTED:
+            return blob_blended_centroid(blob, out_x, out_y);
+        case OTIR_TIR5V3_CENTROID_MODE_REGULARIZED_BINARY:
+            return blob_regularized_binary_centroid(
+                blob,
+                has_previous_centroid,
+                previous_centroid_x,
+                previous_centroid_y,
+                out_x,
+                out_y
+            );
+        case OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB:
+        default:
+            return blob_centroid(blob, out_x, out_y);
+    }
+}
+
 int otir_tir5v3_normalize_minimum_blob_area_points(int minimum_area_points) {
     return minimum_area_points > 0 ? minimum_area_points : 1;
 }
@@ -448,6 +644,7 @@ otir_tir5v3_blob_tracking_config otir_tir5v3_default_blob_tracking_config(void) 
     otir_tir5v3_blob_tracking_config config = {
         .minimum_area_points = 100,
         .use_scaled_hull_centroid = true,
+        .centroid_mode = OTIR_TIR5V3_CENTROID_MODE_FILLED_HULL,
         .row_adjacency = 1,
         .hull_scale = 0.7,
     };
@@ -497,6 +694,18 @@ bool otir_tir5v3_compute_blob_result_with_workspace(
     config.minimum_area_points = config.minimum_area_points > 0
         ? config.minimum_area_points
         : default_config.minimum_area_points;
+    if (config.centroid_mode == default_config.centroid_mode &&
+        config.use_scaled_hull_centroid != default_config.use_scaled_hull_centroid) {
+        config.centroid_mode = config.use_scaled_hull_centroid
+            ? OTIR_TIR5V3_CENTROID_MODE_FILLED_HULL
+            : OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB;
+    }
+    if (config.centroid_mode < OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB ||
+        config.centroid_mode > OTIR_TIR5V3_CENTROID_MODE_REGULARIZED_BINARY) {
+        config.centroid_mode = config.use_scaled_hull_centroid
+            ? OTIR_TIR5V3_CENTROID_MODE_FILLED_HULL
+            : OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB;
+    }
     config.row_adjacency = config.row_adjacency >= 0
         ? config.row_adjacency
         : default_config.row_adjacency;
@@ -553,29 +762,26 @@ bool otir_tir5v3_compute_blob_result_with_workspace(
     }
 
     if (selected_blob_index != SIZE_MAX &&
-        blob_centroid(
+        selected_blob_centroid(
+            stripes,
+            stripe_count,
+            parents,
+            blob_for_root,
+            selected_blob_index,
             &blobs[selected_blob_index],
+            config.centroid_mode,
+            has_previous_centroid,
+            previous_centroid_x,
+            previous_centroid_y,
+            blob_workspace,
+            config.hull_scale,
             &out_result->centroid_x,
             &out_result->centroid_y
         )) {
         out_result->has_centroid = true;
         out_result->selected_blob_area_points = blobs[selected_blob_index].area_points;
         out_result->selected_blob_brightness_sum = blobs[selected_blob_index].brightness_sum;
-        out_result->centroid_mode = OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB;
-        if (config.use_scaled_hull_centroid &&
-            collect_blob_hull_centroid(
-                stripes,
-                stripe_count,
-                parents,
-                blob_for_root,
-                selected_blob_index,
-                config.hull_scale,
-                blob_workspace,
-                &out_result->centroid_x,
-                &out_result->centroid_y
-            )) {
-            out_result->centroid_mode = OTIR_TIR5V3_CENTROID_MODE_SCALED_HULL;
-        }
+        out_result->centroid_mode = config.centroid_mode;
     }
 
     return out_result->has_centroid;
