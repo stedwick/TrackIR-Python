@@ -651,7 +651,7 @@ struct ContentView: View {
                 Toggle("Scaled Hull Contours", isOn: isScaledHullContoursEnabledBinding)
                     .toggleStyle(.checkbox)
 
-                Text("Pac-Man 2 Pi mode: treat a chipped circle more like a full circle before centroiding.")
+                Text("PacMan-to-Pie mode: treat a chipped circle more like a full circle before centroiding.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
