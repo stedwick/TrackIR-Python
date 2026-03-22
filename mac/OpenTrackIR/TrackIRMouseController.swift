@@ -35,6 +35,7 @@ func trackIRMouseStep(
 
 @MainActor
 final class TrackIRMouseController {
+    private var hasRequestedPostEventAccess = false
     private var previousCentroid: CGPoint?
 
     func update(
@@ -71,22 +72,40 @@ final class TrackIRMouseController {
             return
         }
 
-        let currentPosition = currentEvent.location
-        let nextPosition = CGPoint(
-            x: currentPosition.x + delta.x,
-            y: currentPosition.y + delta.y
+        let nextPosition = trackIRClampedCursorPosition(
+            currentPosition: currentEvent.location,
+            delta: delta,
+            displayBounds: CGDisplayBounds(CGMainDisplayID())
         )
 
-        guard let mouseEvent = CGEvent(
-            mouseEventSource: nil,
-            mouseType: .mouseMoved,
-            mouseCursorPosition: nextPosition,
-            mouseButton: .left
-        ) else {
+        if canPostMouseEvents() {
+            guard let mouseEvent = CGEvent(
+                mouseEventSource: nil,
+                mouseType: .mouseMoved,
+                mouseCursorPosition: nextPosition,
+                mouseButton: .left
+            ) else {
+                return
+            }
+
+            mouseEvent.post(tap: .cghidEventTap)
             return
         }
 
-        mouseEvent.post(tap: .cghidEventTap)
+        CGWarpMouseCursorPosition(nextPosition)
+    }
+
+    private func canPostMouseEvents() -> Bool {
+        if CGPreflightPostEventAccess() {
+            return true
+        }
+
+        guard !hasRequestedPostEventAccess else {
+            return false
+        }
+
+        hasRequestedPostEventAccess = true
+        return CGRequestPostEventAccess()
     }
 }
 
@@ -104,6 +123,22 @@ func transformedTrackIRMouseDelta(
     return CGPoint(
         x: rotatedX * speed,
         y: rotatedY * speed
+    )
+}
+
+func trackIRClampedCursorPosition(
+    currentPosition: CGPoint,
+    delta: CGPoint,
+    displayBounds: CGRect
+) -> CGPoint {
+    let unclampedPosition = CGPoint(
+        x: currentPosition.x + delta.x,
+        y: currentPosition.y + delta.y
+    )
+
+    return CGPoint(
+        x: min(max(unclampedPosition.x, displayBounds.minX), displayBounds.maxX),
+        y: min(max(unclampedPosition.y, displayBounds.minY), displayBounds.maxY)
     )
 }
 

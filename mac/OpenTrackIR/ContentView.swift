@@ -678,7 +678,7 @@ func controlDefaultValues() -> ControlDefaultValues {
         trackIREnabled: true,
         mouseMovementEnabled: true,
         mouseMovementSpeed: 5.0,
-        videoFlipHorizontalEnabled: true,
+        videoFlipHorizontalEnabled: false,
         videoFlipVerticalEnabled: false,
         videoRotationDegrees: 0.0,
         videoFramesPerSecond: 60.0

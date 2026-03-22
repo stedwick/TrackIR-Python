@@ -72,4 +72,18 @@ struct TrackIRMouseControllerTests {
         #expect(abs(rotated.x) < 0.0001)
         #expect(abs(rotated.y - 6.0) < 0.0001)
     }
+
+    @Test func clampedCursorPositionStaysOnTheMainDisplayBounds() {
+        #expect(trackIRClampedCursorPosition(
+            currentPosition: CGPoint(x: 100, y: 100),
+            delta: CGPoint(x: 40, y: -25),
+            displayBounds: CGRect(x: 0, y: 0, width: 120, height: 120)
+        ) == CGPoint(x: 120, y: 75))
+
+        #expect(trackIRClampedCursorPosition(
+            currentPosition: CGPoint(x: 10, y: 10),
+            delta: CGPoint(x: -30, y: -40),
+            displayBounds: CGRect(x: 0, y: 0, width: 120, height: 120)
+        ) == CGPoint(x: 0, y: 0))
+    }
 }
