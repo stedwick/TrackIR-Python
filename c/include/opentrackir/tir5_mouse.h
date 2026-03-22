@@ -36,6 +36,9 @@ typedef struct otir_trackir_mouse_tracker_config {
     double deadzone;
     bool avoid_mouse_jumps;
     double jump_threshold_pixels;
+    bool use_adaptive_ema;
+    bool use_alpha_beta_filter;
+    bool use_quantization_residual_carry;
     otir_trackir_mouse_transform transform;
 } otir_trackir_mouse_tracker_config;
 
@@ -45,6 +48,13 @@ typedef struct otir_trackir_mouse_tracker_state {
     otir_trackir_mouse_point delta_history[OTIR_TRACKIR_MOUSE_MAX_SMOOTHING_WINDOW];
     size_t delta_history_count;
     size_t delta_history_write_index;
+    bool has_ema_filtered_delta;
+    otir_trackir_mouse_point ema_filtered_delta;
+    bool has_alpha_beta_state;
+    otir_trackir_mouse_point alpha_beta_position;
+    otir_trackir_mouse_point alpha_beta_velocity;
+    otir_trackir_mouse_point quantization_residual;
+    bool did_use_alpha_beta_filter;
 } otir_trackir_mouse_tracker_state;
 
 typedef struct otir_trackir_mouse_step {
@@ -53,6 +63,16 @@ typedef struct otir_trackir_mouse_step {
     bool has_next_centroid;
     otir_trackir_mouse_point next_centroid;
 } otir_trackir_mouse_step;
+
+typedef struct otir_trackir_mouse_alpha_beta_result {
+    otir_trackir_mouse_point position;
+    otir_trackir_mouse_point velocity;
+} otir_trackir_mouse_alpha_beta_result;
+
+typedef struct otir_trackir_mouse_quantization_result {
+    otir_trackir_mouse_point emitted_delta;
+    otir_trackir_mouse_point residual;
+} otir_trackir_mouse_quantization_result;
 
 otir_trackir_mouse_point otir_trackir_mouse_transform_delta(
     otir_trackir_mouse_point raw_delta,
@@ -77,6 +97,23 @@ bool otir_trackir_mouse_is_inside_deadzone(
     double deadzone
 );
 bool otir_trackir_mouse_point_is_zero(otir_trackir_mouse_point point);
+double otir_trackir_mouse_adaptive_ema_alpha_for_delta(
+    otir_trackir_mouse_point current_delta
+);
+otir_trackir_mouse_point otir_trackir_mouse_apply_adaptive_ema(
+    otir_trackir_mouse_point previous_filtered_delta,
+    otir_trackir_mouse_point current_delta
+);
+otir_trackir_mouse_alpha_beta_result otir_trackir_mouse_alpha_beta_update(
+    otir_trackir_mouse_point previous_position,
+    otir_trackir_mouse_point previous_velocity,
+    otir_trackir_mouse_point measurement
+);
+otir_trackir_mouse_quantization_result
+otir_trackir_mouse_apply_quantization_residual_carry(
+    otir_trackir_mouse_point delta,
+    otir_trackir_mouse_point residual
+);
 void otir_trackir_mouse_tracker_reset(otir_trackir_mouse_tracker_state *state);
 otir_trackir_mouse_step otir_trackir_mouse_tracker_update(
     otir_trackir_mouse_tracker_state *state,

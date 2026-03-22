@@ -11,8 +11,22 @@
 #define OTIR_TRACKIR_MOUSE_VERTICAL_GAIN 1.25
 #define OTIR_TRACKIR_MOUSE_LONG_SMOOTHING_THRESHOLD 0.2
 #define OTIR_TRACKIR_MOUSE_SHORT_SMOOTHING_THRESHOLD 0.5
+#define OTIR_TRACKIR_MOUSE_ADAPTIVE_EMA_MIN_ALPHA 0.18
+#define OTIR_TRACKIR_MOUSE_ADAPTIVE_EMA_MAX_ALPHA 0.78
+#define OTIR_TRACKIR_MOUSE_ADAPTIVE_EMA_FULL_RESPONSE_MAGNITUDE 1.0
+#define OTIR_TRACKIR_MOUSE_ALPHA_BETA_ALPHA 0.80
+#define OTIR_TRACKIR_MOUSE_ALPHA_BETA_BETA 0.20
 
 static double otir_trackir_mouse_squared_magnitude(otir_trackir_mouse_point point);
+static double otir_trackir_mouse_clamp(double value, double minimum, double maximum);
+static otir_trackir_mouse_point otir_trackir_mouse_point_add(
+    otir_trackir_mouse_point lhs,
+    otir_trackir_mouse_point rhs
+);
+static otir_trackir_mouse_point otir_trackir_mouse_point_subtract(
+    otir_trackir_mouse_point lhs,
+    otir_trackir_mouse_point rhs
+);
 static otir_trackir_mouse_point otir_trackir_mouse_average_recent_deltas(
     const otir_trackir_mouse_tracker_state *state,
     size_t window
@@ -114,6 +128,92 @@ bool otir_trackir_mouse_point_is_zero(otir_trackir_mouse_point point) {
     return point.x == 0.0 && point.y == 0.0;
 }
 
+double otir_trackir_mouse_adaptive_ema_alpha_for_delta(
+    otir_trackir_mouse_point current_delta
+) {
+    const double magnitude = sqrt(
+        otir_trackir_mouse_squared_magnitude(current_delta)
+    );
+    const double normalized_magnitude = otir_trackir_mouse_clamp(
+        magnitude / OTIR_TRACKIR_MOUSE_ADAPTIVE_EMA_FULL_RESPONSE_MAGNITUDE,
+        0.0,
+        1.0
+    );
+
+    return OTIR_TRACKIR_MOUSE_ADAPTIVE_EMA_MIN_ALPHA +
+        ((OTIR_TRACKIR_MOUSE_ADAPTIVE_EMA_MAX_ALPHA -
+            OTIR_TRACKIR_MOUSE_ADAPTIVE_EMA_MIN_ALPHA) *
+            normalized_magnitude);
+}
+
+otir_trackir_mouse_point otir_trackir_mouse_apply_adaptive_ema(
+    otir_trackir_mouse_point previous_filtered_delta,
+    otir_trackir_mouse_point current_delta
+) {
+    const double alpha = otir_trackir_mouse_adaptive_ema_alpha_for_delta(
+        current_delta
+    );
+
+    return (otir_trackir_mouse_point){
+        .x = previous_filtered_delta.x +
+            (alpha * (current_delta.x - previous_filtered_delta.x)),
+        .y = previous_filtered_delta.y +
+            (alpha * (current_delta.y - previous_filtered_delta.y)),
+    };
+}
+
+otir_trackir_mouse_alpha_beta_result otir_trackir_mouse_alpha_beta_update(
+    otir_trackir_mouse_point previous_position,
+    otir_trackir_mouse_point previous_velocity,
+    otir_trackir_mouse_point measurement
+) {
+    const otir_trackir_mouse_point predicted_position =
+        otir_trackir_mouse_point_add(previous_position, previous_velocity);
+    const otir_trackir_mouse_point residual =
+        otir_trackir_mouse_point_subtract(measurement, predicted_position);
+
+    return (otir_trackir_mouse_alpha_beta_result){
+        .position = {
+            .x = predicted_position.x +
+                (OTIR_TRACKIR_MOUSE_ALPHA_BETA_ALPHA * residual.x),
+            .y = predicted_position.y +
+                (OTIR_TRACKIR_MOUSE_ALPHA_BETA_ALPHA * residual.y),
+        },
+        .velocity = {
+            .x = previous_velocity.x +
+                (OTIR_TRACKIR_MOUSE_ALPHA_BETA_BETA * residual.x),
+            .y = previous_velocity.y +
+                (OTIR_TRACKIR_MOUSE_ALPHA_BETA_BETA * residual.y),
+        },
+    };
+}
+
+otir_trackir_mouse_quantization_result
+otir_trackir_mouse_apply_quantization_residual_carry(
+    otir_trackir_mouse_point delta,
+    otir_trackir_mouse_point residual
+) {
+    const otir_trackir_mouse_point carried_delta = otir_trackir_mouse_point_add(
+        delta,
+        residual
+    );
+    double integral_x = 0.0;
+    double integral_y = 0.0;
+    const double residual_x = modf(carried_delta.x, &integral_x);
+    const double residual_y = modf(carried_delta.y, &integral_y);
+
+    return (otir_trackir_mouse_quantization_result){
+        .emitted_delta = {
+            .x = integral_x,
+            .y = integral_y,
+        },
+        .residual = {
+            .x = residual_x,
+            .y = residual_y,
+        },
+    };
+}
+
 void otir_trackir_mouse_tracker_reset(otir_trackir_mouse_tracker_state *state) {
     if (state == NULL) {
         return;
@@ -133,7 +233,11 @@ otir_trackir_mouse_step otir_trackir_mouse_tracker_update(
     otir_trackir_mouse_point short_average_delta;
     otir_trackir_mouse_point long_average_delta;
     otir_trackir_mouse_point selected_delta;
+    otir_trackir_mouse_point filtered_centroid;
     otir_trackir_mouse_smoothing_mode smoothing_mode;
+    bool did_toggle_alpha_beta_filter = false;
+    otir_trackir_mouse_alpha_beta_result alpha_beta_result;
+    otir_trackir_mouse_quantization_result quantization_result;
 
     if (state == NULL) {
         return step;
@@ -144,17 +248,67 @@ otir_trackir_mouse_step otir_trackir_mouse_tracker_update(
         return step;
     }
 
-    if (!state->has_previous_centroid) {
+    if (state->did_use_alpha_beta_filter != config.use_alpha_beta_filter) {
+        did_toggle_alpha_beta_filter = true;
+    }
+    state->did_use_alpha_beta_filter = config.use_alpha_beta_filter;
+
+    if (!config.use_adaptive_ema) {
+        state->has_ema_filtered_delta = false;
+    }
+
+    if (!config.use_quantization_residual_carry) {
+        state->quantization_residual = (otir_trackir_mouse_point){0};
+    }
+
+    if (!config.use_alpha_beta_filter) {
+        state->has_alpha_beta_state = false;
+        state->alpha_beta_position = (otir_trackir_mouse_point){0};
+        state->alpha_beta_velocity = (otir_trackir_mouse_point){0};
+    }
+
+    if (did_toggle_alpha_beta_filter) {
         state->has_previous_centroid = true;
         state->previous_centroid = current_centroid;
+        state->delta_history_count = 0;
+        state->delta_history_write_index = 0;
+        state->has_ema_filtered_delta = false;
+        state->quantization_residual = (otir_trackir_mouse_point){0};
+        state->has_alpha_beta_state = config.use_alpha_beta_filter;
+        state->alpha_beta_position = current_centroid;
+        state->alpha_beta_velocity = (otir_trackir_mouse_point){0};
         return step;
     }
 
-    raw_delta = (otir_trackir_mouse_point){
-        .x = current_centroid.x - state->previous_centroid.x,
-        .y = current_centroid.y - state->previous_centroid.y,
-    };
-    state->previous_centroid = current_centroid;
+    filtered_centroid = current_centroid;
+    if (config.use_alpha_beta_filter) {
+        if (!state->has_alpha_beta_state) {
+            state->has_alpha_beta_state = true;
+            state->alpha_beta_position = current_centroid;
+            state->alpha_beta_velocity = (otir_trackir_mouse_point){0};
+        } else {
+            alpha_beta_result = otir_trackir_mouse_alpha_beta_update(
+                state->alpha_beta_position,
+                state->alpha_beta_velocity,
+                current_centroid
+            );
+            state->alpha_beta_position = alpha_beta_result.position;
+            state->alpha_beta_velocity = alpha_beta_result.velocity;
+        }
+        filtered_centroid = state->alpha_beta_position;
+    }
+
+    if (!state->has_previous_centroid) {
+        state->has_previous_centroid = true;
+        state->previous_centroid = filtered_centroid;
+        return step;
+    }
+
+    raw_delta = otir_trackir_mouse_point_subtract(
+        filtered_centroid,
+        state->previous_centroid
+    );
+    state->previous_centroid = filtered_centroid;
 
     if (otir_trackir_mouse_should_skip_jump(
         raw_delta,
@@ -185,6 +339,20 @@ otir_trackir_mouse_step otir_trackir_mouse_tracker_update(
         short_average_delta,
         long_average_delta
     );
+
+    if (config.use_adaptive_ema) {
+        if (!state->has_ema_filtered_delta) {
+            state->has_ema_filtered_delta = true;
+            state->ema_filtered_delta = selected_delta;
+        } else {
+            state->ema_filtered_delta = otir_trackir_mouse_apply_adaptive_ema(
+                state->ema_filtered_delta,
+                selected_delta
+            );
+        }
+        selected_delta = state->ema_filtered_delta;
+    }
+
     selected_delta = otir_trackir_mouse_apply_vertical_gain(
         otir_trackir_mouse_transform_delta(
             selected_delta,
@@ -192,6 +360,15 @@ otir_trackir_mouse_step otir_trackir_mouse_tracker_update(
             config.transform
         )
     );
+
+    if (config.use_quantization_residual_carry) {
+        quantization_result = otir_trackir_mouse_apply_quantization_residual_carry(
+            selected_delta,
+            state->quantization_residual
+        );
+        state->quantization_residual = quantization_result.residual;
+        selected_delta = quantization_result.emitted_delta;
+    }
 
     if (!otir_trackir_mouse_point_is_zero(selected_delta)) {
         step.has_cursor_delta = true;
@@ -244,6 +421,41 @@ otir_trackir_mouse_step otir_trackir_mouse_compute_step(
 
 static double otir_trackir_mouse_squared_magnitude(otir_trackir_mouse_point point) {
     return (point.x * point.x) + (point.y * point.y);
+}
+
+static double otir_trackir_mouse_clamp(
+    double value,
+    double minimum,
+    double maximum
+) {
+    if (value < minimum) {
+        return minimum;
+    }
+    if (value > maximum) {
+        return maximum;
+    }
+
+    return value;
+}
+
+static otir_trackir_mouse_point otir_trackir_mouse_point_add(
+    otir_trackir_mouse_point lhs,
+    otir_trackir_mouse_point rhs
+) {
+    return (otir_trackir_mouse_point){
+        .x = lhs.x + rhs.x,
+        .y = lhs.y + rhs.y,
+    };
+}
+
+static otir_trackir_mouse_point otir_trackir_mouse_point_subtract(
+    otir_trackir_mouse_point lhs,
+    otir_trackir_mouse_point rhs
+) {
+    return (otir_trackir_mouse_point){
+        .x = lhs.x - rhs.x,
+        .y = lhs.y - rhs.y,
+    };
 }
 
 static otir_trackir_mouse_point otir_trackir_mouse_average_recent_deltas(

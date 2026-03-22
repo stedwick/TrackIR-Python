@@ -13,6 +13,9 @@ struct TrackIRControlState: Equatable {
     var mouseDeadzone: Double
     var isAvoidMouseJumpsEnabled: Bool
     var mouseJumpThresholdPixels: Int
+    var isAdaptiveEMAEnabled: Bool
+    var isAlphaBetaFilterEnabled: Bool
+    var isQuantizationResidualCarryEnabled: Bool
     var minimumBlobAreaPoints: Int
     var keepAwakeSeconds: Int
     var isTimeoutEnabled: Bool
@@ -93,6 +96,9 @@ final class TrackIRRuntimeController: ObservableObject {
             mouseDeadzone: controlState.mouseDeadzone,
             isAvoidMouseJumpsEnabled: controlState.isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: controlState.mouseJumpThresholdPixels,
+            isAdaptiveEMAEnabled: controlState.isAdaptiveEMAEnabled,
+            isAlphaBetaFilterEnabled: controlState.isAlphaBetaFilterEnabled,
+            isQuantizationResidualCarryEnabled: controlState.isQuantizationResidualCarryEnabled,
             minimumBlobAreaPoints: controlState.minimumBlobAreaPoints,
             keepAwakeSeconds: controlState.keepAwakeSeconds,
             mouseTransform: currentMouseTransform()
@@ -156,6 +162,24 @@ final class TrackIRRuntimeController: ObservableObject {
     func setMouseJumpThresholdPixels(_ mouseJumpThresholdPixels: Int) {
         updateControlState {
             $0.mouseJumpThresholdPixels = normalizedMouseJumpThreshold(mouseJumpThresholdPixels)
+        }
+    }
+
+    func setAdaptiveEMAEnabled(_ isAdaptiveEMAEnabled: Bool) {
+        updateControlState {
+            $0.isAdaptiveEMAEnabled = isAdaptiveEMAEnabled
+        }
+    }
+
+    func setAlphaBetaFilterEnabled(_ isAlphaBetaFilterEnabled: Bool) {
+        updateControlState {
+            $0.isAlphaBetaFilterEnabled = isAlphaBetaFilterEnabled
+        }
+    }
+
+    func setQuantizationResidualCarryEnabled(_ isQuantizationResidualCarryEnabled: Bool) {
+        updateControlState {
+            $0.isQuantizationResidualCarryEnabled = isQuantizationResidualCarryEnabled
         }
     }
 
@@ -251,6 +275,9 @@ final class TrackIRRuntimeController: ObservableObject {
             mouseDeadzone: controlState.mouseDeadzone,
             isAvoidMouseJumpsEnabled: controlState.isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: controlState.mouseJumpThresholdPixels,
+            isAdaptiveEMAEnabled: controlState.isAdaptiveEMAEnabled,
+            isAlphaBetaFilterEnabled: controlState.isAlphaBetaFilterEnabled,
+            isQuantizationResidualCarryEnabled: controlState.isQuantizationResidualCarryEnabled,
             minimumBlobAreaPoints: controlState.minimumBlobAreaPoints,
             keepAwakeSeconds: controlState.keepAwakeSeconds,
             mouseTransform: currentMouseTransform()
@@ -326,6 +353,15 @@ func trackIRControlState(userDefaults: UserDefaults) -> TrackIRControlState {
         mouseJumpThresholdPixels: userDefaults.object(
             forKey: ControlPreferenceKey.mouseJumpThresholdPixels.rawValue
         ) as? Int ?? defaults.mouseJumpThresholdPixels,
+        isAdaptiveEMAEnabled: userDefaults.object(
+            forKey: ControlPreferenceKey.adaptiveEMAEnabled.rawValue
+        ) as? Bool ?? defaults.adaptiveEMAEnabled,
+        isAlphaBetaFilterEnabled: userDefaults.object(
+            forKey: ControlPreferenceKey.alphaBetaFilterEnabled.rawValue
+        ) as? Bool ?? defaults.alphaBetaFilterEnabled,
+        isQuantizationResidualCarryEnabled: userDefaults.object(
+            forKey: ControlPreferenceKey.quantizationResidualCarryEnabled.rawValue
+        ) as? Bool ?? defaults.quantizationResidualCarryEnabled,
         minimumBlobAreaPoints: userDefaults.object(
             forKey: ControlPreferenceKey.minimumBlobAreaPoints.rawValue
         ) as? Int ?? defaults.minimumBlobAreaPoints,
@@ -367,6 +403,18 @@ func persistControlState(_ controlState: TrackIRControlState, userDefaults: User
     userDefaults.set(
         controlState.mouseJumpThresholdPixels,
         forKey: ControlPreferenceKey.mouseJumpThresholdPixels.rawValue
+    )
+    userDefaults.set(
+        controlState.isAdaptiveEMAEnabled,
+        forKey: ControlPreferenceKey.adaptiveEMAEnabled.rawValue
+    )
+    userDefaults.set(
+        controlState.isAlphaBetaFilterEnabled,
+        forKey: ControlPreferenceKey.alphaBetaFilterEnabled.rawValue
+    )
+    userDefaults.set(
+        controlState.isQuantizationResidualCarryEnabled,
+        forKey: ControlPreferenceKey.quantizationResidualCarryEnabled.rawValue
     )
     userDefaults.set(
         controlState.minimumBlobAreaPoints,

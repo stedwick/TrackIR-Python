@@ -142,6 +142,9 @@ final class TrackIRCameraController: ObservableObject {
         mouseDeadzone: Double,
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
+        isAdaptiveEMAEnabled: Bool,
+        isAlphaBetaFilterEnabled: Bool,
+        isQuantizationResidualCarryEnabled: Bool,
         minimumBlobAreaPoints: Int,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
@@ -175,6 +178,9 @@ final class TrackIRCameraController: ObservableObject {
                 mouseDeadzone: mouseDeadzone,
                 isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
                 mouseJumpThresholdPixels: mouseJumpThresholdPixels,
+                isAdaptiveEMAEnabled: isAdaptiveEMAEnabled,
+                isAlphaBetaFilterEnabled: isAlphaBetaFilterEnabled,
+                isQuantizationResidualCarryEnabled: isQuantizationResidualCarryEnabled,
                 minimumBlobAreaPoints: minimumBlobAreaPoints,
                 keepAwakeSeconds: keepAwakeSeconds,
                 mouseTransform: mouseTransform
@@ -204,6 +210,9 @@ final class TrackIRCameraController: ObservableObject {
         mouseDeadzone: Double,
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
+        isAdaptiveEMAEnabled: Bool,
+        isAlphaBetaFilterEnabled: Bool,
+        isQuantizationResidualCarryEnabled: Bool,
         minimumBlobAreaPoints: Int,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
@@ -243,6 +252,9 @@ final class TrackIRCameraController: ObservableObject {
             mouseDeadzone: mouseDeadzone,
             isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: mouseJumpThresholdPixels,
+            isAdaptiveEMAEnabled: isAdaptiveEMAEnabled,
+            isAlphaBetaFilterEnabled: isAlphaBetaFilterEnabled,
+            isQuantizationResidualCarryEnabled: isQuantizationResidualCarryEnabled,
             minimumBlobAreaPoints: minimumBlobAreaPoints,
             keepAwakeSeconds: keepAwakeSeconds,
             mouseTransform: mouseTransform
@@ -269,6 +281,9 @@ final class TrackIRCameraController: ObservableObject {
         mouseDeadzone: Double,
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
+        isAdaptiveEMAEnabled: Bool,
+        isAlphaBetaFilterEnabled: Bool,
+        isQuantizationResidualCarryEnabled: Bool,
         minimumBlobAreaPoints: Int,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
@@ -340,6 +355,9 @@ final class TrackIRCameraController: ObservableObject {
             mouseDeadzone: mouseDeadzone,
             isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: mouseJumpThresholdPixels,
+            isAdaptiveEMAEnabled: isAdaptiveEMAEnabled,
+            isAlphaBetaFilterEnabled: isAlphaBetaFilterEnabled,
+            isQuantizationResidualCarryEnabled: isQuantizationResidualCarryEnabled,
             minimumBlobAreaPoints: minimumBlobAreaPoints,
             keepAwakeSeconds: keepAwakeSeconds,
             mouseTransform: mouseTransform,
@@ -596,6 +614,9 @@ private struct TrackIRPollingConfiguration: Equatable {
     let mouseDeadzone: Double
     let isAvoidMouseJumpsEnabled: Bool
     let mouseJumpThresholdPixels: Int
+    let isAdaptiveEMAEnabled: Bool
+    let isAlphaBetaFilterEnabled: Bool
+    let isQuantizationResidualCarryEnabled: Bool
     let minimumBlobAreaPoints: Int
     let keepAwakeSeconds: Int
     let mouseTransform: VideoPreviewTransform
@@ -886,6 +907,9 @@ private nonisolated func trackIRApplyMouseMovement(
             deadzone: configuration.mouseDeadzone,
             avoid_mouse_jumps: configuration.isAvoidMouseJumpsEnabled,
             jump_threshold_pixels: Double(configuration.mouseJumpThresholdPixels),
+            use_adaptive_ema: configuration.isAdaptiveEMAEnabled,
+            use_alpha_beta_filter: configuration.isAlphaBetaFilterEnabled,
+            use_quantization_residual_carry: configuration.isQuantizationResidualCarryEnabled,
             transform: trackIRMouseTransform(configuration.mouseTransform)
         )
     )

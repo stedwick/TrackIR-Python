@@ -46,6 +46,9 @@ static void test_mouse_vertical_gain_scales_y_axis(void);
 static void test_mouse_smoothing_mode_matches_python_thresholds(void);
 static void test_mouse_jump_filter_uses_plain_pixel_thresholds(void);
 static void test_mouse_deadzone_uses_short_average_magnitude(void);
+static void test_mouse_adaptive_ema_smooths_small_deltas_more_than_large_deltas(void);
+static void test_mouse_alpha_beta_filter_updates_position_and_velocity(void);
+static void test_mouse_quantization_residual_carry_preserves_fractional_motion(void);
 static void test_mouse_tracker_applies_adaptive_smoothing(void);
 static void test_mouse_step_suppresses_zero_delta(void);
 static void test_cli_read_maximum_frames_per_second_accepts_optional_argument(void);
@@ -79,6 +82,9 @@ int main(void) {
     test_mouse_smoothing_mode_matches_python_thresholds();
     test_mouse_jump_filter_uses_plain_pixel_thresholds();
     test_mouse_deadzone_uses_short_average_magnitude();
+    test_mouse_adaptive_ema_smooths_small_deltas_more_than_large_deltas();
+    test_mouse_alpha_beta_filter_updates_position_and_velocity();
+    test_mouse_quantization_residual_carry_preserves_fractional_motion();
     test_mouse_tracker_applies_adaptive_smoothing();
     test_mouse_step_suppresses_zero_delta();
     test_cli_read_maximum_frames_per_second_accepts_optional_argument();
@@ -669,6 +675,56 @@ static void test_mouse_deadzone_uses_short_average_magnitude(void) {
             0.04
         )
     );
+}
+
+static void test_mouse_adaptive_ema_smooths_small_deltas_more_than_large_deltas(void) {
+    const otir_trackir_mouse_point previous = {.x = 0.0, .y = 0.0};
+    const otir_trackir_mouse_point small_delta = {.x = 0.1, .y = 0.0};
+    const otir_trackir_mouse_point large_delta = {.x = 2.0, .y = 0.0};
+    const otir_trackir_mouse_point filtered_small =
+        otir_trackir_mouse_apply_adaptive_ema(previous, small_delta);
+    const otir_trackir_mouse_point filtered_large =
+        otir_trackir_mouse_apply_adaptive_ema(previous, large_delta);
+
+    assert(filtered_small.x > 0.0);
+    assert(filtered_small.x < filtered_large.x);
+    assert(filtered_large.x < large_delta.x);
+}
+
+static void test_mouse_alpha_beta_filter_updates_position_and_velocity(void) {
+    const otir_trackir_mouse_alpha_beta_result result =
+        otir_trackir_mouse_alpha_beta_update(
+            (otir_trackir_mouse_point){.x = 10.0, .y = 4.0},
+            (otir_trackir_mouse_point){.x = 2.0, .y = -1.0},
+            (otir_trackir_mouse_point){.x = 15.0, .y = 2.0}
+        );
+
+    assert(fabs(result.position.x - 14.4) < 0.0001);
+    assert(fabs(result.position.y - 2.2) < 0.0001);
+    assert(fabs(result.velocity.x - 2.6) < 0.0001);
+    assert(fabs(result.velocity.y - -1.2) < 0.0001);
+}
+
+static void test_mouse_quantization_residual_carry_preserves_fractional_motion(void) {
+    const otir_trackir_mouse_quantization_result first =
+        otir_trackir_mouse_apply_quantization_residual_carry(
+            (otir_trackir_mouse_point){.x = 0.4, .y = -0.4},
+            (otir_trackir_mouse_point){0}
+        );
+    const otir_trackir_mouse_quantization_result second =
+        otir_trackir_mouse_apply_quantization_residual_carry(
+            (otir_trackir_mouse_point){.x = 0.8, .y = -0.8},
+            first.residual
+        );
+
+    assert(first.emitted_delta.x == 0.0);
+    assert(first.emitted_delta.y == 0.0);
+    assert(fabs(first.residual.x - 0.4) < 0.0001);
+    assert(fabs(first.residual.y + 0.4) < 0.0001);
+    assert(second.emitted_delta.x == 1.0);
+    assert(second.emitted_delta.y == -1.0);
+    assert(fabs(second.residual.x - 0.2) < 0.0001);
+    assert(fabs(second.residual.y + 0.2) < 0.0001);
 }
 
 static void test_mouse_tracker_applies_adaptive_smoothing(void) {

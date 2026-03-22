@@ -113,6 +113,9 @@ struct TrackIRMouseControllerTests {
             deadzone: 0.04,
             avoid_mouse_jumps: true,
             jump_threshold_pixels: 50,
+            use_adaptive_ema: false,
+            use_alpha_beta_filter: false,
+            use_quantization_residual_carry: false,
             transform: otir_trackir_mouse_transform(scale_x: 1, scale_y: 1, rotation_degrees: 0)
         )
 
@@ -151,6 +154,9 @@ struct TrackIRMouseControllerTests {
             deadzone: 0.04,
             avoid_mouse_jumps: true,
             jump_threshold_pixels: 50,
+            use_adaptive_ema: false,
+            use_alpha_beta_filter: false,
+            use_quantization_residual_carry: false,
             transform: otir_trackir_mouse_transform(scale_x: 1, scale_y: 1, rotation_degrees: 0)
         )
 

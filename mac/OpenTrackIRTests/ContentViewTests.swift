@@ -59,6 +59,18 @@ struct ContentViewTests {
                 "contentView.mouseJumpThresholdPixels"
         )
         #expect(
+            ControlPreferenceKey.adaptiveEMAEnabled.rawValue ==
+                "contentView.adaptiveEMAEnabled"
+        )
+        #expect(
+            ControlPreferenceKey.alphaBetaFilterEnabled.rawValue ==
+                "contentView.alphaBetaFilterEnabled"
+        )
+        #expect(
+            ControlPreferenceKey.quantizationResidualCarryEnabled.rawValue ==
+                "contentView.quantizationResidualCarryEnabled"
+        )
+        #expect(
             ControlPreferenceKey.minimumBlobAreaPoints.rawValue ==
                 "contentView.minimumBlobAreaPoints"
         )
@@ -82,6 +94,9 @@ struct ContentViewTests {
             mouseDeadzone: 0.04,
             avoidMouseJumpsEnabled: true,
             mouseJumpThresholdPixels: 50,
+            adaptiveEMAEnabled: false,
+            alphaBetaFilterEnabled: false,
+            quantizationResidualCarryEnabled: false,
             minimumBlobAreaPoints: 100,
             keepAwakeSeconds: 29,
             timeoutEnabled: true,
@@ -105,6 +120,12 @@ struct ContentViewTests {
         #expect(preferences[ControlPreferenceKey.mouseDeadzone.rawValue] as? Double == 0.04)
         #expect(preferences[ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.mouseJumpThresholdPixels.rawValue] as? Int == 50)
+        #expect(preferences[ControlPreferenceKey.adaptiveEMAEnabled.rawValue] as? Bool == false)
+        #expect(preferences[ControlPreferenceKey.alphaBetaFilterEnabled.rawValue] as? Bool == false)
+        #expect(
+            preferences[ControlPreferenceKey.quantizationResidualCarryEnabled.rawValue] as? Bool ==
+                false
+        )
         #expect(preferences[ControlPreferenceKey.minimumBlobAreaPoints.rawValue] as? Int == 100)
         #expect(preferences[ControlPreferenceKey.keepAwakeSeconds.rawValue] as? Int == 29)
         #expect(preferences[ControlPreferenceKey.timeoutEnabled.rawValue] as? Bool == true)
@@ -128,6 +149,9 @@ struct ContentViewTests {
             mouseDeadzone: 0.12,
             isAvoidMouseJumpsEnabled: false,
             mouseJumpThresholdPixels: 80,
+            isAdaptiveEMAEnabled: true,
+            isAlphaBetaFilterEnabled: true,
+            isQuantizationResidualCarryEnabled: true,
             minimumBlobAreaPoints: 9,
             keepAwakeSeconds: 45,
             isTimeoutEnabled: false,
@@ -175,6 +199,9 @@ struct ContentViewTests {
         #expect(mouseSmoothingValueLabel(for: 3) == "3")
         #expect(mouseDeadzoneValueLabel(for: 0.04) == "0.04")
         #expect(controlDefaultValues().minimumBlobAreaPoints == 100)
+        #expect(controlDefaultValues().adaptiveEMAEnabled == false)
+        #expect(controlDefaultValues().alphaBetaFilterEnabled == false)
+        #expect(controlDefaultValues().quantizationResidualCarryEnabled == false)
         #expect(trackIRDefaultBlobCentroidMode() == .regularizedBinary)
         #expect(trackIRBlobCentroidModeDescription(for: .regularizedBinary).contains("previous center"))
         #expect(trackIRTimeoutHelperText == "8 hours = 60 sec x 60 min x 8 hrs = 28800 sec")
@@ -466,6 +493,9 @@ struct ContentViewTests {
             mouseDeadzone: 0.04,
             isAvoidMouseJumpsEnabled: true,
             mouseJumpThresholdPixels: 50,
+            isAdaptiveEMAEnabled: false,
+            isAlphaBetaFilterEnabled: false,
+            isQuantizationResidualCarryEnabled: false,
             minimumBlobAreaPoints: 100,
             keepAwakeSeconds: 29,
             isTimeoutEnabled: true,
@@ -496,6 +526,9 @@ struct ContentViewTests {
             mouseDeadzone: 0.04,
             isAvoidMouseJumpsEnabled: true,
             mouseJumpThresholdPixels: 50,
+            isAdaptiveEMAEnabled: false,
+            isAlphaBetaFilterEnabled: false,
+            isQuantizationResidualCarryEnabled: false,
             minimumBlobAreaPoints: 100,
             keepAwakeSeconds: 29,
             isTimeoutEnabled: true,

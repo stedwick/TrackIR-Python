@@ -106,6 +106,18 @@ struct ContentView: View {
         controlState.mouseJumpThresholdPixels
     }
 
+    private var isAdaptiveEMAEnabled: Bool {
+        controlState.isAdaptiveEMAEnabled
+    }
+
+    private var isAlphaBetaFilterEnabled: Bool {
+        controlState.isAlphaBetaFilterEnabled
+    }
+
+    private var isQuantizationResidualCarryEnabled: Bool {
+        controlState.isQuantizationResidualCarryEnabled
+    }
+
     private var minimumBlobAreaPoints: Int {
         controlState.minimumBlobAreaPoints
     }
@@ -536,6 +548,7 @@ struct ContentView: View {
                         mouseSmoothingControlRow
                         mouseDeadzoneControlRow
                         mouseJumpFilterControlRow
+                        experimentalMouseFiltersControlRow
                         keepAwakeControlRow
                         timeoutControlRow
                         blobDetectionControlRow
@@ -629,6 +642,27 @@ struct ContentView: View {
                     suffix: "px",
                     isEnabled: isAvoidMouseJumpsEnabled
                 )
+            }
+        }
+    }
+
+    private var experimentalMouseFiltersControlRow: some View {
+        controlCard {
+            VStack(alignment: .leading, spacing: 16) {
+                controlCopy(
+                    title: "Experimental Filters",
+                    detail: "Try lightweight tracker math experiments one at a time or in combination.",
+                    systemImage: "line.3.crossed.swirl.circle"
+                )
+
+                Toggle("Adaptive EMA", isOn: isAdaptiveEMAEnabledBinding)
+                    .toggleStyle(.checkbox)
+
+                Toggle("Alpha-Beta Filter", isOn: isAlphaBetaFilterEnabledBinding)
+                    .toggleStyle(.checkbox)
+
+                Toggle("Quantization Residual Carry", isOn: isQuantizationResidualCarryEnabledBinding)
+                    .toggleStyle(.checkbox)
             }
         }
     }
@@ -948,6 +982,27 @@ struct ContentView: View {
         )
     }
 
+    private var isAdaptiveEMAEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isAdaptiveEMAEnabled },
+            set: { runtimeController.setAdaptiveEMAEnabled($0) }
+        )
+    }
+
+    private var isAlphaBetaFilterEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isAlphaBetaFilterEnabled },
+            set: { runtimeController.setAlphaBetaFilterEnabled($0) }
+        )
+    }
+
+    private var isQuantizationResidualCarryEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isQuantizationResidualCarryEnabled },
+            set: { runtimeController.setQuantizationResidualCarryEnabled($0) }
+        )
+    }
+
     private var minimumBlobAreaPointsBinding: Binding<Int> {
         Binding(
             get: { minimumBlobAreaPoints },
@@ -1021,6 +1076,9 @@ enum ControlPreferenceKey: String {
     case mouseDeadzone = "contentView.mouseDeadzone"
     case avoidMouseJumpsEnabled = "contentView.avoidMouseJumpsEnabled"
     case mouseJumpThresholdPixels = "contentView.mouseJumpThresholdPixels"
+    case adaptiveEMAEnabled = "contentView.adaptiveEMAEnabled"
+    case alphaBetaFilterEnabled = "contentView.alphaBetaFilterEnabled"
+    case quantizationResidualCarryEnabled = "contentView.quantizationResidualCarryEnabled"
     case minimumBlobAreaPoints = "contentView.minimumBlobAreaPoints"
     case keepAwakeSeconds = "contentView.keepAwakeSeconds"
     case timeoutEnabled = "contentView.timeoutEnabled"
@@ -1041,6 +1099,9 @@ struct ControlDefaultValues: Equatable {
     let mouseDeadzone: Double
     let avoidMouseJumpsEnabled: Bool
     let mouseJumpThresholdPixels: Int
+    let adaptiveEMAEnabled: Bool
+    let alphaBetaFilterEnabled: Bool
+    let quantizationResidualCarryEnabled: Bool
     let minimumBlobAreaPoints: Int
     let keepAwakeSeconds: Int
     let timeoutEnabled: Bool
@@ -1076,6 +1137,9 @@ func controlDefaultValues() -> ControlDefaultValues {
         mouseDeadzone: 0.04,
         avoidMouseJumpsEnabled: true,
         mouseJumpThresholdPixels: 50,
+        adaptiveEMAEnabled: false,
+        alphaBetaFilterEnabled: false,
+        quantizationResidualCarryEnabled: false,
         minimumBlobAreaPoints: 100,
         keepAwakeSeconds: 29,
         timeoutEnabled: true,
@@ -1098,6 +1162,9 @@ func controlDefaultPreferences(_ defaults: ControlDefaultValues) -> [String: Any
         ControlPreferenceKey.mouseDeadzone.rawValue: defaults.mouseDeadzone,
         ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue: defaults.avoidMouseJumpsEnabled,
         ControlPreferenceKey.mouseJumpThresholdPixels.rawValue: defaults.mouseJumpThresholdPixels,
+        ControlPreferenceKey.adaptiveEMAEnabled.rawValue: defaults.adaptiveEMAEnabled,
+        ControlPreferenceKey.alphaBetaFilterEnabled.rawValue: defaults.alphaBetaFilterEnabled,
+        ControlPreferenceKey.quantizationResidualCarryEnabled.rawValue: defaults.quantizationResidualCarryEnabled,
         ControlPreferenceKey.minimumBlobAreaPoints.rawValue: defaults.minimumBlobAreaPoints,
         ControlPreferenceKey.keepAwakeSeconds.rawValue: defaults.keepAwakeSeconds,
         ControlPreferenceKey.timeoutEnabled.rawValue: defaults.timeoutEnabled,
