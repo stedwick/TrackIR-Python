@@ -57,6 +57,7 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - Validate the signed app before notarization with `codesign -dv --verbose=4` and `codesign --verify --deep --strict`; the release app should show a Developer ID signature with a secure `Timestamp=` and no embedded entitlements.
 - Use the existing `OpenTrackIRNotary` keychain profile with `xcrun notarytool submit ... --keychain-profile OpenTrackIRNotary --wait` to notarize a zip that contains the signed `.app`.
 - After Apple accepts the submission, staple the ticket to the `.app` with `xcrun stapler staple`, then rebuild the final GitHub zip from the stapled app so the distributed asset already contains the notarization ticket.
+- The final release zip must contain `OpenTrackIR.app` at the top level. Do not ship a renamed staging bundle such as `OpenTrackIR-0.2-stapled.app`; if a temporary copy is used during notarization, rename or recopy it back to `OpenTrackIR.app` before creating the GitHub asset.
 - Verify the stapled app with `spctl -a -vv`; the accepted result should say `source=Notarized Developer ID`.
 - Check the previous release metadata with `gh release view v0.1` before drafting notes or naming assets so naming stays consistent.
 - Publish the release with `gh release create`, attach the notarized zip, and keep the release notes explicit about platform/build assumptions such as the macOS version, architecture, notarization status, and whether `libusb` is statically linked.
