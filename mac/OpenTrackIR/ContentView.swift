@@ -157,6 +157,25 @@ struct ContentView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 }
 
+                if isVideoEnabled,
+                   cameraController.previewImage != nil,
+                   let centroidMarkerPosition = previewCentroidMarkerPosition(
+                        centroidX: cameraController.centroidX,
+                        centroidY: cameraController.centroidY,
+                        frameWidth: Int(OTIR_TIR5V3_FRAME_WIDTH),
+                        frameHeight: Int(OTIR_TIR5V3_FRAME_HEIGHT),
+                        transform: videoTransform
+                   ) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 10, height: 10)
+                        .shadow(color: Color.black.opacity(0.35), radius: 3, x: 0, y: 1)
+                        .position(
+                            x: centroidMarkerPosition.x * previewWidth,
+                            y: centroidMarkerPosition.y * previewHeight
+                        )
+                }
+
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .strokeBorder(previewBorderColor, lineWidth: 1)
 
@@ -635,6 +654,40 @@ func previewVideoTransform(
         scaleY: flipVertical ? -1 : 1,
         rotationDegrees: normalizedRotationDegrees(rotationDegrees)
     )
+}
+
+func previewCentroidMarkerPosition(
+    centroidX: Double?,
+    centroidY: Double?,
+    frameWidth: Int,
+    frameHeight: Int,
+    transform: VideoPreviewTransform
+) -> CGPoint? {
+    let normalizedX: Double
+    let normalizedY: Double
+    let centeredX: Double
+    let centeredY: Double
+    let flippedX: Double
+    let flippedY: Double
+    let radians: Double
+    let rotatedX: Double
+    let rotatedY: Double
+
+    guard let centroidX, let centroidY, frameWidth > 0, frameHeight > 0 else {
+        return nil
+    }
+
+    normalizedX = min(max(centroidX / Double(frameWidth), 0.0), 1.0)
+    normalizedY = min(max(centroidY / Double(frameHeight), 0.0), 1.0)
+    centeredX = normalizedX - 0.5
+    centeredY = normalizedY - 0.5
+    flippedX = centeredX * Double(transform.scaleX)
+    flippedY = centeredY * Double(transform.scaleY)
+    radians = transform.rotationDegrees * .pi / 180.0
+    rotatedX = (flippedX * cos(radians)) - (flippedY * sin(radians))
+    rotatedY = (flippedX * sin(radians)) + (flippedY * cos(radians))
+
+    return CGPoint(x: rotatedX + 0.5, y: rotatedY + 0.5)
 }
 
 func normalizedRotationDegrees(_ rotationDegrees: Double) -> Double {

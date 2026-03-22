@@ -94,6 +94,32 @@ struct ContentViewTests {
         ) == VideoPreviewTransform(scaleX: 1, scaleY: -1, rotationDegrees: 270))
     }
 
+    @Test func previewCentroidMarkerPositionAppliesFlipAndRotation() {
+        #expect(previewCentroidMarkerPosition(
+            centroidX: 320,
+            centroidY: 240,
+            frameWidth: 640,
+            frameHeight: 480,
+            transform: VideoPreviewTransform(scaleX: 1, scaleY: 1, rotationDegrees: 0)
+        ) == CGPoint(x: 0.5, y: 0.5))
+
+        #expect(previewCentroidMarkerPosition(
+            centroidX: 160,
+            centroidY: 120,
+            frameWidth: 640,
+            frameHeight: 480,
+            transform: VideoPreviewTransform(scaleX: -1, scaleY: 1, rotationDegrees: 0)
+        ) == CGPoint(x: 0.75, y: 0.25))
+
+        #expect(previewCentroidMarkerPosition(
+            centroidX: 480,
+            centroidY: 240,
+            frameWidth: 640,
+            frameHeight: 480,
+            transform: VideoPreviewTransform(scaleX: 1, scaleY: 1, rotationDegrees: 90)
+        ) == CGPoint(x: 0.5, y: 0.75))
+    }
+
     @Test func videoRotationValueLabelUsesNormalizedDegrees() {
         #expect(videoRotationValueLabel(for: 0) == "0°")
         #expect(videoRotationValueLabel(for: 360) == "0°")
