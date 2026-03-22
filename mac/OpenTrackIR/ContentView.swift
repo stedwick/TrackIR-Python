@@ -106,8 +106,8 @@ struct ContentView: View {
         controlState.minimumBlobAreaPoints
     }
 
-    private var isScaledHullContoursEnabled: Bool {
-        controlState.isScaledHullContoursEnabled
+    private var isConvexHullCentroidEnabled: Bool {
+        controlState.isConvexHullCentroidEnabled
     }
 
     private var keepAwakeSeconds: Int {
@@ -637,7 +637,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 16) {
                 controlCopy(
                     title: "Blob Detection",
-                    detail: "Filter tiny blobs and optionally use scaled hull contours for centroiding.",
+                    detail: "Filter tiny blobs and optionally use a convex hull centroid for rubber-band centroiding.",
                     systemImage: "scope"
                 )
 
@@ -648,7 +648,7 @@ struct ContentView: View {
                     suffix: "pts"
                 )
 
-                Toggle("Scaled Hull Contours", isOn: isScaledHullContoursEnabledBinding)
+                Toggle("Convex Hull Centroid", isOn: isConvexHullCentroidEnabledBinding)
                     .toggleStyle(.checkbox)
 
                 Text("PacMan-to-Pie mode: treat a chipped circle more like a full circle before centroiding.")
@@ -922,10 +922,10 @@ struct ContentView: View {
         )
     }
 
-    private var isScaledHullContoursEnabledBinding: Binding<Bool> {
+    private var isConvexHullCentroidEnabledBinding: Binding<Bool> {
         Binding(
-            get: { isScaledHullContoursEnabled },
-            set: { runtimeController.setScaledHullContoursEnabled($0) }
+            get: { isConvexHullCentroidEnabled },
+            set: { runtimeController.setConvexHullCentroidEnabled($0) }
         )
     }
 
@@ -995,7 +995,8 @@ enum ControlPreferenceKey: String {
     case avoidMouseJumpsEnabled = "contentView.avoidMouseJumpsEnabled"
     case mouseJumpThresholdPixels = "contentView.mouseJumpThresholdPixels"
     case minimumBlobAreaPoints = "contentView.minimumBlobAreaPoints"
-    case scaledHullContoursEnabled = "contentView.scaledHullContoursEnabled"
+    // Keep the stored key stable so existing preferences migrate automatically.
+    case convexHullCentroidEnabled = "contentView.scaledHullContoursEnabled"
     case keepAwakeSeconds = "contentView.keepAwakeSeconds"
     case timeoutEnabled = "contentView.timeoutEnabled"
     case timeoutSeconds = "contentView.timeoutSeconds"
@@ -1015,7 +1016,7 @@ struct ControlDefaultValues: Equatable {
     let avoidMouseJumpsEnabled: Bool
     let mouseJumpThresholdPixels: Int
     let minimumBlobAreaPoints: Int
-    let isScaledHullContoursEnabled: Bool
+    let isConvexHullCentroidEnabled: Bool
     let keepAwakeSeconds: Int
     let timeoutEnabled: Bool
     let timeoutSeconds: Int
@@ -1046,7 +1047,7 @@ func controlDefaultValues() -> ControlDefaultValues {
         avoidMouseJumpsEnabled: true,
         mouseJumpThresholdPixels: 50,
         minimumBlobAreaPoints: 100,
-        isScaledHullContoursEnabled: true,
+        isConvexHullCentroidEnabled: true,
         keepAwakeSeconds: 29,
         timeoutEnabled: true,
         timeoutSeconds: 28_800,
@@ -1068,7 +1069,7 @@ func controlDefaultPreferences(_ defaults: ControlDefaultValues) -> [String: Any
         ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue: defaults.avoidMouseJumpsEnabled,
         ControlPreferenceKey.mouseJumpThresholdPixels.rawValue: defaults.mouseJumpThresholdPixels,
         ControlPreferenceKey.minimumBlobAreaPoints.rawValue: defaults.minimumBlobAreaPoints,
-        ControlPreferenceKey.scaledHullContoursEnabled.rawValue: defaults.isScaledHullContoursEnabled,
+        ControlPreferenceKey.convexHullCentroidEnabled.rawValue: defaults.isConvexHullCentroidEnabled,
         ControlPreferenceKey.keepAwakeSeconds.rawValue: defaults.keepAwakeSeconds,
         ControlPreferenceKey.timeoutEnabled.rawValue: defaults.timeoutEnabled,
         ControlPreferenceKey.timeoutSeconds.rawValue: defaults.timeoutSeconds,

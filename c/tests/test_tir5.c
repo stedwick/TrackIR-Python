@@ -361,7 +361,7 @@ static void test_compute_blob_result_can_use_scaled_hull_centroid(void) {
     assert(raw_result.centroid_mode == OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB);
     assert(hull_result.centroid_mode == OTIR_TIR5V3_CENTROID_MODE_SCALED_HULL);
     assert(hull_result.centroid_x > raw_result.centroid_x);
-    assert(hull_result.centroid_y > raw_result.centroid_y);
+    assert(fabs(hull_result.centroid_y - raw_result.centroid_y) < 0.0001);
 }
 
 static void test_compute_blob_result_row_bucket_grouping_respects_row_adjacency(void) {

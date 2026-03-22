@@ -62,7 +62,7 @@ struct ContentViewTests {
                 "contentView.minimumBlobAreaPoints"
         )
         #expect(
-            ControlPreferenceKey.scaledHullContoursEnabled.rawValue ==
+            ControlPreferenceKey.convexHullCentroidEnabled.rawValue ==
                 "contentView.scaledHullContoursEnabled"
         )
         #expect(ControlPreferenceKey.keepAwakeSeconds.rawValue == "contentView.keepAwakeSeconds")
@@ -85,7 +85,7 @@ struct ContentViewTests {
             avoidMouseJumpsEnabled: true,
             mouseJumpThresholdPixels: 50,
             minimumBlobAreaPoints: 100,
-            isScaledHullContoursEnabled: true,
+            isConvexHullCentroidEnabled: true,
             keepAwakeSeconds: 29,
             timeoutEnabled: true,
             timeoutSeconds: 28_800,
@@ -108,7 +108,7 @@ struct ContentViewTests {
         #expect(preferences[ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.mouseJumpThresholdPixels.rawValue] as? Int == 50)
         #expect(preferences[ControlPreferenceKey.minimumBlobAreaPoints.rawValue] as? Int == 100)
-        #expect(preferences[ControlPreferenceKey.scaledHullContoursEnabled.rawValue] as? Bool == true)
+        #expect(preferences[ControlPreferenceKey.convexHullCentroidEnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.keepAwakeSeconds.rawValue] as? Int == 29)
         #expect(preferences[ControlPreferenceKey.timeoutEnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.timeoutSeconds.rawValue] as? Int == 28_800)
@@ -131,7 +131,7 @@ struct ContentViewTests {
             isAvoidMouseJumpsEnabled: false,
             mouseJumpThresholdPixels: 80,
             minimumBlobAreaPoints: 9,
-            isScaledHullContoursEnabled: false,
+            isConvexHullCentroidEnabled: false,
             keepAwakeSeconds: 45,
             isTimeoutEnabled: false,
             timeoutSeconds: 600,
@@ -463,7 +463,7 @@ struct ContentViewTests {
             isAvoidMouseJumpsEnabled: true,
             mouseJumpThresholdPixels: 50,
             minimumBlobAreaPoints: 100,
-            isScaledHullContoursEnabled: true,
+            isConvexHullCentroidEnabled: true,
             keepAwakeSeconds: 29,
             isTimeoutEnabled: true,
             timeoutSeconds: 28_800,
@@ -493,7 +493,7 @@ struct ContentViewTests {
             isAvoidMouseJumpsEnabled: true,
             mouseJumpThresholdPixels: 50,
             minimumBlobAreaPoints: 100,
-            isScaledHullContoursEnabled: true,
+            isConvexHullCentroidEnabled: true,
             keepAwakeSeconds: 29,
             isTimeoutEnabled: true,
             timeoutSeconds: 28_800,

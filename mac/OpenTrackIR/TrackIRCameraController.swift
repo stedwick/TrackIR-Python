@@ -126,7 +126,7 @@ final class TrackIRCameraController: ObservableObject {
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
         minimumBlobAreaPoints: Int,
-        isScaledHullContoursEnabled: Bool,
+        isConvexHullCentroidEnabled: Bool,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
@@ -158,7 +158,7 @@ final class TrackIRCameraController: ObservableObject {
                 isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
                 mouseJumpThresholdPixels: mouseJumpThresholdPixels,
                 minimumBlobAreaPoints: minimumBlobAreaPoints,
-                isScaledHullContoursEnabled: isScaledHullContoursEnabled,
+                isConvexHullCentroidEnabled: isConvexHullCentroidEnabled,
                 keepAwakeSeconds: keepAwakeSeconds,
                 mouseTransform: mouseTransform
             )
@@ -187,7 +187,7 @@ final class TrackIRCameraController: ObservableObject {
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
         minimumBlobAreaPoints: Int,
-        isScaledHullContoursEnabled: Bool,
+        isConvexHullCentroidEnabled: Bool,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
@@ -225,7 +225,7 @@ final class TrackIRCameraController: ObservableObject {
             isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: mouseJumpThresholdPixels,
             minimumBlobAreaPoints: minimumBlobAreaPoints,
-            isScaledHullContoursEnabled: isScaledHullContoursEnabled,
+            isConvexHullCentroidEnabled: isConvexHullCentroidEnabled,
             keepAwakeSeconds: keepAwakeSeconds,
             mouseTransform: mouseTransform
         )
@@ -251,7 +251,7 @@ final class TrackIRCameraController: ObservableObject {
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
         minimumBlobAreaPoints: Int,
-        isScaledHullContoursEnabled: Bool,
+        isConvexHullCentroidEnabled: Bool,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
@@ -269,7 +269,7 @@ final class TrackIRCameraController: ObservableObject {
         )
         otir_trackir_session_set_video_enabled(session, isVideoEnabled)
         otir_trackir_session_set_minimum_blob_area_points(session, Int32(minimumBlobAreaPoints))
-        otir_trackir_session_set_scaled_hull_enabled(session, isScaledHullContoursEnabled)
+        otir_trackir_session_set_scaled_hull_enabled(session, isConvexHullCentroidEnabled)
         otir_trackir_session_set_low_power_mode_enabled(session, false)
         otir_mac_mouse_controller_prepare_post_event_access(
             mouseController,
@@ -319,7 +319,7 @@ final class TrackIRCameraController: ObservableObject {
             isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: mouseJumpThresholdPixels,
             minimumBlobAreaPoints: minimumBlobAreaPoints,
-            isScaledHullContoursEnabled: isScaledHullContoursEnabled,
+            isConvexHullCentroidEnabled: isConvexHullCentroidEnabled,
             keepAwakeSeconds: keepAwakeSeconds,
             mouseTransform: mouseTransform,
             shouldPublishUI: shouldPublishUI,
@@ -572,7 +572,7 @@ private struct TrackIRPollingConfiguration: Equatable {
     let isAvoidMouseJumpsEnabled: Bool
     let mouseJumpThresholdPixels: Int
     let minimumBlobAreaPoints: Int
-    let isScaledHullContoursEnabled: Bool
+    let isConvexHullCentroidEnabled: Bool
     let keepAwakeSeconds: Int
     let mouseTransform: VideoPreviewTransform
     let shouldPublishUI: Bool
