@@ -48,9 +48,6 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .top)
             }
             .background(appBackground)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                scrollGlassHint
-            }
         }
         .frame(minWidth: 760, minHeight: 560)
         .onAppear {
@@ -317,24 +314,6 @@ struct ContentView: View {
                 }
             }
         }
-    }
-
-    private var scrollGlassHint: some View {
-        Rectangle()
-            .fill(.ultraThinMaterial)
-            .mask {
-                LinearGradient(
-                    colors: [
-                        Color.clear,
-                        Color.black.opacity(0.55),
-                        Color.black,
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            .frame(height: 68)
-            .allowsHitTesting(false)
     }
 
     private var previewMessage: String {
