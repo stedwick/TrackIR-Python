@@ -2,6 +2,8 @@
 
 OpenTrackIR is an infrared head-mouse to move your cursor on macOS if you are disabled. OpenTrackIR is a reverse-engineering workspace for NaturalPoint TrackIR hardware, with the explicit goal of removing the dependency on NaturalPoint's proprietary SDK and making device support work cross-platform.
 
+If you want to try the current macOS app, download it from the [releases page](https://github.com/stedwick/OpenTrackIR/releases).
+
 The repo is organized by implementation target:
 
 - `python/`: active protocol exploration, USB transport work, packet decoding, logging, and preview tooling.

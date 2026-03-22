@@ -43,13 +43,29 @@ struct TrackIRCameraDisplayState: Equatable, Sendable {
 final class TrackIRCameraController: ObservableObject {
     @Published private(set) var previewImage: CGImage?
     @Published private(set) var displayState = TrackIRCameraDisplayState()
+    @Published private(set) var xKeysMonitorSnapshot = XKeysMonitorSnapshot()
 
     let backendLabel = "C + libusb"
 
     private let mouseController = otir_mac_mouse_controller_create()
+    private let xKeysFootPedalMonitor = XKeysFootPedalMonitor()
     private var pollTask: Task<Void, Never>?
     private var session: OpaquePointer?
     private var pollingConfiguration: TrackIRPollingConfiguration?
+    var xKeysFailureHandler: (() -> Void)?
+
+    init() {
+        xKeysFootPedalMonitor.onSnapshotChange = { [weak self] snapshot in
+            Task { @MainActor [weak self] in
+                self?.xKeysMonitorSnapshot = snapshot
+            }
+        }
+        xKeysFootPedalMonitor.onFailure = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.xKeysFailureHandler?()
+            }
+        }
+    }
 
     var sourceLabel: String {
         switch displayState.phase {
@@ -119,6 +135,7 @@ final class TrackIRCameraController: ObservableObject {
         isVideoEnabled: Bool,
         maximumTrackingFramesPerSecond: Double,
         isWindowVisible: Bool,
+        isXKeysFastMouseEnabled: Bool,
         isMouseMovementEnabled: Bool,
         mouseMovementSpeed: Double,
         mouseSmoothing: Int,
@@ -134,6 +151,7 @@ final class TrackIRCameraController: ObservableObject {
             isVideoEnabled: isVideoEnabled,
             isWindowVisible: isWindowVisible
         )
+        syncXKeysMonitor(isEnabled: isXKeysFastMouseEnabled)
         let shouldPollSnapshots = trackIRShouldPollSnapshots(
             isWindowVisible: isWindowVisible,
             isMouseMovementEnabled: isMouseMovementEnabled,
@@ -151,6 +169,7 @@ final class TrackIRCameraController: ObservableObject {
                 maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond,
                 shouldPollSnapshots: shouldPollSnapshots,
                 shouldPublishUI: isWindowVisible,
+                isXKeysFastMouseEnabled: isXKeysFastMouseEnabled,
                 isMouseMovementEnabled: isMouseMovementEnabled,
                 mouseMovementSpeed: mouseMovementSpeed,
                 mouseSmoothing: mouseSmoothing,
@@ -180,6 +199,7 @@ final class TrackIRCameraController: ObservableObject {
         isVideoEnabled: Bool,
         maximumTrackingFramesPerSecond: Double,
         isWindowVisible: Bool,
+        isXKeysFastMouseEnabled: Bool,
         isMouseMovementEnabled: Bool,
         mouseMovementSpeed: Double,
         mouseSmoothing: Int,
@@ -197,6 +217,7 @@ final class TrackIRCameraController: ObservableObject {
             isTrackIREnabled: isTrackIREnabled,
             keepAwakeSeconds: keepAwakeSeconds
         )
+        syncXKeysMonitor(isEnabled: isXKeysFastMouseEnabled)
         let shouldRestart = shouldAccessTrackIRHardware(
             isTrackIREnabled: isTrackIREnabled,
             isVideoEnabled: isVideoEnabled,
@@ -218,6 +239,7 @@ final class TrackIRCameraController: ObservableObject {
             maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond,
             shouldPollSnapshots: shouldPollSnapshots,
             shouldPublishUI: isWindowVisible,
+            isXKeysFastMouseEnabled: isXKeysFastMouseEnabled,
             isMouseMovementEnabled: isMouseMovementEnabled,
             mouseMovementSpeed: mouseMovementSpeed,
             mouseSmoothing: mouseSmoothing,
@@ -244,6 +266,7 @@ final class TrackIRCameraController: ObservableObject {
         maximumTrackingFramesPerSecond: Double,
         shouldPollSnapshots: Bool,
         shouldPublishUI: Bool,
+        isXKeysFastMouseEnabled: Bool,
         isMouseMovementEnabled: Bool,
         mouseMovementSpeed: Double,
         mouseSmoothing: Int,
@@ -312,6 +335,7 @@ final class TrackIRCameraController: ObservableObject {
         let configuration = TrackIRPollingConfiguration(
             isTrackIREnabled: true,
             isVideoEnabled: isVideoEnabled,
+            isXKeysFastMouseEnabled: isXKeysFastMouseEnabled,
             isMouseMovementEnabled: isMouseMovementEnabled,
             mouseMovementSpeed: mouseMovementSpeed,
             mouseSmoothing: mouseSmoothing,
@@ -339,7 +363,8 @@ final class TrackIRCameraController: ObservableObject {
             startPolling(
                 session: session,
                 mouseController: mouseController,
-                configuration: configuration
+                configuration: configuration,
+                xKeysMonitor: xKeysFootPedalMonitor
             )
         }
     }
@@ -373,7 +398,8 @@ final class TrackIRCameraController: ObservableObject {
     private func startPolling(
         session: OpaquePointer,
         mouseController: OpaquePointer?,
-        configuration: TrackIRPollingConfiguration
+        configuration: TrackIRPollingConfiguration,
+        xKeysMonitor: XKeysFootPedalMonitor
     ) {
         pollTask?.cancel()
 
@@ -482,7 +508,8 @@ final class TrackIRCameraController: ObservableObject {
                     trackIRApplyMouseMovement(
                         controller: mouseController,
                         snapshot: snapshot,
-                        configuration: configuration
+                        configuration: configuration,
+                        xKeysMonitorSnapshot: xKeysMonitor.snapshot
                     )
                 if didMoveMouse {
                     lastMouseMovementTime = currentTime
@@ -565,6 +592,7 @@ private let trackIRLogger = Logger(
 private struct TrackIRPollingConfiguration: Equatable {
     let isTrackIREnabled: Bool
     let isVideoEnabled: Bool
+    let isXKeysFastMouseEnabled: Bool
     let isMouseMovementEnabled: Bool
     let mouseMovementSpeed: Double
     let mouseSmoothing: Int
@@ -579,6 +607,12 @@ private struct TrackIRPollingConfiguration: Equatable {
     let maximumPreviewFramesPerSecond: Double
     let maximumTelemetryFramesPerSecond: Double
     let pollInterval: TimeInterval
+}
+
+private extension TrackIRCameraController {
+    func syncXKeysMonitor(isEnabled: Bool) {
+        xKeysFootPedalMonitor.setEnabled(isEnabled)
+    }
 }
 
 nonisolated func shouldStreamTrackIRSession(isTrackIREnabled: Bool, isVideoEnabled: Bool) -> Bool {
@@ -832,7 +866,8 @@ nonisolated func trackIRMouseTransform(
 private nonisolated func trackIRApplyMouseMovement(
     controller: OpaquePointer?,
     snapshot: otir_trackir_session_snapshot,
-    configuration: TrackIRPollingConfiguration
+    configuration: TrackIRPollingConfiguration,
+    xKeysMonitorSnapshot: XKeysMonitorSnapshot
 ) -> Bool {
     otir_mac_mouse_controller_update(
         controller,
@@ -842,7 +877,11 @@ private nonisolated func trackIRApplyMouseMovement(
         otir_trackir_mouse_tracker_config(
             is_movement_enabled: configuration.isMouseMovementEnabled &&
                 snapshot.phase == OTIR_TRACKIR_SESSION_PHASE_STREAMING,
-            speed: configuration.mouseMovementSpeed,
+            speed: trackIRMouseEffectiveSpeed(
+                baseSpeed: configuration.mouseMovementSpeed,
+                isXKeysFastMouseEnabled: configuration.isXKeysFastMouseEnabled,
+                isXKeysPedalPressed: xKeysMonitorSnapshot.isPressed
+            ),
             smoothing: Double(configuration.mouseSmoothing),
             deadzone: configuration.mouseDeadzone,
             avoid_mouse_jumps: configuration.isAvoidMouseJumpsEnabled,

@@ -86,6 +86,10 @@ struct ContentView: View {
         controlState.mouseMovementSpeed
     }
 
+    private var isXKeysFastMouseEnabled: Bool {
+        controlState.isXKeysFastMouseEnabled
+    }
+
     private var mouseSmoothing: Int {
         controlState.mouseSmoothing
     }
@@ -539,6 +543,7 @@ struct ContentView: View {
                         keepAwakeControlRow
                         timeoutControlRow
                         blobDetectionControlRow
+                        xKeysFastMouseControlRow
                     }
                 }
             }
@@ -696,6 +701,31 @@ struct ContentView: View {
                     suffix: "sec",
                     isEnabled: isTimeoutEnabled
                 )
+            }
+        }
+    }
+
+    private var xKeysFastMouseControlRow: some View {
+        controlCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .center, spacing: 10) {
+                    Circle()
+                        .fill(xKeysIndicatorColor(for: cameraController.xKeysMonitorSnapshot.indicatorState))
+                        .frame(width: 14, height: 14)
+
+                    Text(xKeysIndicatorLabel(for: cameraController.xKeysMonitorSnapshot.indicatorState))
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                controlCopy(
+                    title: "X-keys Fast Mode",
+                    detail: "Hold the middle X-keys foot pedal for an instant 2.5x mouse speed boost.",
+                    systemImage: "figure.run"
+                )
+
+                Toggle("Enable X-keys Foot Pedal Fast Mode", isOn: isXKeysFastMouseEnabledBinding)
+                    .toggleStyle(.checkbox)
             }
         }
     }
@@ -901,6 +931,13 @@ struct ContentView: View {
         )
     }
 
+    private var isXKeysFastMouseEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { isXKeysFastMouseEnabled },
+            set: { runtimeController.setXKeysFastMouseEnabled($0) }
+        )
+    }
+
     private var isAvoidMouseJumpsEnabledBinding: Binding<Bool> {
         Binding(
             get: { isAvoidMouseJumpsEnabled },
@@ -990,6 +1027,7 @@ enum ControlPreferenceKey: String {
     case trackIREnabled = "contentView.trackIREnabled"
     case mouseMovementEnabled = "contentView.mouseMovementEnabled"
     case mouseMovementSpeed = "contentView.mouseMovementSpeed"
+    case xKeysFastMouseEnabled = "contentView.xKeysFastMouseEnabled"
     case mouseSmoothing = "contentView.mouseSmoothing"
     case mouseDeadzone = "contentView.mouseDeadzone"
     case avoidMouseJumpsEnabled = "contentView.avoidMouseJumpsEnabled"
@@ -1011,6 +1049,7 @@ struct ControlDefaultValues: Equatable {
     let trackIREnabled: Bool
     let mouseMovementEnabled: Bool
     let mouseMovementSpeed: Double
+    let isXKeysFastMouseEnabled: Bool
     let mouseSmoothing: Int
     let mouseDeadzone: Double
     let avoidMouseJumpsEnabled: Bool
@@ -1042,6 +1081,7 @@ func controlDefaultValues() -> ControlDefaultValues {
         trackIREnabled: true,
         mouseMovementEnabled: true,
         mouseMovementSpeed: 2.0,
+        isXKeysFastMouseEnabled: false,
         mouseSmoothing: 3,
         mouseDeadzone: 0.04,
         avoidMouseJumpsEnabled: true,
@@ -1064,6 +1104,7 @@ func controlDefaultPreferences(_ defaults: ControlDefaultValues) -> [String: Any
         ControlPreferenceKey.trackIREnabled.rawValue: defaults.trackIREnabled,
         ControlPreferenceKey.mouseMovementEnabled.rawValue: defaults.mouseMovementEnabled,
         ControlPreferenceKey.mouseMovementSpeed.rawValue: defaults.mouseMovementSpeed,
+        ControlPreferenceKey.xKeysFastMouseEnabled.rawValue: defaults.isXKeysFastMouseEnabled,
         ControlPreferenceKey.mouseSmoothing.rawValue: defaults.mouseSmoothing,
         ControlPreferenceKey.mouseDeadzone.rawValue: defaults.mouseDeadzone,
         ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue: defaults.avoidMouseJumpsEnabled,
@@ -1086,6 +1127,32 @@ func toggledMouseMovementState(isEnabled: Bool) -> Bool {
 
 func mouseSpeedValueLabel(for speed: Double) -> String {
     "\(speed.formatted(.number.precision(.fractionLength(0 ... 2))))x"
+}
+
+func xKeysIndicatorLabel(for state: XKeysIndicatorState) -> String {
+    switch state {
+        case .disabled:
+            return "Disabled"
+        case .notDetected:
+            return "No Pedal"
+        case .detectedIdle:
+            return "Ready"
+        case .pressed:
+            return "Pressed"
+    }
+}
+
+func xKeysIndicatorColor(for state: XKeysIndicatorState) -> Color {
+    switch state {
+        case .disabled:
+            return Color.gray.opacity(0.7)
+        case .notDetected:
+            return Color.red
+        case .detectedIdle:
+            return Color.yellow
+        case .pressed:
+            return Color.green
+    }
 }
 
 func mouseSmoothingValueLabel(for smoothing: Int) -> String {

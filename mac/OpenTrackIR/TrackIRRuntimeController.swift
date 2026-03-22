@@ -8,6 +8,7 @@ struct TrackIRControlState: Equatable {
     var isTrackIREnabled: Bool
     var isMouseMovementEnabled: Bool
     var mouseMovementSpeed: Double
+    var isXKeysFastMouseEnabled: Bool
     var mouseSmoothing: Int
     var mouseDeadzone: Double
     var isAvoidMouseJumpsEnabled: Bool
@@ -42,6 +43,9 @@ final class TrackIRRuntimeController: ObservableObject {
         self.userDefaults = userDefaults
         self.cameraController = cameraController ?? TrackIRCameraController()
         self.controlState = trackIRControlState(userDefaults: userDefaults)
+        self.cameraController.xKeysFailureHandler = { [weak self] in
+            self?.setXKeysFastMouseEnabled(false)
+        }
         syncTrackIRCamera()
         syncTimeoutTask()
     }
@@ -83,6 +87,7 @@ final class TrackIRRuntimeController: ObservableObject {
                 controlActiveState: controlActiveState,
                 isWindowVisible: isWindowVisible
             ),
+            isXKeysFastMouseEnabled: controlState.isXKeysFastMouseEnabled,
             isMouseMovementEnabled: controlState.isMouseMovementEnabled,
             mouseMovementSpeed: trackIRMouseBackendSpeed(controlSpeed: controlState.mouseMovementSpeed),
             mouseSmoothing: controlState.mouseSmoothing,
@@ -123,6 +128,12 @@ final class TrackIRRuntimeController: ObservableObject {
     func setMouseMovementSpeed(_ mouseMovementSpeed: Double) {
         updateControlState {
             $0.mouseMovementSpeed = normalizedMouseMovementControlSpeed(mouseMovementSpeed)
+        }
+    }
+
+    func setXKeysFastMouseEnabled(_ isXKeysFastMouseEnabled: Bool) {
+        updateControlState {
+            $0.isXKeysFastMouseEnabled = isXKeysFastMouseEnabled
         }
     }
 
@@ -241,6 +252,7 @@ final class TrackIRRuntimeController: ObservableObject {
                 controlActiveState: controlActiveState,
                 isWindowVisible: isWindowVisible
             ),
+            isXKeysFastMouseEnabled: controlState.isXKeysFastMouseEnabled,
             isMouseMovementEnabled: controlState.isMouseMovementEnabled,
             mouseMovementSpeed: trackIRMouseBackendSpeed(controlSpeed: controlState.mouseMovementSpeed),
             mouseSmoothing: controlState.mouseSmoothing,
@@ -310,6 +322,9 @@ func trackIRControlState(userDefaults: UserDefaults) -> TrackIRControlState {
             ?? defaults.mouseMovementEnabled,
         mouseMovementSpeed: userDefaults.object(forKey: ControlPreferenceKey.mouseMovementSpeed.rawValue) as? Double
             ?? defaults.mouseMovementSpeed,
+        isXKeysFastMouseEnabled: userDefaults.object(
+            forKey: ControlPreferenceKey.xKeysFastMouseEnabled.rawValue
+        ) as? Bool ?? defaults.isXKeysFastMouseEnabled,
         mouseSmoothing: userDefaults.object(forKey: ControlPreferenceKey.mouseSmoothing.rawValue) as? Int
             ?? defaults.mouseSmoothing,
         mouseDeadzone: userDefaults.object(forKey: ControlPreferenceKey.mouseDeadzone.rawValue) as? Double
@@ -351,6 +366,10 @@ func persistControlState(_ controlState: TrackIRControlState, userDefaults: User
         forKey: ControlPreferenceKey.mouseMovementEnabled.rawValue
     )
     userDefaults.set(controlState.mouseMovementSpeed, forKey: ControlPreferenceKey.mouseMovementSpeed.rawValue)
+    userDefaults.set(
+        controlState.isXKeysFastMouseEnabled,
+        forKey: ControlPreferenceKey.xKeysFastMouseEnabled.rawValue
+    )
     userDefaults.set(controlState.mouseSmoothing, forKey: ControlPreferenceKey.mouseSmoothing.rawValue)
     userDefaults.set(controlState.mouseDeadzone, forKey: ControlPreferenceKey.mouseDeadzone.rawValue)
     userDefaults.set(

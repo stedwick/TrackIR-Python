@@ -47,6 +47,7 @@ struct ContentViewTests {
         #expect(ControlPreferenceKey.trackIREnabled.rawValue == "contentView.trackIREnabled")
         #expect(ControlPreferenceKey.mouseMovementEnabled.rawValue == "contentView.mouseMovementEnabled")
         #expect(ControlPreferenceKey.mouseMovementSpeed.rawValue == "contentView.mouseMovementSpeed")
+        #expect(ControlPreferenceKey.xKeysFastMouseEnabled.rawValue == "contentView.xKeysFastMouseEnabled")
         #expect(ControlPreferenceKey.mouseSmoothing.rawValue == "contentView.mouseSmoothing")
         #expect(ControlPreferenceKey.mouseDeadzone.rawValue == "contentView.mouseDeadzone")
         #expect(
@@ -80,6 +81,7 @@ struct ContentViewTests {
             trackIREnabled: true,
             mouseMovementEnabled: true,
             mouseMovementSpeed: 2.0,
+            isXKeysFastMouseEnabled: false,
             mouseSmoothing: 3,
             mouseDeadzone: 0.04,
             avoidMouseJumpsEnabled: true,
@@ -103,6 +105,7 @@ struct ContentViewTests {
         #expect(preferences[ControlPreferenceKey.trackIREnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.mouseMovementEnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.mouseMovementSpeed.rawValue] as? Double == 2.0)
+        #expect(preferences[ControlPreferenceKey.xKeysFastMouseEnabled.rawValue] as? Bool == false)
         #expect(preferences[ControlPreferenceKey.mouseSmoothing.rawValue] as? Int == 3)
         #expect(preferences[ControlPreferenceKey.mouseDeadzone.rawValue] as? Double == 0.04)
         #expect(preferences[ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue] as? Bool == true)
@@ -126,6 +129,7 @@ struct ContentViewTests {
             isTrackIREnabled: true,
             isMouseMovementEnabled: false,
             mouseMovementSpeed: 3.4,
+            isXKeysFastMouseEnabled: true,
             mouseSmoothing: 7,
             mouseDeadzone: 0.12,
             isAvoidMouseJumpsEnabled: false,
@@ -458,6 +462,7 @@ struct ContentViewTests {
             isTrackIREnabled: true,
             isMouseMovementEnabled: true,
             mouseMovementSpeed: 2.0,
+            isXKeysFastMouseEnabled: false,
             mouseSmoothing: 3,
             mouseDeadzone: 0.04,
             isAvoidMouseJumpsEnabled: true,
@@ -488,6 +493,7 @@ struct ContentViewTests {
             isTrackIREnabled: false,
             isMouseMovementEnabled: false,
             mouseMovementSpeed: 2.0,
+            isXKeysFastMouseEnabled: false,
             mouseSmoothing: 3,
             mouseDeadzone: 0.04,
             isAvoidMouseJumpsEnabled: true,
