@@ -421,7 +421,7 @@ int otir_tir5v3_normalize_minimum_blob_area_points(int minimum_area_points) {
 
 otir_tir5v3_blob_tracking_config otir_tir5v3_default_blob_tracking_config(void) {
     otir_tir5v3_blob_tracking_config config = {
-        .minimum_area_points = 4,
+        .minimum_area_points = 100,
         .use_scaled_hull_centroid = true,
         .row_adjacency = 1,
         .hull_scale = 0.7,

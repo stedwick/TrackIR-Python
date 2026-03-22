@@ -533,12 +533,12 @@ struct ContentView: View {
 
                 if isAdvancedMouseExpanded {
                     LazyVGrid(columns: advancedMouseControlColumns, alignment: .leading, spacing: 14) {
-                        blobDetectionControlRow
                         mouseSmoothingControlRow
                         mouseDeadzoneControlRow
                         mouseJumpFilterControlRow
                         keepAwakeControlRow
                         timeoutControlRow
+                        blobDetectionControlRow
                     }
                 }
             }
@@ -650,6 +650,10 @@ struct ContentView: View {
 
                 Toggle("Scaled Hull Contours", isOn: isScaledHullContoursEnabledBinding)
                     .toggleStyle(.checkbox)
+
+                Text("Pac-Man 2 Pi mode: treat a chipped circle more like a full circle before centroiding.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -1041,7 +1045,7 @@ func controlDefaultValues() -> ControlDefaultValues {
         mouseDeadzone: 0.04,
         avoidMouseJumpsEnabled: true,
         mouseJumpThresholdPixels: 50,
-        minimumBlobAreaPoints: 4,
+        minimumBlobAreaPoints: 100,
         isScaledHullContoursEnabled: true,
         keepAwakeSeconds: 29,
         timeoutEnabled: true,

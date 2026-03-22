@@ -83,7 +83,7 @@ struct ContentViewTests {
             mouseDeadzone: 0.04,
             avoidMouseJumpsEnabled: true,
             mouseJumpThresholdPixels: 50,
-            minimumBlobAreaPoints: 4,
+            minimumBlobAreaPoints: 100,
             isScaledHullContoursEnabled: true,
             keepAwakeSeconds: 29,
             timeoutEnabled: true,
@@ -106,7 +106,7 @@ struct ContentViewTests {
         #expect(preferences[ControlPreferenceKey.mouseDeadzone.rawValue] as? Double == 0.04)
         #expect(preferences[ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.mouseJumpThresholdPixels.rawValue] as? Int == 50)
-        #expect(preferences[ControlPreferenceKey.minimumBlobAreaPoints.rawValue] as? Int == 4)
+        #expect(preferences[ControlPreferenceKey.minimumBlobAreaPoints.rawValue] as? Int == 100)
         #expect(preferences[ControlPreferenceKey.scaledHullContoursEnabled.rawValue] as? Bool == true)
         #expect(preferences[ControlPreferenceKey.keepAwakeSeconds.rawValue] as? Int == 29)
         #expect(preferences[ControlPreferenceKey.timeoutEnabled.rawValue] as? Bool == true)
@@ -176,6 +176,7 @@ struct ContentViewTests {
     @Test func advancedMouseDefaultsAndLabelsMatchExpectedValues() {
         #expect(mouseSmoothingValueLabel(for: 3) == "3")
         #expect(mouseDeadzoneValueLabel(for: 0.04) == "0.04")
+        #expect(controlDefaultValues().minimumBlobAreaPoints == 100)
         #expect(trackIRTimeoutHelperText == "8 hours = 60 sec x 60 min x 8 hrs = 28800 sec")
     }
 
@@ -391,7 +392,7 @@ struct ContentViewTests {
             mouseDeadzone: 0.04,
             isAvoidMouseJumpsEnabled: true,
             mouseJumpThresholdPixels: 50,
-            minimumBlobAreaPoints: 4,
+            minimumBlobAreaPoints: 100,
             isScaledHullContoursEnabled: true,
             keepAwakeSeconds: 29,
             isTimeoutEnabled: true,
@@ -421,7 +422,7 @@ struct ContentViewTests {
             mouseDeadzone: 0.04,
             isAvoidMouseJumpsEnabled: true,
             mouseJumpThresholdPixels: 50,
-            minimumBlobAreaPoints: 4,
+            minimumBlobAreaPoints: 100,
             isScaledHullContoursEnabled: true,
             keepAwakeSeconds: 29,
             isTimeoutEnabled: true,
