@@ -193,9 +193,33 @@ struct ContentViewTests {
         ))
     }
 
-    @Test func trackIRUIUpdateIntervalUsesThrottledPolling() {
-        #expect(abs(trackIRUIUpdateInterval(isVideoEnabled: true) - (1.0 / 30.0)) < 0.0001)
-        #expect(trackIRUIUpdateInterval(isVideoEnabled: false) == 0.2)
+    @Test func trackIRPollingCanContinueWithoutVisibleWindowWhenMouseIsEnabled() {
+        #expect(trackIRShouldPollSnapshots(isWindowVisible: true, isMouseMovementEnabled: false))
+        #expect(trackIRShouldPollSnapshots(isWindowVisible: false, isMouseMovementEnabled: true))
+        #expect(!trackIRShouldPollSnapshots(isWindowVisible: false, isMouseMovementEnabled: false))
+    }
+
+    @Test func trackIRPollingIntervalMatchesMouseMovementMode() {
+        #expect(abs(trackIRPollingInterval(
+            isVideoEnabled: true,
+            isMouseMovementEnabled: false,
+            maximumTrackingFramesPerSecond: 125
+        ) - (1.0 / 30.0)) < 0.0001)
+        #expect(trackIRPollingInterval(
+            isVideoEnabled: false,
+            isMouseMovementEnabled: false,
+            maximumTrackingFramesPerSecond: 125
+        ) == 0.2)
+        #expect(abs(trackIRPollingInterval(
+            isVideoEnabled: false,
+            isMouseMovementEnabled: true,
+            maximumTrackingFramesPerSecond: 75
+        ) - (1.0 / 75.0)) < 0.0001)
+        #expect(abs(trackIRPollingInterval(
+            isVideoEnabled: false,
+            isMouseMovementEnabled: true,
+            maximumTrackingFramesPerSecond: 0
+        ) - (1.0 / 60.0)) < 0.0001)
     }
 
     @Test func trackIRCameraPhaseMapsNativeSessionStates() {

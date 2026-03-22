@@ -24,9 +24,10 @@ final class TrackIRCameraController: ObservableObject {
 
     let backendLabel = "C + libusb"
 
+    private let mouseController = TrackIRMouseController()
     private var pollTask: Task<Void, Never>?
     private var session: OpaquePointer?
-    private var polledVideoEnabled = true
+    private var pollingConfiguration: TrackIRPollingConfiguration?
 
     var sourceLabel: String {
         switch phase {
@@ -67,11 +68,17 @@ final class TrackIRCameraController: ObservableObject {
         isTrackIREnabled: Bool,
         isVideoEnabled: Bool,
         maximumTrackingFramesPerSecond: Double,
-        isWindowVisible: Bool
+        isWindowVisible: Bool,
+        isMouseMovementEnabled: Bool,
+        mouseMovementSpeed: Double
     ) {
         let effectiveVideoEnabled = trackIREffectiveVideoEnabled(
             isVideoEnabled: isVideoEnabled,
             isWindowVisible: isWindowVisible
+        )
+        let shouldPollSnapshots = trackIRShouldPollSnapshots(
+            isWindowVisible: isWindowVisible,
+            isMouseMovementEnabled: isMouseMovementEnabled
         )
 
         if shouldAccessTrackIRHardware(
@@ -82,7 +89,9 @@ final class TrackIRCameraController: ObservableObject {
             startStreamingIfNeeded(
                 isVideoEnabled: effectiveVideoEnabled,
                 maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond,
-                shouldPollUI: isWindowVisible
+                shouldPollSnapshots: shouldPollSnapshots,
+                isMouseMovementEnabled: isMouseMovementEnabled,
+                mouseMovementSpeed: mouseMovementSpeed
             )
         } else {
             if shouldStreamTrackIRSession(
@@ -98,8 +107,15 @@ final class TrackIRCameraController: ObservableObject {
     func refresh(
         isTrackIREnabled: Bool,
         isVideoEnabled: Bool,
-        maximumTrackingFramesPerSecond: Double
+        maximumTrackingFramesPerSecond: Double,
+        isWindowVisible: Bool,
+        isMouseMovementEnabled: Bool,
+        mouseMovementSpeed: Double
     ) {
+        let shouldPollSnapshots = trackIRShouldPollSnapshots(
+            isWindowVisible: isWindowVisible,
+            isMouseMovementEnabled: isMouseMovementEnabled
+        )
         let shouldRestart = shouldAccessTrackIRHardware(
             isTrackIREnabled: isTrackIREnabled,
             isVideoEnabled: isVideoEnabled,
@@ -119,7 +135,9 @@ final class TrackIRCameraController: ObservableObject {
         startStreamingIfNeeded(
             isVideoEnabled: isVideoEnabled,
             maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond,
-            shouldPollUI: true
+            shouldPollSnapshots: shouldPollSnapshots,
+            isMouseMovementEnabled: isMouseMovementEnabled,
+            mouseMovementSpeed: mouseMovementSpeed
         )
     }
 
@@ -134,7 +152,9 @@ final class TrackIRCameraController: ObservableObject {
     private func startStreamingIfNeeded(
         isVideoEnabled: Bool,
         maximumTrackingFramesPerSecond: Double,
-        shouldPollUI: Bool
+        shouldPollSnapshots: Bool,
+        isMouseMovementEnabled: Bool,
+        mouseMovementSpeed: Double
     ) {
         guard let session = ensureSession() else {
             phase = .failed
@@ -170,16 +190,30 @@ final class TrackIRCameraController: ObservableObject {
             previewImage = nil
         }
 
-        if !shouldPollUI {
+        if !shouldPollSnapshots {
             pollTask?.cancel()
             pollTask = nil
+            pollingConfiguration = nil
+            mouseController.reset()
             previewImage = nil
             return
         }
 
-        if pollTask == nil || polledVideoEnabled != isVideoEnabled {
-            polledVideoEnabled = isVideoEnabled
-            startPolling(session: session, isVideoEnabled: isVideoEnabled)
+        let configuration = TrackIRPollingConfiguration(
+            isVideoEnabled: isVideoEnabled,
+            isMouseMovementEnabled: isMouseMovementEnabled,
+            mouseMovementSpeed: mouseMovementSpeed,
+            pollInterval: trackIRPollingInterval(
+                isVideoEnabled: isVideoEnabled,
+                isMouseMovementEnabled: isMouseMovementEnabled,
+                maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond
+            )
+        )
+
+        if pollTask == nil || pollingConfiguration != configuration {
+            pollingConfiguration = configuration
+            mouseController.reset()
+            startPolling(session: session, configuration: configuration)
         }
     }
 
@@ -192,6 +226,7 @@ final class TrackIRCameraController: ObservableObject {
             otir_trackir_session_stop(session, waitForShutdown)
         }
 
+        mouseController.reset()
         phase = .idle
         lastErrorDescription = nil
         frameIndex = 0
@@ -199,7 +234,7 @@ final class TrackIRCameraController: ObservableObject {
         centroidX = nil
         centroidY = nil
         lastPacketType = nil
-        polledVideoEnabled = true
+        pollingConfiguration = nil
 
         if clearPreview {
             previewImage = nil
@@ -214,10 +249,8 @@ final class TrackIRCameraController: ObservableObject {
         return session
     }
 
-    private func startPolling(session: OpaquePointer, isVideoEnabled: Bool) {
+    private func startPolling(session: OpaquePointer, configuration: TrackIRPollingConfiguration) {
         pollTask?.cancel()
-
-        let updateInterval = trackIRUIUpdateInterval(isVideoEnabled: isVideoEnabled)
 
         pollTask = Task.detached(priority: .utility) { [weak self] in
             var lastPreviewFrameGeneration: UInt64 = 0
@@ -228,7 +261,7 @@ final class TrackIRCameraController: ObservableObject {
 
                 otir_trackir_session_copy_snapshot(session, &snapshot)
 
-                if isVideoEnabled,
+                if configuration.isVideoEnabled,
                    snapshot.has_preview_frame,
                    snapshot.preview_frame_generation != lastPreviewFrameGeneration {
                     var frameBytes = [UInt8](
@@ -263,11 +296,11 @@ final class TrackIRCameraController: ObservableObject {
                     self?.apply(
                         snapshotCopy,
                         previewImage: previewImageCopy,
-                        isVideoEnabled: isVideoEnabled
+                        configuration: configuration
                     )
                 }
 
-                let nanoseconds = UInt64(updateInterval * 1_000_000_000)
+                let nanoseconds = UInt64(configuration.pollInterval * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: nanoseconds)
             }
         }
@@ -276,7 +309,7 @@ final class TrackIRCameraController: ObservableObject {
     private func apply(
         _ snapshot: otir_trackir_session_snapshot,
         previewImage: CGImage?,
-        isVideoEnabled: Bool
+        configuration: TrackIRPollingConfiguration
     ) {
         phase = trackIRCameraPhase(sessionPhase: snapshot.phase)
         lastErrorDescription = trackIRSessionErrorDescription(snapshot: snapshot)
@@ -286,9 +319,16 @@ final class TrackIRCameraController: ObservableObject {
         centroidY = snapshot.has_centroid ? snapshot.centroid_y : nil
         lastPacketType = snapshot.has_packet_type ? snapshot.packet_type : nil
 
+        mouseController.update(
+            centroidX: centroidX,
+            centroidY: centroidY,
+            isMovementEnabled: configuration.isMouseMovementEnabled && phase == .streaming,
+            speed: configuration.mouseMovementSpeed
+        )
+
         if let previewImage {
             self.previewImage = previewImage
-        } else if !isVideoEnabled || !snapshot.has_preview_frame || phase != .streaming {
+        } else if !configuration.isVideoEnabled || !snapshot.has_preview_frame || phase != .streaming {
             self.previewImage = nil
         }
     }
@@ -307,6 +347,13 @@ private let trackIRLogger = Logger(
     subsystem: Bundle.main.bundleIdentifier ?? "philsapps.OpenTrackIR",
     category: "TrackIRCamera"
 )
+
+private struct TrackIRPollingConfiguration: Equatable {
+    let isVideoEnabled: Bool
+    let isMouseMovementEnabled: Bool
+    let mouseMovementSpeed: Double
+    let pollInterval: TimeInterval
+}
 
 nonisolated func shouldStreamTrackIRSession(isTrackIREnabled: Bool, isVideoEnabled: Bool) -> Bool {
     isTrackIREnabled
@@ -332,8 +379,27 @@ nonisolated func shouldAccessTrackIRHardware(
     ) && !isRunningInXcodePreview(environment: environment)
 }
 
-nonisolated func trackIRUIUpdateInterval(isVideoEnabled: Bool) -> TimeInterval {
-    isVideoEnabled ? (1.0 / 30.0) : 0.2
+nonisolated func trackIRShouldPollSnapshots(
+    isWindowVisible: Bool,
+    isMouseMovementEnabled: Bool
+) -> Bool {
+    isWindowVisible || isMouseMovementEnabled
+}
+
+nonisolated func trackIRPollingInterval(
+    isVideoEnabled: Bool,
+    isMouseMovementEnabled: Bool,
+    maximumTrackingFramesPerSecond: Double
+) -> TimeInterval {
+    guard isMouseMovementEnabled else {
+        return isVideoEnabled ? (1.0 / 30.0) : 0.2
+    }
+
+    let framesPerSecond = maximumTrackingFramesPerSecond > 0
+        ? maximumTrackingFramesPerSecond
+        : 60.0
+
+    return 1.0 / framesPerSecond
 }
 
 nonisolated func trackIRCameraPhase(sessionPhase: otir_trackir_session_phase) -> TrackIRCameraPhase {

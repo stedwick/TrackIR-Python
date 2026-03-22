@@ -67,6 +67,12 @@ struct ContentView: View {
         .onChange(of: isVideoEnabled) { _, _ in
             syncTrackIRCamera()
         }
+        .onChange(of: isMouseMovementEnabled) { _, _ in
+            syncTrackIRCamera()
+        }
+        .onChange(of: mouseMovementSpeed) { _, _ in
+            syncTrackIRCamera()
+        }
         .onChange(of: videoFramesPerSecond) { _, _ in
             syncTrackIRCamera()
         }
@@ -593,7 +599,9 @@ struct ContentView: View {
                 scenePhase: scenePhase,
                 controlActiveState: controlActiveState,
                 isWindowVisible: isWindowVisible
-            )
+            ),
+            isMouseMovementEnabled: isMouseMovementEnabled,
+            mouseMovementSpeed: mouseMovementSpeed
         )
     }
 
@@ -601,7 +609,14 @@ struct ContentView: View {
         cameraController.refresh(
             isTrackIREnabled: isTrackIREnabled,
             isVideoEnabled: isVideoEnabled,
-            maximumTrackingFramesPerSecond: videoFramesPerSecond
+            maximumTrackingFramesPerSecond: videoFramesPerSecond,
+            isWindowVisible: trackIRPresentationIsActive(
+                scenePhase: scenePhase,
+                controlActiveState: controlActiveState,
+                isWindowVisible: isWindowVisible
+            ),
+            isMouseMovementEnabled: isMouseMovementEnabled,
+            mouseMovementSpeed: mouseMovementSpeed
         )
     }
 }
