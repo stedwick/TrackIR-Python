@@ -55,20 +55,22 @@ struct ContentView: View {
         }
         .frame(minWidth: 760, minHeight: 560)
         .onAppear {
-            syncTrackIRCamera()
+            syncTrackIRCamera(isWindowVisible: true)
         }
         .onChange(of: isTrackIREnabled) { _, _ in
-            syncTrackIRCamera()
+            syncTrackIRCamera(isWindowVisible: true)
         }
         .onChange(of: isVideoEnabled) { _, _ in
-            syncTrackIRCamera()
+            syncTrackIRCamera(isWindowVisible: true)
         }
         .onChange(of: videoFramesPerSecond) { _, _ in
-            syncTrackIRCamera()
+            syncTrackIRCamera(isWindowVisible: true)
         }
         .onDisappear {
             if shouldShutdownTrackIRRuntime(for: .windowClosed) {
                 cameraController.shutdown()
+            } else {
+                syncTrackIRCamera(isWindowVisible: false)
             }
         }
     }
@@ -571,11 +573,12 @@ struct ContentView: View {
             )
     }
 
-    private func syncTrackIRCamera() {
+    private func syncTrackIRCamera(isWindowVisible: Bool) {
         cameraController.syncStreaming(
             isTrackIREnabled: isTrackIREnabled,
             isVideoEnabled: isVideoEnabled,
-            maximumTrackingFramesPerSecond: videoFramesPerSecond
+            maximumTrackingFramesPerSecond: videoFramesPerSecond,
+            isWindowVisible: isWindowVisible
         )
     }
 

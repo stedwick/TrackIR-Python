@@ -66,21 +66,28 @@ final class TrackIRCameraController: ObservableObject {
     func syncStreaming(
         isTrackIREnabled: Bool,
         isVideoEnabled: Bool,
-        maximumTrackingFramesPerSecond: Double
+        maximumTrackingFramesPerSecond: Double,
+        isWindowVisible: Bool
     ) {
+        let effectiveVideoEnabled = trackIREffectiveVideoEnabled(
+            isVideoEnabled: isVideoEnabled,
+            isWindowVisible: isWindowVisible
+        )
+
         if shouldAccessTrackIRHardware(
             isTrackIREnabled: isTrackIREnabled,
-            isVideoEnabled: isVideoEnabled,
+            isVideoEnabled: effectiveVideoEnabled,
             environment: ProcessInfo.processInfo.environment
         ) {
             startStreamingIfNeeded(
-                isVideoEnabled: isVideoEnabled,
-                maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond
+                isVideoEnabled: effectiveVideoEnabled,
+                maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond,
+                shouldPollUI: isWindowVisible
             )
         } else {
             if shouldStreamTrackIRSession(
                 isTrackIREnabled: isTrackIREnabled,
-                isVideoEnabled: isVideoEnabled
+                isVideoEnabled: effectiveVideoEnabled
             ), isRunningInXcodePreview(environment: ProcessInfo.processInfo.environment) {
                 trackIRLogger.info("Skipping TrackIR hardware access in Xcode preview mode")
             }
@@ -111,7 +118,8 @@ final class TrackIRCameraController: ObservableObject {
 
         startStreamingIfNeeded(
             isVideoEnabled: isVideoEnabled,
-            maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond
+            maximumTrackingFramesPerSecond: maximumTrackingFramesPerSecond,
+            shouldPollUI: true
         )
     }
 
@@ -125,7 +133,8 @@ final class TrackIRCameraController: ObservableObject {
 
     private func startStreamingIfNeeded(
         isVideoEnabled: Bool,
-        maximumTrackingFramesPerSecond: Double
+        maximumTrackingFramesPerSecond: Double,
+        shouldPollUI: Bool
     ) {
         guard let session = ensureSession() else {
             phase = .failed
@@ -159,6 +168,13 @@ final class TrackIRCameraController: ObservableObject {
 
         if !isVideoEnabled {
             previewImage = nil
+        }
+
+        if !shouldPollUI {
+            pollTask?.cancel()
+            pollTask = nil
+            previewImage = nil
+            return
         }
 
         if pollTask == nil || polledVideoEnabled != isVideoEnabled {
@@ -294,6 +310,10 @@ private let trackIRLogger = Logger(
 
 nonisolated func shouldStreamTrackIRSession(isTrackIREnabled: Bool, isVideoEnabled: Bool) -> Bool {
     isTrackIREnabled
+}
+
+nonisolated func trackIREffectiveVideoEnabled(isVideoEnabled: Bool, isWindowVisible: Bool) -> Bool {
+    isVideoEnabled && isWindowVisible
 }
 
 nonisolated func isRunningInXcodePreview(environment: [String: String]) -> Bool {

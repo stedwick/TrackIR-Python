@@ -144,6 +144,12 @@ struct ContentViewTests {
         #expect(!shouldStreamTrackIRSession(isTrackIREnabled: false, isVideoEnabled: true))
     }
 
+    @Test func trackIREffectiveVideoEnabledDependsOnWindowVisibility() {
+        #expect(trackIREffectiveVideoEnabled(isVideoEnabled: true, isWindowVisible: true))
+        #expect(!trackIREffectiveVideoEnabled(isVideoEnabled: true, isWindowVisible: false))
+        #expect(!trackIREffectiveVideoEnabled(isVideoEnabled: false, isWindowVisible: true))
+    }
+
     @Test func trackIRRuntimeShutdownPolicyDependsOnAppLifecycleEvent() {
         #expect(!shouldShutdownTrackIRRuntime(for: .windowClosed))
         #expect(shouldShutdownTrackIRRuntime(for: .appWillTerminate))
