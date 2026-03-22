@@ -13,6 +13,7 @@ struct ContentView: View {
     @Environment(\.controlActiveState) private var controlActiveState
     @Environment(\.scenePhase) private var scenePhase
     @State private var isAdvancedMouseExpanded = false
+    @State private var isPreviewCentroidMarkerEnabled = true
     @ObservedObject private var runtimeController: TrackIRRuntimeController
     @ObservedObject private var cameraController: TrackIRCameraController
 
@@ -218,8 +219,11 @@ struct ContentView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 }
 
-                if isVideoEnabled,
-                   cameraController.previewImage != nil,
+                if shouldDrawPreviewCentroidMarker(
+                    isVideoEnabled: isVideoEnabled,
+                    hasPreviewImage: cameraController.previewImage != nil,
+                    isMarkerEnabled: isPreviewCentroidMarkerEnabled
+                ),
                    let centroidMarkerPosition = previewCentroidMarkerPosition(
                         centroidX: cameraController.centroidX,
                         centroidY: cameraController.centroidY,
@@ -248,6 +252,10 @@ struct ContentView: View {
             }
             .frame(width: previewWidth, height: previewHeight)
             .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 10)
+
+            Toggle("Show detected blob center", isOn: $isPreviewCentroidMarkerEnabled)
+                .toggleStyle(.checkbox)
+                .frame(width: previewWidth, alignment: .center)
 
             HStack(spacing: 12) {
                 previewMetric(title: "Device", value: cameraController.sourceLabel)
@@ -599,12 +607,12 @@ struct ContentView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Slider(value: mouseDeadzoneBinding, in: 0.0 ... 0.15, step: 0.01)
+                    Slider(value: mouseDeadzoneBinding, in: 0.0 ... 2.0, step: 0.01)
 
                     HStack {
                         Text("0.00")
                         Spacer()
-                        Text("0.15")
+                        Text("2.00")
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1060,7 +1068,7 @@ func normalizedMouseSmoothing(_ smoothing: Double) -> Int {
 }
 
 func normalizedMouseDeadzone(_ deadzone: Double) -> Double {
-    min(max(deadzone, 0.0), 0.15)
+    min(max(deadzone, 0.0), 2.0)
 }
 
 func normalizedMouseJumpThreshold(_ jumpThresholdPixels: Int) -> Int {
@@ -1125,6 +1133,14 @@ func previewCentroidMarkerPosition(
     rotatedY = (flippedX * sin(radians)) + (flippedY * cos(radians))
 
     return CGPoint(x: rotatedX + 0.5, y: rotatedY + 0.5)
+}
+
+func shouldDrawPreviewCentroidMarker(
+    isVideoEnabled: Bool,
+    hasPreviewImage: Bool,
+    isMarkerEnabled: Bool
+) -> Bool {
+    isVideoEnabled && hasPreviewImage && isMarkerEnabled
 }
 
 func normalizedRotationDegrees(_ rotationDegrees: Double) -> Double {

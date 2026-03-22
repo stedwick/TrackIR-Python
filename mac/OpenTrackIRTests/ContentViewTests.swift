@@ -169,7 +169,8 @@ struct ContentViewTests {
         #expect(normalizedMouseSmoothing(0) == 1)
         #expect(normalizedMouseSmoothing(10.8) == 10)
         #expect(normalizedMouseDeadzone(-1) == 0)
-        #expect(normalizedMouseDeadzone(0.3) == 0.15)
+        #expect(normalizedMouseDeadzone(0.3) == 0.3)
+        #expect(normalizedMouseDeadzone(2.5) == 2.0)
         #expect(normalizedMouseJumpThreshold(0) == 1)
         #expect(normalizedKeepAwakeSeconds(-10) == 0)
         #expect(normalizedTimeoutSeconds(0) == 1)
@@ -212,6 +213,29 @@ struct ContentViewTests {
             frameHeight: 480,
             transform: VideoPreviewTransform(scaleX: 1, scaleY: 1, rotationDegrees: 90)
         ) == CGPoint(x: 0.5, y: 0.75))
+    }
+
+    @Test func previewCentroidMarkerVisibilityDependsOnToggleAndPreviewState() {
+        #expect(shouldDrawPreviewCentroidMarker(
+            isVideoEnabled: true,
+            hasPreviewImage: true,
+            isMarkerEnabled: true
+        ))
+        #expect(!shouldDrawPreviewCentroidMarker(
+            isVideoEnabled: false,
+            hasPreviewImage: true,
+            isMarkerEnabled: true
+        ))
+        #expect(!shouldDrawPreviewCentroidMarker(
+            isVideoEnabled: true,
+            hasPreviewImage: false,
+            isMarkerEnabled: true
+        ))
+        #expect(!shouldDrawPreviewCentroidMarker(
+            isVideoEnabled: true,
+            hasPreviewImage: true,
+            isMarkerEnabled: false
+        ))
     }
 
     @Test func videoRotationValueLabelUsesNormalizedDegrees() {
