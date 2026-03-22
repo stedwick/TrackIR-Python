@@ -313,23 +313,32 @@ struct ContentViewTests {
         ))
     }
 
-    @Test func keepAwakeOnlyFiresWhileTrackIRIsEnabled() {
+    @Test func keepAwakeOnlyFiresWhileTrackIRIsEnabledAndMouseMovementIsOff() {
         #expect(trackIRShouldRequestMouseEventAccess(isMouseMovementEnabled: true, keepAwakeSeconds: 0))
         #expect(trackIRShouldRequestMouseEventAccess(isMouseMovementEnabled: false, keepAwakeSeconds: 29))
         #expect(trackIRShouldFireKeepAwake(
             isTrackIREnabled: true,
+            isMouseMovementEnabled: false,
             keepAwakeSeconds: 29,
             timeSinceLastMouseMovement: 29
         ))
         #expect(!trackIRShouldFireKeepAwake(
             isTrackIREnabled: false,
+            isMouseMovementEnabled: false,
             keepAwakeSeconds: 29,
             timeSinceLastMouseMovement: 60
         ))
         #expect(!trackIRShouldFireKeepAwake(
             isTrackIREnabled: true,
+            isMouseMovementEnabled: false,
             keepAwakeSeconds: 29,
             timeSinceLastMouseMovement: 10
+        ))
+        #expect(!trackIRShouldFireKeepAwake(
+            isTrackIREnabled: true,
+            isMouseMovementEnabled: true,
+            keepAwakeSeconds: 29,
+            timeSinceLastMouseMovement: 60
         ))
     }
 

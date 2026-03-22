@@ -12,6 +12,7 @@ struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.controlActiveState) private var controlActiveState
     @Environment(\.scenePhase) private var scenePhase
+    @State private var isAdvancedMouseExpanded = false
     @ObservedObject private var runtimeController: TrackIRRuntimeController
     @ObservedObject private var cameraController: TrackIRCameraController
 
@@ -39,6 +40,7 @@ struct ContentView: View {
                     videoPreview(previewWidth: previewWidth)
                         .frame(maxWidth: .infinity, alignment: .center)
                     controlSection(columnCount: controlColumns)
+                    advancedMouseControlsRow
                 }
                 .frame(maxWidth: 1_120, alignment: .topLeading)
                 .padding(24)
@@ -264,69 +266,49 @@ struct ContentView: View {
     }
 
     private func controlSection(columnCount: Int) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Controls")
-                .font(.title2.weight(.semibold))
+        sectionCard {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Controls")
+                    .font(.title2.weight(.semibold))
 
-            Text("Live controls for the TrackIR preview and desktop shell.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-
-            LazyVGrid(columns: gridColumns(count: columnCount), alignment: .leading, spacing: 14) {
-                controlRow(
-                    title: "Enable TrackIR",
-                    detail: "Toggle TrackIR.",
-                    systemImage: "dot.radiowaves.left.and.right",
-                    isOn: isTrackIREnabledBinding
-                )
-
-                controlRow(
-                    title: "Show Video",
-                    detail: "Show the camera preview.",
-                    systemImage: "video",
-                    isOn: isVideoEnabledBinding
-                )
-
-                controlRow(
-                    title: "Enable Mouse Movement",
-                    detail: "Toggle mouse movement.",
-                    systemImage: "cursorarrow.motionlines",
-                    isOn: isMouseMovementEnabledBinding
-                )
-
-                mouseSpeedControlRow
-
-                mouseHotkeyControlRow
-                    .gridCellColumns(columnCount == 1 ? 1 : 2)
-
-                advancedMouseControlsRow
-                    .gridCellColumns(columnCount == 1 ? 1 : 2)
-
-                videoControlsRow
-                    .gridCellColumns(columnCount == 1 ? 1 : 2)
-            }
-
-            Divider()
-                .padding(.vertical, 6)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Next Steps")
-                    .font(.headline)
-                Text("Use this live preview to validate the current libusb path before swapping the Mac transport later.")
+                Text("Live controls for TrackIR, video, and mouse movement.")
                     .font(.body)
                     .foregroundStyle(.secondary)
+
+                LazyVGrid(columns: gridColumns(count: columnCount), alignment: .leading, spacing: 14) {
+                    controlRow(
+                        title: "Enable TrackIR",
+                        detail: "Toggle TrackIR.",
+                        systemImage: "dot.radiowaves.left.and.right",
+                        isOn: isTrackIREnabledBinding
+                    )
+
+                    controlRow(
+                        title: "Show Video",
+                        detail: "Show the camera preview.",
+                        systemImage: "video",
+                        isOn: isVideoEnabledBinding
+                    )
+
+                    controlRow(
+                        title: "Enable Mouse Movement",
+                        detail: "Toggle mouse movement.",
+                        systemImage: "cursorarrow.motionlines",
+                        isOn: isMouseMovementEnabledBinding
+                    )
+
+                    mouseSpeedControlRow
+
+                    trackIRFramesPerSecondControlRow
+
+                    mouseHotkeyControlRow
+                        .gridCellColumns(columnCount == 1 ? 1 : 2)
+
+                    videoControlsRow
+                        .gridCellColumns(columnCount == 1 ? 1 : 2)
+                }
             }
         }
-        .padding(22)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.regularMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(cardBorderColor, lineWidth: 1)
-        )
     }
 
     private var scrollGlassHint: some View {
@@ -413,6 +395,10 @@ struct ContentView: View {
 
     private func gridColumns(count: Int) -> [GridItem] {
         Array(repeating: GridItem(.flexible(minimum: 180), spacing: 14, alignment: .top), count: count)
+    }
+
+    private var advancedMouseControlColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(minimum: 220), spacing: 14, alignment: .top), count: 2)
     }
 
     private func statusChip(title: String, systemImage: String) -> some View {
@@ -524,93 +510,165 @@ struct ContentView: View {
     }
 
     private var advancedMouseControlsRow: some View {
+        sectionCard {
+            VStack(alignment: .leading, spacing: 18) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isAdvancedMouseExpanded.toggle()
+                    }
+                } label: {
+                    HStack(alignment: .top, spacing: 14) {
+                        controlCopy(
+                            title: "Advanced Controls",
+                            detail: "Advanced tuning for mouse smoothing, keep-awake, and timeout.",
+                            systemImage: "slider.horizontal.3"
+                        )
+
+                        Spacer(minLength: 16)
+
+                        Image(systemName: isAdvancedMouseExpanded ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.top, 2)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if isAdvancedMouseExpanded {
+                    LazyVGrid(columns: advancedMouseControlColumns, alignment: .leading, spacing: 14) {
+                        mouseSmoothingControlRow
+                        mouseDeadzoneControlRow
+                        mouseJumpFilterControlRow
+                        keepAwakeControlRow
+                        timeoutControlRow
+                    }
+                }
+            }
+        }
+    }
+
+    private var mouseSmoothingControlRow: some View {
+        controlCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 14) {
+                    controlCopy(
+                        title: "Smoothing",
+                        detail: "A moving average that smooths pointer movements.",
+                        systemImage: "waveform.path.ecg"
+                    )
+
+                    Spacer(minLength: 16)
+
+                    Text(mouseSmoothingValueLabel(for: mouseSmoothing))
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Slider(value: mouseSmoothingBinding, in: 1 ... 10, step: 1)
+
+                    HStack {
+                        Text("1")
+                        Spacer()
+                        Text("10")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var mouseDeadzoneControlRow: some View {
+        controlCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 14) {
+                    controlCopy(
+                        title: "Dead Zone",
+                        detail: "Suppress tiny head movements.",
+                        systemImage: "dot.scope"
+                    )
+
+                    Spacer(minLength: 16)
+
+                    Text(mouseDeadzoneValueLabel(for: mouseDeadzone))
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Slider(value: mouseDeadzoneBinding, in: 0.0 ... 0.15, step: 0.01)
+
+                    HStack {
+                        Text("0.00")
+                        Spacer()
+                        Text("0.15")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private var mouseJumpFilterControlRow: some View {
         controlCard {
             VStack(alignment: .leading, spacing: 16) {
                 controlCopy(
-                    title: "Advanced Mouse",
-                    detail: "Tune smoothing, dead zone, jump filtering, keep-awake, and timeout.",
-                    systemImage: "slider.horizontal.3"
+                    title: "Avoid Mouse Jumps",
+                    detail: "Prevent sudden mouse skips before they move the cursor.",
+                    systemImage: "arrow.trianglehead.branch"
                 )
 
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(alignment: .top, spacing: 14) {
-                        controlCopy(
-                            title: "Smoothing",
-                            detail: "Average slower movements more aggressively.",
-                            systemImage: "waveform.path.ecg"
-                        )
-
-                        Spacer(minLength: 16)
-
-                        Text(mouseSmoothingValueLabel(for: mouseSmoothing))
-                            .font(.title3.weight(.semibold))
-                            .monospacedDigit()
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Slider(value: mouseSmoothingBinding, in: 1 ... 10, step: 1)
-
-                        HStack {
-                            Text("1")
-                            Spacer()
-                            Text("10")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(alignment: .top, spacing: 14) {
-                        controlCopy(
-                            title: "Dead Zone",
-                            detail: "Suppress tiny filtered motion when you are trying to stay still.",
-                            systemImage: "dot.scope"
-                        )
-
-                        Spacer(minLength: 16)
-
-                        Text(mouseDeadzoneValueLabel(for: mouseDeadzone))
-                            .font(.title3.weight(.semibold))
-                            .monospacedDigit()
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Slider(value: mouseDeadzoneBinding, in: 0.0 ... 0.15, step: 0.01)
-
-                        HStack {
-                            Text("0.00")
-                            Spacer()
-                            Text("0.15")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-
-                Toggle("Avoid Mouse Jumps", isOn: isAvoidMouseJumpsEnabledBinding)
+                Toggle("Enable Jump Filter", isOn: isAvoidMouseJumpsEnabledBinding)
                     .toggleStyle(.checkbox)
 
                 integerSettingRow(
                     title: "Jump Threshold",
-                    detail: "Skip centroid jumps larger than this many pixels.",
+                    detail: "Prevent mouse skips over \(mouseJumpThresholdPixels) pixels.",
                     value: mouseJumpThresholdPixelsBinding,
                     suffix: "px",
                     isEnabled: isAvoidMouseJumpsEnabled
                 )
+            }
+        }
+    }
+
+    private var keepAwakeControlRow: some View {
+        controlCard {
+            VStack(alignment: .leading, spacing: 16) {
+                controlCopy(
+                    title: "Keep Awake",
+                    detail: "Move the cursor 1 px every N seconds while TrackIR is on and mouse movement is off. Use 0 to disable.",
+                    systemImage: "cursorarrow.motionlines"
+                )
 
                 integerSettingRow(
-                    title: "Keep Awake",
-                    detail: "Move the cursor 1 px every N seconds while TrackIR is on. Use 0 to disable.",
+                    title: "Interval",
+                    detail: "How often to send the keep-awake nudge.",
                     value: keepAwakeSecondsBinding,
                     suffix: "sec"
+                )
+            }
+        }
+    }
+
+    private var timeoutControlRow: some View {
+        controlCard {
+            VStack(alignment: .leading, spacing: 16) {
+                controlCopy(
+                    title: "Timeout",
+                    detail: "Set the number of seconds before OpenTrackIR turns itself off.",
+                    systemImage: "timer"
                 )
 
                 Toggle("Enable Timeout", isOn: isTimeoutEnabledBinding)
                     .toggleStyle(.checkbox)
 
                 integerSettingRow(
-                    title: "Timeout",
+                    title: "Duration",
                     detail: trackIRTimeoutHelperText,
                     value: timeoutSecondsBinding,
                     suffix: "sec",
@@ -625,7 +683,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 16) {
                 controlCopy(
                     title: "Video Controls",
-                    detail: "Adjust the preview.",
+                    detail: "Adjust the preview and mouse movement transform.",
                     systemImage: "camera.filters"
                 )
 
@@ -641,7 +699,7 @@ struct ContentView: View {
                     HStack(alignment: .top, spacing: 14) {
                         controlCopy(
                             title: "Rotate",
-                            detail: "Rotate the preview.",
+                            detail: "Rotate the preview and mouse movement.",
                             systemImage: "rotate.right"
                         )
 
@@ -664,33 +722,37 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                     }
                 }
+            }
+        }
+    }
 
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(alignment: .top, spacing: 14) {
-                        controlCopy(
-                            title: "TrackIR FPS",
-                            detail: "Cap TrackIR processing.",
-                            systemImage: "gauge.with.dots.needle.33percent"
-                        )
+    private var trackIRFramesPerSecondControlRow: some View {
+        controlCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 14) {
+                    controlCopy(
+                        title: "TrackIR FPS",
+                        detail: "Cap TrackIR processing.",
+                        systemImage: "gauge.with.dots.needle.33percent"
+                    )
 
-                        Spacer(minLength: 16)
+                    Spacer(minLength: 16)
 
-                        Text(trackIRFramesPerSecondValueLabel(for: videoFramesPerSecond))
-                            .font(.title3.weight(.semibold))
-                            .monospacedDigit()
+                    Text(trackIRFramesPerSecondValueLabel(for: videoFramesPerSecond))
+                        .font(.title3.weight(.semibold))
+                        .monospacedDigit()
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Slider(value: videoFramesPerSecondBinding, in: 0 ... 125, step: 1)
+
+                    HStack {
+                        Text("0")
+                        Spacer()
+                        Text("125")
                     }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Slider(value: videoFramesPerSecondBinding, in: 0 ... 125, step: 1)
-
-                        HStack {
-                            Text("0")
-                            Spacer()
-                            Text("125")
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
         }
@@ -728,6 +790,20 @@ struct ContentView: View {
             )
     }
 
+    private func sectionCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.regularMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(cardBorderColor, lineWidth: 1)
+            )
+    }
+
     private func integerSettingRow(
         title: String,
         detail: String,
@@ -755,6 +831,8 @@ struct ContentView: View {
                 Text(suffix)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
     }

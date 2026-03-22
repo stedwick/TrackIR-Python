@@ -417,6 +417,7 @@ final class TrackIRCameraController: ObservableObject {
                     lastMouseMovementTime = currentTime
                 } else if trackIRShouldFireKeepAwake(
                     isTrackIREnabled: configuration.isTrackIREnabled,
+                    isMouseMovementEnabled: configuration.isMouseMovementEnabled,
                     keepAwakeSeconds: configuration.keepAwakeSeconds,
                     timeSinceLastMouseMovement: currentTime - lastMouseMovementTime
                 ), otir_mac_mouse_controller_nudge(mouseController) {
@@ -544,10 +545,14 @@ nonisolated func trackIRShouldRequestMouseEventAccess(
 
 nonisolated func trackIRShouldFireKeepAwake(
     isTrackIREnabled: Bool,
+    isMouseMovementEnabled: Bool,
     keepAwakeSeconds: Int,
     timeSinceLastMouseMovement: TimeInterval
 ) -> Bool {
-    isTrackIREnabled && keepAwakeSeconds > 0 && timeSinceLastMouseMovement >= Double(keepAwakeSeconds)
+    isTrackIREnabled &&
+        !isMouseMovementEnabled &&
+        keepAwakeSeconds > 0 &&
+        timeSinceLastMouseMovement >= Double(keepAwakeSeconds)
 }
 
 nonisolated func trackIRPollingInterval(
