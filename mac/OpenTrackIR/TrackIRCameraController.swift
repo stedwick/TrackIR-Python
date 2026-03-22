@@ -148,8 +148,10 @@ final class TrackIRCameraController: ObservableObject {
             if shouldStreamTrackIRSession(
                 isTrackIREnabled: isTrackIREnabled,
                 isVideoEnabled: effectiveVideoEnabled
-            ), isRunningInXcodePreview(environment: ProcessInfo.processInfo.environment) {
-                trackIRLogger.info("Skipping TrackIR hardware access in Xcode preview mode")
+            ), isTrackIRHardwareAccessDisabledForHostEnvironment(
+                environment: ProcessInfo.processInfo.environment
+            ) {
+                trackIRLogger.info("Skipping TrackIR hardware access in host test or preview mode")
             }
             stopStreaming(clearPreview: true, waitForShutdown: false)
         }
@@ -532,6 +534,13 @@ nonisolated func isRunningInXcodePreview(environment: [String: String]) -> Bool 
         environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1"
 }
 
+nonisolated func isTrackIRHardwareAccessDisabledForHostEnvironment(
+    environment: [String: String]
+) -> Bool {
+    isRunningInXcodePreview(environment: environment) ||
+        environment["OTIR_DISABLE_TRACKIR_HARDWARE"] == "1"
+}
+
 nonisolated func shouldAccessTrackIRHardware(
     isTrackIREnabled: Bool,
     isVideoEnabled: Bool,
@@ -540,7 +549,7 @@ nonisolated func shouldAccessTrackIRHardware(
     shouldStreamTrackIRSession(
         isTrackIREnabled: isTrackIREnabled,
         isVideoEnabled: isVideoEnabled
-    ) && !isRunningInXcodePreview(environment: environment)
+    ) && !isTrackIRHardwareAccessDisabledForHostEnvironment(environment: environment)
 }
 
 nonisolated func trackIRShouldPollSnapshots(

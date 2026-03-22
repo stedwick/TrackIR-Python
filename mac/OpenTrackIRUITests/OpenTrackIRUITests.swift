@@ -8,6 +8,7 @@
 import XCTest
 
 final class OpenTrackIRUITests: XCTestCase {
+    private let disableHardwareEnvironment = ["OTIR_DISABLE_TRACKIR_HARDWARE": "1"]
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
@@ -25,7 +26,7 @@ final class OpenTrackIRUITests: XCTestCase {
     @MainActor
     func testExample() throws {
         // UI tests must launch the application that they test.
-        let app = XCUIApplication()
+        let app = launchTestApplication()
         app.launch()
 
         // Use XCTAssert and related functions to verify your tests produce the correct results.
@@ -35,7 +36,14 @@ final class OpenTrackIRUITests: XCTestCase {
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+            let app = launchTestApplication()
+            app.launch()
         }
+    }
+
+    private func launchTestApplication() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment.merge(disableHardwareEnvironment) { _, new in new }
+        return app
     }
 }

@@ -33,6 +33,7 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - Keep hardware communication, parsing, and visualization separated.
 - If platform-specific behavior is required, isolate it in the platform directory or a clearly named adapter layer.
 - Keep OpenCV, windowing, and app event-loop concerns out of shared C protocol code.
+- Keep reusable mouse-tracker math and smoothing in shared C; keep OS event posting and permissions in platform bridges.
 - Keep the macOS app on native Apple UI/media APIs rather than introducing OpenCV into `mac/`.
 
 ## Validation
@@ -49,14 +50,14 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - `python/`: fastest place to iterate on USB transport, logging, decoding, and tests.
 - `c/`: reusable C library for protocol logic, frame helpers, and device transport.
 - `cpp/`: native consumers of the C library, including the OpenCV preview harness.
-- `mac/`: SwiftUI macOS app shell and future native platform integration for the shared library.
-- `mac/`, `win/`, `nix/`: platform-specific integration layers and notes.
+- `mac/`: SwiftUI macOS app, Quartz mouse bridge, and temporary Xcode-side bridge to the shared C sources.
+- `win/`, `nix/`: platform-specific integration layers and notes.
 
 ## Native build layout
 
 - Keep the root `CMakeLists.txt` as the native build entrypoint.
 - Keep native targets split into `c/CMakeLists.txt` and `cpp/CMakeLists.txt`.
-- Prefer native build directories under `c/` or `cpp/`, with `c/build` as the default documented location.
+- Prefer the top-level `build/` tree for documented CMake commands unless a subproject has a stronger reason to diverge.
 - Treat `libusb-1.0` as required for the native C hardware library.
 - Treat OpenCV as optional and scoped only to the C++ preview harness.
 
@@ -64,9 +65,10 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 
 - Treat `python/` as the reference workbench for rapid reverse-engineering and behavior discovery.
 - Move stable protocol behavior into `c/` once it is understood and testable.
-- Keep `c/` responsible for protocol parsing, centroid math, frame reconstruction, and transport.
+- Keep `c/` responsible for protocol parsing, centroid math, frame reconstruction, session orchestration, shared mouse-tracker logic, and transport.
 - Keep `cpp/` responsible for consuming the C API and validating it in native desktop flows.
-- Keep `mac/` responsible for native app presentation and Apple-platform integration on top of the shared C layer.
+- Keep `mac/` responsible for native app presentation, preview/image conversion, app lifecycle, and platform event bridges on top of the shared C layer.
+- Keep `mac/OpenTrackIR/TrackIRNativeSources.c` thin until the planned transport split removes the temporary source-inclusion bridge.
 - If protocol logic appears in C++ app code, that is usually a sign it belongs back in `c/`.
 
 @README.md

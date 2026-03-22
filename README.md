@@ -7,7 +7,7 @@ The repo is organized by implementation target:
 - `python/`: active protocol exploration, USB transport work, packet decoding, logging, and preview tooling.
 - `c/`: reusable cross-platform C library for TrackIR protocol, frame reconstruction, and device control.
 - `cpp/`: native C++ consumers and harnesses for the C library, including the OpenCV preview app.
-- `mac/`: SwiftUI macOS app shell and future native Apple-platform integration.
+- `mac/`: SwiftUI macOS app with live TrackIR preview controls, native mouse output, and a temporary bridge to the shared C sources.
 - `win/`, `nix/`: platform-specific notes, adapters, or future integration work.
 - `tmp/`: scratch output and temporary artifacts.
 
@@ -60,17 +60,24 @@ The native port now lives in:
 - `c/CMakeLists.txt`: C library, C tests, and C streaming harness targets.
 - `cpp/CMakeLists.txt`: C++ consumer targets, including the OpenCV preview app.
 - `c/include/opentrackir/tir5.h`: public C API for protocol helpers, frame reconstruction, and device control.
-- `c/src/`: protocol/frame implementation plus the `libusb` device backend.
+- `c/include/opentrackir/tir5_mouse.h`: shared centroid-to-cursor tracking and smoothing helpers.
+- `c/include/opentrackir/tir5_session.h`: native session snapshot API for higher-level app consumers.
+- `c/include/opentrackir/tir5_tooling.h`: shared CLI and FPS helper functions for native harnesses.
+- `c/src/`: protocol/frame implementation, shared mouse/session/tooling helpers, plus the current `libusb` device backend.
 - `c/examples/stream_dump.c`: simple C-only stream dumper that prints frame, packet, and centroid data.
-- `c/tests/test_tir5.c`: unit tests for the pure parsing and centroid/frame logic.
+- `c/tests/test_tir5.c`: unit tests for pure parsing, centroid/frame logic, mouse helpers, and native tooling helpers.
 - `cpp/opencv_preview/main.cpp`: simple C++ OpenCV preview app that consumes the C API and serves as the first native hardware test harness.
-- `mac/OpenTrackIR/ContentView.swift`: SwiftUI macOS shell with a responsive preview panel placeholder and UI-only controls for future TrackIR integration.
+- `mac/OpenTrackIR/TrackIRRuntimeController.swift`: persisted control state, lifecycle gating, timeout handling, and camera sync policy.
+- `mac/OpenTrackIR/TrackIRCameraController.swift`: macOS-side session polling, preview publishing, and telemetry updates.
+- `mac/OpenTrackIR/TrackIRMouseBridge.c`: Quartz event bridge for moving the macOS cursor from shared C mouse deltas.
+- `mac/OpenTrackIR/TrackIRNativeSources.c`: temporary Xcode-side bridge that compiles the shared C sources into the app target.
+- `PLAN-macOS-libusb-to-IOKit.md`: follow-on transport split plan for replacing the current macOS `libusb` path with an Apple-native backend.
 
 The intended native split is:
 
-- The C library owns protocol parsing, centroid math, frame reconstruction, and hardware transport.
-- The C++ app owns preview rendering and native test-harness concerns.
-- The macOS app owns native Apple UI and desktop integration on top of the shared library.
+- The C library owns protocol parsing, centroid math, frame reconstruction, session state, reusable mouse-tracker logic, and hardware transport.
+- The C++ app owns preview rendering and native test-harness concerns on top of the public C API.
+- The macOS app owns native Apple UI, preview/image presentation, app lifecycle, and Quartz mouse-event posting on top of the shared library.
 - OpenCV stays out of the C library and out of the macOS app.
 
 The intended build flow is:
@@ -91,14 +98,16 @@ This is one native project with C and C++ subprojects under a shared top-level b
 
 ## macOS app status
 
-The macOS project is currently a UI-only SwiftUI shell. It includes:
+The macOS project now streams real TrackIR data through the shared C session layer and includes:
 
-- a native preview panel placeholder for the future camera feed
-- a toggle to show or hide video
-- a toggle to enable or disable TrackIR
-- a toggle to enable or disable future mouse movement
+- a live grayscale preview rendered with native Apple image APIs
+- centroid, frame-rate, packet-type, and phase telemetry in the dashboard
+- preview publishing that pauses when the window is hidden or inactive, with snapshot polling kept alive only when mouse movement or keep-awake behavior still needs it
+- controls for TrackIR enablement, preview visibility, FPS caps, blob filtering, video transforms, keep-awake, and timeout behavior
+- mouse movement driven by shared C tracking logic with a macOS Quartz event bridge
+- a global keyboard shortcut to toggle mouse movement
 
-It does not yet talk to the C library, move the mouse, or stream real video frames. When that integration work starts, use native Apple image/video APIs in the macOS app rather than OpenCV.
+The current macOS transport path is still temporary: the Xcode target compiles the shared C sources through `TrackIRNativeSources.c` and therefore still rides on the existing `libusb` backend. The planned transport split and IOKit migration are documented in [`PLAN-macOS-libusb-to-IOKit.md`](PLAN-macOS-libusb-to-IOKit.md).
 
 ## macOS app build and run
 
@@ -115,6 +124,13 @@ To build from the terminal:
 ```sh
 cd /Users/philip/src/OpenTrackIR
 xcodebuild -project mac/OpenTrackIR.xcodeproj -scheme OpenTrackIR -destination 'platform=macOS' build
+```
+
+To run only the macOS unit tests:
+
+```sh
+cd /Users/philip/src/OpenTrackIR
+xcodebuild -project mac/OpenTrackIR.xcodeproj -scheme OpenTrackIR -destination 'platform=macOS' test -only-testing:OpenTrackIRTests
 ```
 
 To run the built app from Finder, use Xcode's Product > Show Build Folder, then open `OpenTrackIR.app`.

@@ -1,11 +1,17 @@
 # macOS Agent Notes
 
-The `mac/` directory contains the SwiftUI macOS application shell. Treat it as a native app layer that consumes the shared library and presents desktop UI, not as a second implementation of the TrackIR protocol.
+The `mac/` directory contains the SwiftUI macOS application. Treat it as a native app layer that consumes the shared C code and presents desktop UI, not as a second implementation of the TrackIR protocol.
 
 ## Current structure
 
 - `OpenTrackIR/OpenTrackIRApp.swift`: app entrypoint and window scene.
-- `OpenTrackIR/ContentView.swift`: current top-level SwiftUI view. It now contains the first responsive desktop shell with a native preview panel placeholder and UI-only toggles.
+- `OpenTrackIR/ContentView.swift`: dashboard UI for preview, telemetry, controls, and shortcut configuration.
+- `OpenTrackIR/TrackIRRuntimeController.swift`: persisted control state, lifecycle gating, refresh policy, and timeout handling.
+- `OpenTrackIR/TrackIRCameraController.swift`: session ownership, polling policy, preview image publishing, and telemetry state.
+- `OpenTrackIR/OpenTrackIR-Bridging-Header.h`: Swift bridge to the shared C headers and macOS mouse bridge.
+- `OpenTrackIR/TrackIRNativeSources.c`: temporary Xcode-side inclusion of the shared C implementation files.
+- `OpenTrackIR/TrackIRMouseBridge.c`: Quartz cursor posting, display-bounds handling, and permission checks.
+- `OpenTrackIR/TrackIRMouseBridge.h`: C bridge surface used by Swift and shared mouse helpers.
 - `OpenTrackIRTests/`: unit tests using Swift Testing (`import Testing`).
 - `OpenTrackIRUITests/`: UI tests using `XCTest`.
 - `OpenTrackIR.xcodeproj`: Xcode project for the macOS app target.
@@ -13,11 +19,14 @@ The `mac/` directory contains the SwiftUI macOS application shell. Treat it as a
 ## macOS-specific rules
 
 - Keep protocol parsing, centroid math, and device transport in the shared C library whenever possible.
+- Keep reusable mouse tracking and smoothing logic in shared C whenever possible.
 - Do not reimplement TrackIR packet logic in SwiftUI views.
 - Keep SwiftUI views thin and driven by app state, observable models, or adapter objects.
 - If the macOS app needs native integration code for the C library, isolate it in a clearly named bridge or adapter layer.
 - Treat `ContentView.swift` as presentation, not business logic.
 - Do not depend on OpenCV in the macOS app. Use native Apple image, video, and rendering APIs when the preview is wired up.
+- Keep cursor posting, accessibility permission checks, and display-bound clamping in the macOS bridge layer, not in shared C.
+- The current `TrackIRNativeSources.c` inclusion is a temporary bridge. Keep it minimal and aligned with the shared headers instead of letting it fork behavior.
 - Prefer small pure Swift helpers for view formatting and state derivation when needed, with one focused test per new business-rule helper.
 
 ## Testing expectations
@@ -34,7 +43,7 @@ The `mac/` directory contains the SwiftUI macOS application shell. Treat it as a
 
 - Preserve the separation between:
   - shared protocol/device logic in `c/`
-  - native app presentation and platform integration in `mac/`
+  - native app presentation, runtime policy, and Quartz integration in `mac/`
 - Make the smallest defensible UI change.
-- Prefer evolving the blank SwiftUI shell into a focused desktop control/preview app rather than adding speculative architecture up front.
-- While the app is still UI-only, prefer clear placeholder states and explicit labels over fake backend behavior.
+- Preserve the existing live preview, telemetry, visibility-aware polling, and hotkey behavior unless the task explicitly changes them.
+- Keep transport-migration work aligned with `PLAN-macOS-libusb-to-IOKit.md` so the app does not grow a second copy of device logic.

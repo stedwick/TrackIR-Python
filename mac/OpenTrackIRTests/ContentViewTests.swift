@@ -10,6 +10,7 @@ import SwiftUI
 import Testing
 @testable import OpenTrackIR
 
+@MainActor
 struct ContentViewTests {
 
     @Test func dashboardLayoutUsesTwoColumnsAtDesktopWidths() {
@@ -303,6 +304,16 @@ struct ContentViewTests {
         #expect(!isRunningInXcodePreview(environment: [:]))
     }
 
+    @Test func trackIRHardwareAccessEnvironmentDetectionMatchesPreviewAndUITestFlags() {
+        #expect(isTrackIRHardwareAccessDisabledForHostEnvironment(environment: [:]) == false)
+        #expect(isTrackIRHardwareAccessDisabledForHostEnvironment(
+            environment: ["XCODE_RUNNING_FOR_PREVIEWS": "1"]
+        ))
+        #expect(isTrackIRHardwareAccessDisabledForHostEnvironment(
+            environment: ["OTIR_DISABLE_TRACKIR_HARDWARE": "1"]
+        ))
+    }
+
     @Test func trackIRHardwareAccessSkipsPreviewRuns() {
         #expect(shouldAccessTrackIRHardware(
             isTrackIREnabled: true,
@@ -313,6 +324,11 @@ struct ContentViewTests {
             isTrackIREnabled: true,
             isVideoEnabled: true,
             environment: ["XCODE_RUNNING_FOR_PREVIEWS": "1"]
+        ))
+        #expect(!shouldAccessTrackIRHardware(
+            isTrackIREnabled: true,
+            isVideoEnabled: true,
+            environment: ["OTIR_DISABLE_TRACKIR_HARDWARE": "1"]
         ))
         #expect(!shouldAccessTrackIRHardware(
             isTrackIREnabled: false,
