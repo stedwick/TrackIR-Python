@@ -45,6 +45,8 @@ typedef struct otir_trackir_session_snapshot {
     bool has_centroid;
     double centroid_x;
     double centroid_y;
+    int selected_blob_area_points;
+    int selected_blob_brightness_sum;
     bool has_packet_type;
     uint8_t packet_type;
     bool has_preview_frame;

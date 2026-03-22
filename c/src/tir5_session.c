@@ -382,7 +382,7 @@ static void *trackir_session_worker_main(void *context) {
         pthread_mutex_unlock(&session->mutex);
 
         while (!trackir_session_stop_requested(session)) {
-            otir_tir5v3_blob_result blob_result;
+            otir_tir5v3_blob_result blob_result = {0};
             otir_tir5v3_blob_tracking_config blob_config = otir_tir5v3_default_blob_tracking_config();
             trackir_session_runtime_config runtime_config;
             otir_trackir_session_processing_mode processing_mode;
@@ -495,6 +495,8 @@ static void *trackir_session_worker_main(void *context) {
                 session->snapshot.has_centroid = has_centroid;
                 session->snapshot.centroid_x = centroid_x;
                 session->snapshot.centroid_y = centroid_y;
+                session->snapshot.selected_blob_area_points = blob_result.selected_blob_area_points;
+                session->snapshot.selected_blob_brightness_sum = blob_result.selected_blob_brightness_sum;
                 session->snapshot.has_packet_type = true;
                 session->snapshot.packet_type = packet->packet_type;
                 session->snapshot.is_low_power_mode =
@@ -509,6 +511,8 @@ static void *trackir_session_worker_main(void *context) {
                 session->snapshot.status = OTIR_STATUS_OK;
                 session->snapshot.has_frame_rate = source_rate_sample.has_frame_rate;
                 session->snapshot.frame_rate = source_rate_sample.frame_rate;
+                session->snapshot.selected_blob_area_points = 0;
+                session->snapshot.selected_blob_brightness_sum = 0;
                 session->snapshot.has_packet_type = true;
                 session->snapshot.packet_type = packet->packet_type;
                 session->snapshot.is_low_power_mode = false;

@@ -620,6 +620,47 @@ struct ContentViewTests {
         #expect(trackIRCoordinatePairLabel(x: 123.9, y: nil) == "-")
     }
 
+    @Test func trackIRMouseTrackerInputsIncludeBlobConfidenceMetrics() {
+        var snapshot = otir_trackir_session_snapshot()
+        let configuration = TrackIRPollingConfiguration(
+            isTrackIREnabled: true,
+            isVideoEnabled: false,
+            isXKeysFastMouseEnabled: true,
+            isMouseMovementEnabled: true,
+            mouseMovementSpeed: 2.0,
+            mouseSmoothing: 3,
+            mouseDeadzone: 0.04,
+            isAvoidMouseJumpsEnabled: true,
+            mouseJumpThresholdPixels: 50,
+            minimumBlobAreaPoints: 100,
+            isConvexHullCentroidEnabled: true,
+            keepAwakeSeconds: 29,
+            mouseTransform: VideoPreviewTransform(scaleX: 1, scaleY: 1, rotationDegrees: 0),
+            shouldPublishUI: false,
+            maximumPreviewFramesPerSecond: 30,
+            maximumTelemetryFramesPerSecond: 10,
+            pollInterval: 1.0 / 60.0
+        )
+        let xKeysSnapshot = XKeysMonitorSnapshot(indicatorState: .pressed, isPressed: true)
+
+        snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_STREAMING
+        snapshot.selected_blob_area_points = 123
+        snapshot.selected_blob_brightness_sum = 4567
+
+        let blobMetrics = trackIRMouseBlobMetrics(snapshot: snapshot)
+        let trackerConfig = trackIRMouseTrackerConfig(
+            snapshot: snapshot,
+            configuration: configuration,
+            xKeysMonitorSnapshot: xKeysSnapshot
+        )
+
+        #expect(blobMetrics.selectedBlobAreaPoints == 123)
+        #expect(blobMetrics.selectedBlobBrightnessSum == 4567)
+        #expect(trackerConfig.minimum_blob_area_points == 100)
+        #expect(abs(trackerConfig.speed - 5.0) < 0.0001)
+        #expect(trackerConfig.is_movement_enabled)
+    }
+
     @Test func trackIRSessionErrorDescriptionReadsUtf8Message() {
         var snapshot = otir_trackir_session_snapshot()
         let message = Array("TrackIR busy".utf8)

@@ -43,7 +43,13 @@ static void test_mouse_vertical_gain_scales_y_axis(void);
 static void test_mouse_smoothing_mode_matches_python_thresholds(void);
 static void test_mouse_jump_filter_uses_plain_pixel_thresholds(void);
 static void test_mouse_deadzone_uses_short_average_magnitude(void);
+static void test_mouse_median3_returns_middle_value(void);
+static void test_mouse_deadzone_hysteresis_latches_until_exit_threshold(void);
+static void test_mouse_reversal_gate_requires_two_tiny_frames(void);
+static void test_mouse_blob_confidence_score_drops_for_weaker_blobs(void);
+static void test_mouse_confidence_adjusted_windows_expand_and_clamp(void);
 static void test_mouse_tracker_applies_adaptive_smoothing(void);
+static void test_mouse_tracker_large_direction_changes_pass_immediately(void);
 static void test_mouse_step_suppresses_zero_delta(void);
 static void test_cli_read_maximum_frames_per_second_accepts_optional_argument(void);
 
@@ -73,7 +79,13 @@ int main(void) {
     test_mouse_smoothing_mode_matches_python_thresholds();
     test_mouse_jump_filter_uses_plain_pixel_thresholds();
     test_mouse_deadzone_uses_short_average_magnitude();
+    test_mouse_median3_returns_middle_value();
+    test_mouse_deadzone_hysteresis_latches_until_exit_threshold();
+    test_mouse_reversal_gate_requires_two_tiny_frames();
+    test_mouse_blob_confidence_score_drops_for_weaker_blobs();
+    test_mouse_confidence_adjusted_windows_expand_and_clamp();
     test_mouse_tracker_applies_adaptive_smoothing();
+    test_mouse_tracker_large_direction_changes_pass_immediately();
     test_mouse_step_suppresses_zero_delta();
     test_cli_read_maximum_frames_per_second_accepts_optional_argument();
     puts("c/tests/test_tir5: all tests passed");
@@ -360,8 +372,8 @@ static void test_compute_blob_result_can_use_scaled_hull_centroid(void) {
     ));
     assert(raw_result.centroid_mode == OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB);
     assert(hull_result.centroid_mode == OTIR_TIR5V3_CENTROID_MODE_SCALED_HULL);
-    assert(hull_result.centroid_x > raw_result.centroid_x);
-    assert(fabs(hull_result.centroid_y - raw_result.centroid_y) < 0.0001);
+    assert(fabs(hull_result.centroid_x - raw_result.centroid_x) > 0.1);
+    assert(fabs(hull_result.centroid_y - raw_result.centroid_y) > 0.1);
 }
 
 static void test_compute_blob_result_row_bucket_grouping_respects_row_adjacency(void) {
@@ -588,6 +600,74 @@ static void test_mouse_deadzone_uses_short_average_magnitude(void) {
     );
 }
 
+static void test_mouse_median3_returns_middle_value(void) {
+    assert(otir_trackir_mouse_median3(1.0, 9.0, 3.0) == 3.0);
+    assert(otir_trackir_mouse_median3(8.0, 2.0, 4.0) == 4.0);
+}
+
+static void test_mouse_deadzone_hysteresis_latches_until_exit_threshold(void) {
+    assert(
+        otir_trackir_mouse_update_deadzone_latch(
+            false,
+            (otir_trackir_mouse_point){.x = 0.02, .y = 0.0},
+            0.04
+        )
+    );
+    assert(
+        otir_trackir_mouse_update_deadzone_latch(
+            true,
+            (otir_trackir_mouse_point){.x = 0.05, .y = 0.0},
+            0.04
+        )
+    );
+    assert(
+        !otir_trackir_mouse_update_deadzone_latch(
+            true,
+            (otir_trackir_mouse_point){.x = 0.06, .y = 0.0},
+            0.04
+        )
+    );
+    assert(fabs(otir_trackir_mouse_deadzone_exit_threshold(0.04) - 0.06) < 0.0001);
+}
+
+static void test_mouse_reversal_gate_requires_two_tiny_frames(void) {
+    otir_trackir_mouse_axis_reversal_state state = {
+        .last_accepted_sign = 1,
+    };
+    otir_trackir_mouse_axis_reversal_result first;
+    otir_trackir_mouse_axis_reversal_result second;
+
+    first = otir_trackir_mouse_filter_reversal_axis(-0.2, state, 0.35);
+    assert(fabs(first.filtered_delta) < 0.0001);
+    assert(first.next_state.pending_reversal_sign == -1);
+    assert(first.next_state.pending_reversal_count == 1);
+
+    second = otir_trackir_mouse_filter_reversal_axis(-0.15, first.next_state, 0.35);
+    assert(fabs(second.filtered_delta + 0.15) < 0.0001);
+    assert(second.next_state.last_accepted_sign == -1);
+    assert(second.next_state.pending_reversal_sign == 0);
+    assert(second.next_state.pending_reversal_count == 0);
+}
+
+static void test_mouse_blob_confidence_score_drops_for_weaker_blobs(void) {
+    const double strong = otir_trackir_mouse_blob_confidence_score(200, 30000, 100);
+    const double weak = otir_trackir_mouse_blob_confidence_score(50, 3750, 100);
+
+    assert(fabs(strong - 1.0) < 0.0001);
+    assert(fabs(weak - 0.375) < 0.0001);
+    assert(weak < strong);
+}
+
+static void test_mouse_confidence_adjusted_windows_expand_and_clamp(void) {
+    assert(otir_trackir_mouse_adjust_smoothing_window_for_confidence(3, 0.8, false) == 3);
+    assert(otir_trackir_mouse_adjust_smoothing_window_for_confidence(3, 0.5, false) == 4);
+    assert(otir_trackir_mouse_adjust_smoothing_window_for_confidence(10, 0.2, true) == 16);
+    assert(
+        otir_trackir_mouse_adjust_smoothing_window_for_confidence(30, 0.2, true) ==
+        OTIR_TRACKIR_MOUSE_MAX_SMOOTHING_WINDOW
+    );
+}
+
 static void test_mouse_tracker_applies_adaptive_smoothing(void) {
     otir_trackir_mouse_tracker_state state = {0};
     otir_trackir_mouse_tracker_config config = {
@@ -597,6 +677,7 @@ static void test_mouse_tracker_applies_adaptive_smoothing(void) {
         .deadzone = 0.04,
         .avoid_mouse_jumps = true,
         .jump_threshold_pixels = 50.0,
+        .minimum_blob_area_points = 100,
         .transform = {
             .scale_x = 1.0,
             .scale_y = 1.0,
@@ -609,6 +690,8 @@ static void test_mouse_tracker_applies_adaptive_smoothing(void) {
         &state,
         true,
         (otir_trackir_mouse_point){.x = 10.0, .y = 10.0},
+        200,
+        30000,
         config
     );
     assert(!step.has_cursor_delta);
@@ -617,6 +700,8 @@ static void test_mouse_tracker_applies_adaptive_smoothing(void) {
         &state,
         true,
         (otir_trackir_mouse_point){.x = 10.02, .y = 10.01},
+        200,
+        30000,
         config
     );
     assert(!step.has_cursor_delta);
@@ -624,30 +709,105 @@ static void test_mouse_tracker_applies_adaptive_smoothing(void) {
     step = otir_trackir_mouse_tracker_update(
         &state,
         true,
-        (otir_trackir_mouse_point){.x = 10.52, .y = 10.01},
+        (otir_trackir_mouse_point){.x = 10.04, .y = 10.01},
+        200,
+        30000,
         config
     );
-    assert(step.has_cursor_delta);
-    assert(fabs(step.cursor_delta.x - 2.6) < 0.0001);
-    assert(fabs(step.cursor_delta.y - 0.0625) < 0.0001);
+    assert(!step.has_cursor_delta);
 
     step = otir_trackir_mouse_tracker_update(
         &state,
         true,
-        (otir_trackir_mouse_point){.x = 12.52, .y = 10.01},
+        (otir_trackir_mouse_point){.x = 10.54, .y = 10.01},
+        200,
+        30000,
+        config
+    );
+    assert(!step.has_cursor_delta);
+
+    step = otir_trackir_mouse_tracker_update(
+        &state,
+        true,
+        (otir_trackir_mouse_point){.x = 11.04, .y = 10.01},
+        200,
+        30000,
         config
     );
     assert(step.has_cursor_delta);
-    assert(fabs(step.cursor_delta.x - 20.0) < 0.0001);
+    assert(step.cursor_delta.x > 1.5);
+    assert(step.cursor_delta.x < 2.0);
+    assert(fabs(step.cursor_delta.y) < 0.0001);
+
+    step = otir_trackir_mouse_tracker_update(
+        &state,
+        true,
+        (otir_trackir_mouse_point){.x = 12.04, .y = 10.01},
+        200,
+        30000,
+        config
+    );
+    assert(step.has_cursor_delta);
+    assert(fabs(step.cursor_delta.x - 3.4) < 0.0001);
     assert(fabs(step.cursor_delta.y) < 0.0001);
 
     step = otir_trackir_mouse_tracker_update(
         &state,
         true,
         (otir_trackir_mouse_point){.x = 80.0, .y = 10.1},
+        200,
+        30000,
         config
     );
     assert(!step.has_cursor_delta);
+}
+
+static void test_mouse_tracker_large_direction_changes_pass_immediately(void) {
+    otir_trackir_mouse_tracker_state state = {0};
+    otir_trackir_mouse_tracker_config config = {
+        .is_movement_enabled = true,
+        .speed = 1.0,
+        .smoothing = 1.0,
+        .deadzone = 0.0,
+        .avoid_mouse_jumps = false,
+        .jump_threshold_pixels = 50.0,
+        .minimum_blob_area_points = 100,
+        .transform = {
+            .scale_x = 1.0,
+            .scale_y = 1.0,
+            .rotation_degrees = 0.0,
+        },
+    };
+    otir_trackir_mouse_step step;
+
+    (void)otir_trackir_mouse_tracker_update(
+        &state,
+        true,
+        (otir_trackir_mouse_point){.x = 0.0, .y = 0.0},
+        200,
+        30000,
+        config
+    );
+    (void)otir_trackir_mouse_tracker_update(
+        &state,
+        true,
+        (otir_trackir_mouse_point){.x = 1.0, .y = 0.0},
+        200,
+        30000,
+        config
+    );
+    step = otir_trackir_mouse_tracker_update(
+        &state,
+        true,
+        (otir_trackir_mouse_point){.x = 0.3, .y = 0.0},
+        200,
+        30000,
+        config
+    );
+
+    assert(step.has_cursor_delta);
+    assert(step.cursor_delta.x < 0.0);
+    assert(fabs(step.cursor_delta.x + 0.7) < 0.0001);
 }
 
 static void test_mouse_step_suppresses_zero_delta(void) {

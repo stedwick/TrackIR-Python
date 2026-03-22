@@ -31,6 +31,8 @@ bool otir_mac_mouse_controller_update(
     bool has_centroid,
     double centroid_x,
     double centroid_y,
+    int selected_blob_area_points,
+    int selected_blob_brightness_sum,
     otir_trackir_mouse_tracker_config config
 );
 bool otir_mac_mouse_controller_nudge(otir_mac_mouse_controller *controller);

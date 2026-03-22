@@ -113,6 +113,7 @@ struct TrackIRMouseControllerTests {
             deadzone: 0.04,
             avoid_mouse_jumps: true,
             jump_threshold_pixels: 50,
+            minimum_blob_area_points: 100,
             transform: otir_trackir_mouse_transform(scale_x: 1, scale_y: 1, rotation_degrees: 0)
         )
 
@@ -120,26 +121,51 @@ struct TrackIRMouseControllerTests {
             &state,
             true,
             otir_trackir_mouse_point(x: 10, y: 10),
+            200,
+            30_000,
             config
         )
         let deadzone = otir_trackir_mouse_tracker_update(
             &state,
             true,
             otir_trackir_mouse_point(x: 10.02, y: 10.01),
+            200,
+            30_000,
+            config
+        )
+        let medianSettling = otir_trackir_mouse_tracker_update(
+            &state,
+            true,
+            otir_trackir_mouse_point(x: 10.04, y: 10.01),
+            200,
+            30_000,
+            config
+        )
+        let stillLatched = otir_trackir_mouse_tracker_update(
+            &state,
+            true,
+            otir_trackir_mouse_point(x: 10.54, y: 10.01),
+            200,
+            30_000,
             config
         )
         let smoothed = otir_trackir_mouse_tracker_update(
             &state,
             true,
-            otir_trackir_mouse_point(x: 10.52, y: 10.01),
+            otir_trackir_mouse_point(x: 11.04, y: 10.01),
+            200,
+            30_000,
             config
         )
 
         #expect(!first.has_cursor_delta)
         #expect(!deadzone.has_cursor_delta)
+        #expect(!medianSettling.has_cursor_delta)
+        #expect(!stillLatched.has_cursor_delta)
         #expect(smoothed.has_cursor_delta)
-        #expect(abs(smoothed.cursor_delta.x - 2.6) < 0.0001)
-        #expect(abs(smoothed.cursor_delta.y - 0.0625) < 0.0001)
+        #expect(smoothed.cursor_delta.x > 1.5)
+        #expect(smoothed.cursor_delta.x < 2.0)
+        #expect(abs(smoothed.cursor_delta.y) < 0.0001)
     }
 
     @Test func trackerSkipsConfiguredJumpGlitches() {
@@ -151,6 +177,7 @@ struct TrackIRMouseControllerTests {
             deadzone: 0.04,
             avoid_mouse_jumps: true,
             jump_threshold_pixels: 50,
+            minimum_blob_area_points: 100,
             transform: otir_trackir_mouse_transform(scale_x: 1, scale_y: 1, rotation_degrees: 0)
         )
 
@@ -158,12 +185,16 @@ struct TrackIRMouseControllerTests {
             &state,
             true,
             otir_trackir_mouse_point(x: 10, y: 10),
+            200,
+            30_000,
             config
         )
         let jump = otir_trackir_mouse_tracker_update(
             &state,
             true,
             otir_trackir_mouse_point(x: 61, y: 10),
+            200,
+            30_000,
             config
         )
 

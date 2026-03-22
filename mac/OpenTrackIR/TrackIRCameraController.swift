@@ -589,7 +589,7 @@ private let trackIRLogger = Logger(
     category: "TrackIRCamera"
 )
 
-private struct TrackIRPollingConfiguration: Equatable {
+struct TrackIRPollingConfiguration: Equatable {
     let isTrackIREnabled: Bool
     let isVideoEnabled: Bool
     let isXKeysFastMouseEnabled: Bool
@@ -863,30 +863,56 @@ nonisolated func trackIRMouseTransform(
     )
 }
 
+nonisolated func trackIRMouseBlobMetrics(
+    snapshot: otir_trackir_session_snapshot
+) -> (selectedBlobAreaPoints: Int32, selectedBlobBrightnessSum: Int32) {
+    (
+        selectedBlobAreaPoints: Int32(snapshot.selected_blob_area_points),
+        selectedBlobBrightnessSum: Int32(snapshot.selected_blob_brightness_sum)
+    )
+}
+
+nonisolated func trackIRMouseTrackerConfig(
+    snapshot: otir_trackir_session_snapshot,
+    configuration: TrackIRPollingConfiguration,
+    xKeysMonitorSnapshot: XKeysMonitorSnapshot
+) -> otir_trackir_mouse_tracker_config {
+    otir_trackir_mouse_tracker_config(
+        is_movement_enabled: configuration.isMouseMovementEnabled &&
+            snapshot.phase == OTIR_TRACKIR_SESSION_PHASE_STREAMING,
+        speed: trackIRMouseEffectiveSpeed(
+            baseSpeed: configuration.mouseMovementSpeed,
+            isXKeysFastMouseEnabled: configuration.isXKeysFastMouseEnabled,
+            isXKeysPedalPressed: xKeysMonitorSnapshot.isPressed
+        ),
+        smoothing: Double(configuration.mouseSmoothing),
+        deadzone: configuration.mouseDeadzone,
+        avoid_mouse_jumps: configuration.isAvoidMouseJumpsEnabled,
+        jump_threshold_pixels: Double(configuration.mouseJumpThresholdPixels),
+        minimum_blob_area_points: Int32(configuration.minimumBlobAreaPoints),
+        transform: trackIRMouseTransform(configuration.mouseTransform)
+    )
+}
+
 private nonisolated func trackIRApplyMouseMovement(
     controller: OpaquePointer?,
     snapshot: otir_trackir_session_snapshot,
     configuration: TrackIRPollingConfiguration,
     xKeysMonitorSnapshot: XKeysMonitorSnapshot
 ) -> Bool {
-    otir_mac_mouse_controller_update(
+    let blobMetrics = trackIRMouseBlobMetrics(snapshot: snapshot)
+
+    return otir_mac_mouse_controller_update(
         controller,
         snapshot.has_centroid,
         snapshot.centroid_x,
         snapshot.centroid_y,
-        otir_trackir_mouse_tracker_config(
-            is_movement_enabled: configuration.isMouseMovementEnabled &&
-                snapshot.phase == OTIR_TRACKIR_SESSION_PHASE_STREAMING,
-            speed: trackIRMouseEffectiveSpeed(
-                baseSpeed: configuration.mouseMovementSpeed,
-                isXKeysFastMouseEnabled: configuration.isXKeysFastMouseEnabled,
-                isXKeysPedalPressed: xKeysMonitorSnapshot.isPressed
-            ),
-            smoothing: Double(configuration.mouseSmoothing),
-            deadzone: configuration.mouseDeadzone,
-            avoid_mouse_jumps: configuration.isAvoidMouseJumpsEnabled,
-            jump_threshold_pixels: Double(configuration.mouseJumpThresholdPixels),
-            transform: trackIRMouseTransform(configuration.mouseTransform)
+        blobMetrics.selectedBlobAreaPoints,
+        blobMetrics.selectedBlobBrightnessSum,
+        trackIRMouseTrackerConfig(
+            snapshot: snapshot,
+            configuration: configuration,
+            xKeysMonitorSnapshot: xKeysMonitorSnapshot
         )
     )
 }

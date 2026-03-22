@@ -101,6 +101,8 @@ bool otir_mac_mouse_controller_update(
     bool has_centroid,
     double centroid_x,
     double centroid_y,
+    int selected_blob_area_points,
+    int selected_blob_brightness_sum,
     otir_trackir_mouse_tracker_config config
 ) {
     otir_trackir_mouse_step step;
@@ -119,6 +121,8 @@ bool otir_mac_mouse_controller_update(
         &controller->tracker_state,
         has_centroid,
         current_centroid,
+        selected_blob_area_points,
+        selected_blob_brightness_sum,
         config
     );
     can_post_mouse_events = controller->can_post_mouse_events;
