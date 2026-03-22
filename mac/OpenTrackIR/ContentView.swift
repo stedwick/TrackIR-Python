@@ -110,10 +110,6 @@ struct ContentView: View {
         controlState.minimumBlobAreaPoints
     }
 
-    private var blobCentroidMode: TrackIRBlobCentroidMode {
-        controlState.blobCentroidMode
-    }
-
     private var keepAwakeSeconds: Int {
         controlState.keepAwakeSeconds
     }
@@ -642,7 +638,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 16) {
                 controlCopy(
                     title: "Blob Detection",
-                    detail: "Filter tiny blobs and choose how the centroid is stabilized when the blob brightness flickers.",
+                    detail: "Filter tiny blobs and use a previous-regularized centroid to calm tiny frame-to-frame brightness flicker.",
                     systemImage: "scope"
                 )
 
@@ -653,21 +649,10 @@ struct ContentView: View {
                     suffix: "pts"
                 )
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Centroid Formula")
-                        .font(.subheadline.weight(.semibold))
+                Text("Centroid Formula: Previous-Regularized")
+                    .font(.subheadline.weight(.semibold))
 
-                    Picker("Centroid Formula", selection: blobCentroidModeBinding) {
-                        ForEach(TrackIRBlobCentroidMode.allCases, id: \.self) { mode in
-                            Text(trackIRBlobCentroidModeLabel(for: mode))
-                                .tag(mode)
-                        }
-                    }
-                    .pickerStyle(.radioGroup)
-                    .labelsHidden()
-                }
-
-                Text(trackIRBlobCentroidModeDescription(for: blobCentroidMode))
+                Text(trackIRBlobCentroidModeDescription(for: trackIRDefaultBlobCentroidMode()))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -970,13 +955,6 @@ struct ContentView: View {
         )
     }
 
-    private var blobCentroidModeBinding: Binding<TrackIRBlobCentroidMode> {
-        Binding(
-            get: { blobCentroidMode },
-            set: { runtimeController.setBlobCentroidMode($0) }
-        )
-    }
-
     private var keepAwakeSecondsBinding: Binding<Int> {
         Binding(
             get: { keepAwakeSeconds },
@@ -1044,8 +1022,6 @@ enum ControlPreferenceKey: String {
     case avoidMouseJumpsEnabled = "contentView.avoidMouseJumpsEnabled"
     case mouseJumpThresholdPixels = "contentView.mouseJumpThresholdPixels"
     case minimumBlobAreaPoints = "contentView.minimumBlobAreaPoints"
-    // Keep the stored key stable so existing preferences migrate automatically.
-    case convexHullCentroidEnabled = "contentView.scaledHullContoursEnabled"
     case keepAwakeSeconds = "contentView.keepAwakeSeconds"
     case timeoutEnabled = "contentView.timeoutEnabled"
     case timeoutSeconds = "contentView.timeoutSeconds"
@@ -1066,7 +1042,6 @@ struct ControlDefaultValues: Equatable {
     let avoidMouseJumpsEnabled: Bool
     let mouseJumpThresholdPixels: Int
     let minimumBlobAreaPoints: Int
-    let blobCentroidMode: TrackIRBlobCentroidMode
     let keepAwakeSeconds: Int
     let timeoutEnabled: Bool
     let timeoutSeconds: Int
@@ -1086,6 +1061,10 @@ func defaultMouseMovementShortcut() -> KeyboardShortcuts.Shortcut {
     .init(.f7, modifiers: [.shift])
 }
 
+func trackIRDefaultBlobCentroidMode() -> TrackIRBlobCentroidMode {
+    .regularizedBinary
+}
+
 func controlDefaultValues() -> ControlDefaultValues {
     ControlDefaultValues(
         videoEnabled: true,
@@ -1098,7 +1077,6 @@ func controlDefaultValues() -> ControlDefaultValues {
         avoidMouseJumpsEnabled: true,
         mouseJumpThresholdPixels: 50,
         minimumBlobAreaPoints: 100,
-        blobCentroidMode: .filledHull,
         keepAwakeSeconds: 29,
         timeoutEnabled: true,
         timeoutSeconds: 28_800,
@@ -1121,7 +1099,6 @@ func controlDefaultPreferences(_ defaults: ControlDefaultValues) -> [String: Any
         ControlPreferenceKey.avoidMouseJumpsEnabled.rawValue: defaults.avoidMouseJumpsEnabled,
         ControlPreferenceKey.mouseJumpThresholdPixels.rawValue: defaults.mouseJumpThresholdPixels,
         ControlPreferenceKey.minimumBlobAreaPoints.rawValue: defaults.minimumBlobAreaPoints,
-        ControlPreferenceKey.convexHullCentroidEnabled.rawValue: defaults.blobCentroidMode.rawValue,
         ControlPreferenceKey.keepAwakeSeconds.rawValue: defaults.keepAwakeSeconds,
         ControlPreferenceKey.timeoutEnabled.rawValue: defaults.timeoutEnabled,
         ControlPreferenceKey.timeoutSeconds.rawValue: defaults.timeoutSeconds,
@@ -1132,66 +1109,12 @@ func controlDefaultPreferences(_ defaults: ControlDefaultValues) -> [String: Any
     ]
 }
 
-enum TrackIRBlobCentroidMode: Int, CaseIterable, Equatable {
-    case rawWeighted = 1
-    case filledHull = 2
-    case binary = 3
-    case blended = 4
+enum TrackIRBlobCentroidMode: Int, Equatable {
     case regularizedBinary = 5
-}
-
-func normalizedTrackIRBlobCentroidMode(_ rawValue: Int) -> TrackIRBlobCentroidMode {
-    TrackIRBlobCentroidMode(rawValue: rawValue) ?? .filledHull
-}
-
-func isLegacyBooleanPreferenceValue(_ value: Any) -> Bool {
-    guard let number = value as? NSNumber else {
-        return false
-    }
-
-    return CFGetTypeID(number) == CFBooleanGetTypeID()
-}
-
-func migratedTrackIRBlobCentroidMode(
-    storedValue: Any?,
-    defaultMode: TrackIRBlobCentroidMode
-) -> TrackIRBlobCentroidMode {
-    if let storedValue, isLegacyBooleanPreferenceValue(storedValue),
-        let isConvexHullEnabled = storedValue as? Bool {
-        return isConvexHullEnabled ? .filledHull : .rawWeighted
-    }
-    if let rawValue = storedValue as? Int {
-        return normalizedTrackIRBlobCentroidMode(rawValue)
-    }
-
-    return defaultMode
-}
-
-func trackIRBlobCentroidModeLabel(for mode: TrackIRBlobCentroidMode) -> String {
-    switch mode {
-        case .rawWeighted:
-            return "Off"
-        case .filledHull:
-            return "Filled Hull"
-        case .binary:
-            return "Binary"
-        case .blended:
-            return "Blended"
-        case .regularizedBinary:
-            return "Previous-Regularized"
-    }
 }
 
 func trackIRBlobCentroidModeDescription(for mode: TrackIRBlobCentroidMode) -> String {
     switch mode {
-        case .rawWeighted:
-            return "Use the current brightness-weighted centroid with no extra stabilization."
-        case .filledHull:
-            return "Ignore grayscale inside the blob and use the centroid of the blob's filled convex hull."
-        case .binary:
-            return "Treat every blob pixel equally so tiny brightness changes do not pull the center around."
-        case .blended:
-            return "Mix the binary centroid with the brightness-weighted centroid for a middle ground."
         case .regularizedBinary:
             return "Blend the new binary centroid with the previous center to calm tiny frame-to-frame wobble."
     }

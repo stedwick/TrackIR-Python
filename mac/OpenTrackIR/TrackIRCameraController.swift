@@ -143,7 +143,6 @@ final class TrackIRCameraController: ObservableObject {
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
         minimumBlobAreaPoints: Int,
-        blobCentroidMode: TrackIRBlobCentroidMode,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
@@ -177,7 +176,6 @@ final class TrackIRCameraController: ObservableObject {
                 isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
                 mouseJumpThresholdPixels: mouseJumpThresholdPixels,
                 minimumBlobAreaPoints: minimumBlobAreaPoints,
-                blobCentroidMode: blobCentroidMode,
                 keepAwakeSeconds: keepAwakeSeconds,
                 mouseTransform: mouseTransform
             )
@@ -207,7 +205,6 @@ final class TrackIRCameraController: ObservableObject {
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
         minimumBlobAreaPoints: Int,
-        blobCentroidMode: TrackIRBlobCentroidMode,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
@@ -247,7 +244,6 @@ final class TrackIRCameraController: ObservableObject {
             isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: mouseJumpThresholdPixels,
             minimumBlobAreaPoints: minimumBlobAreaPoints,
-            blobCentroidMode: blobCentroidMode,
             keepAwakeSeconds: keepAwakeSeconds,
             mouseTransform: mouseTransform
         )
@@ -274,7 +270,6 @@ final class TrackIRCameraController: ObservableObject {
         isAvoidMouseJumpsEnabled: Bool,
         mouseJumpThresholdPixels: Int,
         minimumBlobAreaPoints: Int,
-        blobCentroidMode: TrackIRBlobCentroidMode,
         keepAwakeSeconds: Int,
         mouseTransform: VideoPreviewTransform
     ) {
@@ -294,7 +289,7 @@ final class TrackIRCameraController: ObservableObject {
         otir_trackir_session_set_minimum_blob_area_points(session, Int32(minimumBlobAreaPoints))
         otir_trackir_session_set_centroid_mode(
             session,
-            trackIRNativeBlobCentroidMode(blobCentroidMode)
+            trackIRNativeBlobCentroidMode()
         )
         otir_trackir_session_set_low_power_mode_enabled(session, false)
         otir_mac_mouse_controller_prepare_post_event_access(
@@ -346,7 +341,6 @@ final class TrackIRCameraController: ObservableObject {
             isAvoidMouseJumpsEnabled: isAvoidMouseJumpsEnabled,
             mouseJumpThresholdPixels: mouseJumpThresholdPixels,
             minimumBlobAreaPoints: minimumBlobAreaPoints,
-            blobCentroidMode: blobCentroidMode,
             keepAwakeSeconds: keepAwakeSeconds,
             mouseTransform: mouseTransform,
             shouldPublishUI: shouldPublishUI,
@@ -603,7 +597,6 @@ private struct TrackIRPollingConfiguration: Equatable {
     let isAvoidMouseJumpsEnabled: Bool
     let mouseJumpThresholdPixels: Int
     let minimumBlobAreaPoints: Int
-    let blobCentroidMode: TrackIRBlobCentroidMode
     let keepAwakeSeconds: Int
     let mouseTransform: VideoPreviewTransform
     let shouldPublishUI: Bool
@@ -866,21 +859,8 @@ nonisolated func trackIRMouseTransform(
     )
 }
 
-nonisolated func trackIRNativeBlobCentroidMode(
-    _ mode: TrackIRBlobCentroidMode
-) -> otir_tir5v3_centroid_mode {
-    switch mode {
-        case .rawWeighted:
-            return OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB
-        case .filledHull:
-            return OTIR_TIR5V3_CENTROID_MODE_FILLED_HULL
-        case .binary:
-            return OTIR_TIR5V3_CENTROID_MODE_BINARY_BLOB
-        case .blended:
-            return OTIR_TIR5V3_CENTROID_MODE_BLENDED_BINARY_WEIGHTED
-        case .regularizedBinary:
-            return OTIR_TIR5V3_CENTROID_MODE_REGULARIZED_BINARY
-    }
+nonisolated func trackIRNativeBlobCentroidMode() -> otir_tir5v3_centroid_mode {
+    OTIR_TIR5V3_CENTROID_MODE_REGULARIZED_BINARY
 }
 
 private nonisolated func trackIRApplyMouseMovement(
