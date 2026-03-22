@@ -45,6 +45,22 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - Do not run scheme-wide macOS test commands that include `OpenTrackIRUITests` unless the user explicitly asks for UI testing.
 - Prefer targeted macOS validation commands such as `xcodebuild build` and `xcodebuild test -only-testing:OpenTrackIRTests` so the app is not repeatedly relaunched during normal work.
 
+## Release process
+
+- Start releases from a clean `main` worktree that is already pushed to `origin/main`.
+- Follow the existing versioning pattern: Git tag `v0.2`, GitHub release title `0.2`, and asset name `OpenTrackIR-0.2-macOS-26-Tahoe-Apple-Silicon.zip`.
+- For the macOS app, prioritize Developer ID code signing and notarization over Git tag signing; the goal is a build that launches without Gatekeeper malware warnings on another Mac.
+- The Xcode project is already configured with `Developer ID Application: Philip Brocoum (WP9BPQYC6P)`. Preserve that unless the signing identity changes intentionally.
+- Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `mac/OpenTrackIR.xcodeproj/project.pbxproj` before cutting the release so the app bundle version matches the GitHub release.
+- A plain Release build from Xcode produced notarization failures for `0.2` because the signature was missing a secure timestamp and the binary still carried `com.apple.security.get-task-allow`.
+- The successful release build used `xcodebuild -project mac/OpenTrackIR.xcodeproj -scheme OpenTrackIR -destination 'platform=macOS' -configuration Release -derivedDataPath /Users/philip/src/OpenTrackIR/tmp/DerivedData-0.2-release CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO OTHER_CODE_SIGN_FLAGS=--timestamp build`.
+- Validate the signed app before notarization with `codesign -dv --verbose=4` and `codesign --verify --deep --strict`; the release app should show a Developer ID signature with a secure `Timestamp=` and no embedded entitlements.
+- Use the existing `OpenTrackIRNotary` keychain profile with `xcrun notarytool submit ... --keychain-profile OpenTrackIRNotary --wait` to notarize a zip that contains the signed `.app`.
+- After Apple accepts the submission, staple the ticket to the `.app` with `xcrun stapler staple`, then rebuild the final GitHub zip from the stapled app so the distributed asset already contains the notarization ticket.
+- Verify the stapled app with `spctl -a -vv`; the accepted result should say `source=Notarized Developer ID`.
+- Check the previous release metadata with `gh release view v0.1` before drafting notes or naming assets so naming stays consistent.
+- Publish the release with `gh release create`, attach the notarized zip, and keep the release notes explicit about platform/build assumptions such as the macOS version, architecture, notarization status, and whether `libusb` is statically linked.
+
 ## Directory guide
 
 - `python/`: fastest place to iterate on USB transport, logging, decoding, and tests.
