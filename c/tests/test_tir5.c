@@ -1,4 +1,5 @@
 #include "opentrackir/tir5.h"
+#include "opentrackir/tir5_mouse.h"
 #include "opentrackir/tir5_tooling.h"
 
 #include <assert.h>
@@ -29,6 +30,8 @@ static void test_build_frame_marks_stripes_and_stats(void);
 static void test_normalize_maximum_frames_per_second_rejects_invalid_values(void);
 static void test_should_process_frame_respects_processing_cap(void);
 static void test_should_publish_frame_respects_maximum_rate(void);
+static void test_mouse_transform_delta_applies_flip_and_rotation(void);
+static void test_mouse_step_suppresses_zero_delta(void);
 static void test_cli_read_maximum_frames_per_second_accepts_optional_argument(void);
 
 int main(void) {
@@ -45,6 +48,8 @@ int main(void) {
     test_normalize_maximum_frames_per_second_rejects_invalid_values();
     test_should_process_frame_respects_processing_cap();
     test_should_publish_frame_respects_maximum_rate();
+    test_mouse_transform_delta_applies_flip_and_rotation();
+    test_mouse_step_suppresses_zero_delta();
     test_cli_read_maximum_frames_per_second_accepts_optional_argument();
     puts("c/tests/test_tir5: all tests passed");
     return 0;
@@ -277,6 +282,67 @@ static void test_should_publish_frame_respects_maximum_rate(void) {
     assert(otir_tir5v3_should_publish_frame(1.0 / 60.0, 60.0));
     assert(otir_tir5v3_should_publish_frame(0.05, 60.0));
     assert(!otir_tir5v3_should_publish_frame(0.05, 0.0));
+}
+
+static void test_mouse_transform_delta_applies_flip_and_rotation(void) {
+    otir_trackir_mouse_point flipped = otir_trackir_mouse_transform_delta(
+        (otir_trackir_mouse_point){.x = 3.0, .y = -2.0},
+        2.0,
+        (otir_trackir_mouse_transform){
+            .scale_x = -1.0,
+            .scale_y = 1.0,
+            .rotation_degrees = 0.0,
+        }
+    );
+    otir_trackir_mouse_point rotated = otir_trackir_mouse_transform_delta(
+        (otir_trackir_mouse_point){.x = 4.0, .y = 0.0},
+        1.5,
+        (otir_trackir_mouse_transform){
+            .scale_x = 1.0,
+            .scale_y = 1.0,
+            .rotation_degrees = 90.0,
+        }
+    );
+
+    assert(fabs(flipped.x + 6.0) < 0.0001);
+    assert(fabs(flipped.y + 4.0) < 0.0001);
+    assert(fabs(rotated.x) < 0.0001);
+    assert(fabs(rotated.y - 6.0) < 0.0001);
+}
+
+static void test_mouse_step_suppresses_zero_delta(void) {
+    otir_trackir_mouse_step first_step = otir_trackir_mouse_compute_step(
+        false,
+        (otir_trackir_mouse_point){0},
+        true,
+        (otir_trackir_mouse_point){.x = 10.0, .y = 20.0},
+        true,
+        1.0,
+        (otir_trackir_mouse_transform){
+            .scale_x = 1.0,
+            .scale_y = 1.0,
+            .rotation_degrees = 0.0,
+        }
+    );
+    otir_trackir_mouse_step zero_delta_step = otir_trackir_mouse_compute_step(
+        true,
+        first_step.next_centroid,
+        true,
+        (otir_trackir_mouse_point){.x = 10.0, .y = 20.0},
+        true,
+        1.0,
+        (otir_trackir_mouse_transform){
+            .scale_x = 1.0,
+            .scale_y = 1.0,
+            .rotation_degrees = 0.0,
+        }
+    );
+
+    assert(!first_step.has_cursor_delta);
+    assert(first_step.has_next_centroid);
+    assert(!zero_delta_step.has_cursor_delta);
+    assert(zero_delta_step.has_next_centroid);
+    assert(otir_trackir_mouse_point_is_zero(zero_delta_step.cursor_delta));
 }
 
 static void test_normalize_maximum_frames_per_second_rejects_invalid_values(void) {

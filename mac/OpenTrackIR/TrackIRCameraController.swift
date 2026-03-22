@@ -24,7 +24,7 @@ final class TrackIRCameraController: ObservableObject {
 
     let backendLabel = "C + libusb"
 
-    private let mouseController = TrackIRMouseController()
+    private let mouseController = otir_mac_mouse_controller_create()
     private var pollTask: Task<Void, Never>?
     private var session: OpaquePointer?
     private var pollingConfiguration: TrackIRPollingConfiguration?
@@ -172,6 +172,10 @@ final class TrackIRCameraController: ObservableObject {
             maximumTrackingFramesPerSecond
         )
         otir_trackir_session_set_video_enabled(session, isVideoEnabled)
+        otir_mac_mouse_controller_prepare_post_event_access(
+            mouseController,
+            isMouseMovementEnabled
+        )
 
         let startStatus = otir_trackir_session_start(session)
         guard startStatus == OTIR_STATUS_OK else {
@@ -199,7 +203,7 @@ final class TrackIRCameraController: ObservableObject {
             pollTask?.cancel()
             pollTask = nil
             pollingConfiguration = nil
-            mouseController.reset()
+            otir_mac_mouse_controller_reset(mouseController)
             previewImage = nil
             return
         }
@@ -219,8 +223,12 @@ final class TrackIRCameraController: ObservableObject {
 
         if pollTask == nil || pollingConfiguration != configuration {
             pollingConfiguration = configuration
-            mouseController.reset()
-            startPolling(session: session, configuration: configuration)
+            otir_mac_mouse_controller_reset(mouseController)
+            startPolling(
+                session: session,
+                mouseController: mouseController,
+                configuration: configuration
+            )
         }
     }
 
@@ -233,7 +241,7 @@ final class TrackIRCameraController: ObservableObject {
             otir_trackir_session_stop(session, waitForShutdown)
         }
 
-        mouseController.reset()
+        otir_mac_mouse_controller_reset(mouseController)
         phase = .idle
         lastErrorDescription = nil
         frameIndex = 0
@@ -256,7 +264,11 @@ final class TrackIRCameraController: ObservableObject {
         return session
     }
 
-    private func startPolling(session: OpaquePointer, configuration: TrackIRPollingConfiguration) {
+    private func startPolling(
+        session: OpaquePointer,
+        mouseController: OpaquePointer?,
+        configuration: TrackIRPollingConfiguration
+    ) {
         pollTask?.cancel()
 
         pollTask = Task.detached(priority: .utility) { [weak self] in
@@ -309,6 +321,12 @@ final class TrackIRCameraController: ObservableObject {
                 let snapshotCopy = snapshot
                 let previewImageCopy = latestPreviewImage
 
+                trackIRApplyMouseMovement(
+                    controller: mouseController,
+                    snapshot: snapshotCopy,
+                    configuration: configuration
+                )
+
                 await MainActor.run { [weak self, snapshotCopy, previewImageCopy] in
                     self?.apply(
                         snapshotCopy,
@@ -336,14 +354,6 @@ final class TrackIRCameraController: ObservableObject {
         centroidY = snapshot.has_centroid ? snapshot.centroid_y : nil
         lastPacketType = snapshot.has_packet_type ? snapshot.packet_type : nil
 
-        mouseController.update(
-            centroidX: centroidX,
-            centroidY: centroidY,
-            isMovementEnabled: configuration.isMouseMovementEnabled && phase == .streaming,
-            speed: configuration.mouseMovementSpeed,
-            transform: configuration.mouseTransform
-        )
-
         if let previewImage {
             self.previewImage = previewImage
         } else if !configuration.isVideoEnabled || !snapshot.has_preview_frame || phase != .streaming {
@@ -358,6 +368,8 @@ final class TrackIRCameraController: ObservableObject {
             otir_trackir_session_stop(session, true)
             otir_trackir_session_destroy(session)
         }
+
+        otir_mac_mouse_controller_destroy(mouseController)
     }
 }
 
@@ -505,6 +517,33 @@ nonisolated func trackIRCoordinatePairLabel(x: Double?, y: Double?) -> String {
     }
 
     return "\(xLabel), \(yLabel)"
+}
+
+nonisolated func trackIRMouseTransform(
+    _ transform: VideoPreviewTransform
+) -> otir_trackir_mouse_transform {
+    otir_trackir_mouse_transform(
+        scale_x: Double(transform.scaleX),
+        scale_y: Double(transform.scaleY),
+        rotation_degrees: transform.rotationDegrees
+    )
+}
+
+private nonisolated func trackIRApplyMouseMovement(
+    controller: OpaquePointer?,
+    snapshot: otir_trackir_session_snapshot,
+    configuration: TrackIRPollingConfiguration
+) {
+    otir_mac_mouse_controller_update(
+        controller,
+        snapshot.has_centroid,
+        snapshot.centroid_x,
+        snapshot.centroid_y,
+        configuration.isMouseMovementEnabled &&
+            snapshot.phase == OTIR_TRACKIR_SESSION_PHASE_STREAMING,
+        configuration.mouseMovementSpeed,
+        trackIRMouseTransform(configuration.mouseTransform)
+    )
 }
 
 nonisolated func trackIRPreviewImage(frameBytes: [UInt8], width: Int, height: Int) -> CGImage? {
