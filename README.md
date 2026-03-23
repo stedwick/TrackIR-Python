@@ -154,6 +154,23 @@ open ~/Library/Developer/Xcode/DerivedData/OpenTrackIR-*/Build/Products/Debug/Op
 
 If `libusb-1.0` and OpenCV are available, the preview target is built alongside the C library and tests.
 
+## macOS permissions troubleshooting
+
+The macOS app currently crosses two separate privacy boundaries:
+
+- Cursor movement uses Quartz post-event access through `CGRequestPostEventAccess()` in `mac/OpenTrackIR/TrackIRMouseBridge.c`.
+- The optional X-keys foot pedal fast-mode integration opens the HID device through `IOHIDDeviceOpen()` in `mac/OpenTrackIR/XKeysFootPedalMonitor.swift`.
+
+If the cursor stops moving after rebuilding or changing signing, the usual cause is stale TCC trust for the current app signature rather than a TrackIR transport failure. The app bundle identifier is `philsapps.OpenTrackIR`, so the practical reset is:
+
+```sh
+tccutil reset All philsapps.OpenTrackIR
+```
+
+Then fully quit `OpenTrackIR`, remove any stale `OpenTrackIR` entry from System Settings > Privacy & Security > Accessibility, relaunch the current build, and re-approve it there when prompted. If you use the X-keys foot pedal, also approve Input Monitoring if macOS asks.
+
+The `IOHIDDeviceOpen` TCC denial from the X-keys monitor does not directly block TrackIR cursor movement. It disables the optional foot-pedal fast mode, while stale Quartz post-event permission prevents mouse movement.
+
 ## Native run commands
 
 Run the C unit tests:

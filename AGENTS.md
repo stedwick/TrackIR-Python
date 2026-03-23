@@ -45,6 +45,13 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - Do not run scheme-wide macOS test commands that include `OpenTrackIRUITests` unless the user explicitly asks for UI testing.
 - Prefer targeted macOS validation commands such as `xcodebuild build` and `xcodebuild test -only-testing:OpenTrackIRTests` so the app is not repeatedly relaunched during normal work.
 
+## macOS permissions notes
+
+- Keep the current TCC split explicit in docs and code comments: Quartz cursor posting uses `CGRequestPostEventAccess()` in `mac/OpenTrackIR/TrackIRMouseBridge.c`, while the optional X-keys foot pedal fast mode uses `IOHIDDeviceOpen()` in `mac/OpenTrackIR/XKeysFootPedalMonitor.swift`.
+- If local macOS runs stop moving the cursor after a rebuild or signing change, assume stale TCC trust for bundle id `philsapps.OpenTrackIR` before assuming TrackIR transport failure.
+- The standard local reset is `tccutil reset All philsapps.OpenTrackIR`, then fully quit the app, remove any stale Accessibility entry, relaunch, and re-approve the current build. If the user relies on the X-keys foot pedal, they may also need to re-approve Input Monitoring.
+- Do not describe an `IOHIDDeviceOpen` TCC denial as the direct cause of cursor movement failure unless the code path has changed. Today that denial disables only the optional X-keys fast mode; stale Quartz post-event access is what blocks cursor movement.
+
 ## Release process
 
 - Start releases from a clean `main` worktree that is already pushed to `origin/main`.
