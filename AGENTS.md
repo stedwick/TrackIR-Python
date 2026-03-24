@@ -67,6 +67,11 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - The final release zip must contain `OpenTrackIR.app` at the top level. Do not ship a renamed staging bundle such as `OpenTrackIR-0.2-stapled.app`; if a temporary copy is used during notarization, rename or recopy it back to `OpenTrackIR.app` before creating the GitHub asset.
 - Verify the stapled app with `spctl -a -vv`; the accepted result should say `source=Notarized Developer ID`.
 - Check the previous release metadata with `gh release view v0.1` before drafting notes or naming assets so naming stays consistent.
+- Each GitHub release description should include a short release-specific summary of what changed in that version. Example:
+  `0.2.2 release.`
+
+  `This adds a new app icon.`
+- Do not repeat prior release-specific change summaries in later releases; keep only the current release's change summary plus the current platform/build assumptions.
 - Publish the release with `gh release create`, attach the notarized zip, and keep the release notes explicit about platform/build assumptions such as the macOS version, architecture, notarization status, and whether `libusb` is statically linked.
 
 ## Directory guide
