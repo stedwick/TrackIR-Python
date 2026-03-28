@@ -23,13 +23,18 @@
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="CornerRadius" Value="18" />
             </Style>
+            <Style x:Key="StatusCardStyle" TargetType="Border" BasedOn="{StaticResource CardBorderStyle}">
+                <Setter Property="Padding" Value="14,12" />
+                <Setter Property="CornerRadius" Value="16" />
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <Grid Background="{ThemeResource PageBackgroundBrush}">
             <Grid Padding="24">
-                <StackPanel MaxWidth="1120" HorizontalAlignment="Center" Spacing="20">
+                <Grid MaxWidth="1120" HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="20">
                     <Grid ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -42,11 +47,49 @@
                         <Button Grid.Column="1" VerticalAlignment="Top" Command="{x:Bind ViewModel.RefreshCommand}" Content="Refresh" />
                     </Grid>
 
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <Border Style="{StaticResource CardBorderStyle}" Padding="12,6" CornerRadius="999"><TextBlock Text="{x:Bind ViewModel.TrackIRStatusText, Mode=OneWay}" /></Border>
-                        <Border Style="{StaticResource CardBorderStyle}" Padding="12,6" CornerRadius="999"><TextBlock Text="{x:Bind ViewModel.VideoStatusText, Mode=OneWay}" /></Border>
-                        <Border Style="{StaticResource CardBorderStyle}" Padding="12,6" CornerRadius="999"><TextBlock Text="{x:Bind ViewModel.MouseStatusText, Mode=OneWay}" /></Border>
-                    </StackPanel>
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource StatusCardStyle}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Width="10" Height="10" VerticalAlignment="Center" Fill="{x:Bind ViewModel.TrackIRStatusBrush, Mode=OneWay}" />
+                                <TextBlock Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="TrackIR" />
+                                <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="{x:Bind ViewModel.TrackIRStatusValue, Mode=OneWay}" />
+                            </Grid>
+                        </Border>
+                        <Border Grid.Column="1" Style="{StaticResource StatusCardStyle}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Width="10" Height="10" VerticalAlignment="Center" Fill="{x:Bind ViewModel.VideoStatusBrush, Mode=OneWay}" />
+                                <TextBlock Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Video" />
+                                <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="{x:Bind ViewModel.VideoStatusValue, Mode=OneWay}" />
+                            </Grid>
+                        </Border>
+                        <Border Grid.Column="2" Style="{StaticResource StatusCardStyle}">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Width="10" Height="10" VerticalAlignment="Center" Fill="{x:Bind ViewModel.MouseStatusBrush, Mode=OneWay}" />
+                                <TextBlock Grid.Column="1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Mouse" />
+                                <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="{x:Bind ViewModel.MouseStatusValue, Mode=OneWay}" />
+                            </Grid>
+                        </Border>
+                    </Grid>
 
                     <Border Style="{StaticResource SectionBorderStyle}">
                         <StackPanel Spacing="16">
@@ -54,7 +97,7 @@
                                 <TextBlock FontSize="24" FontWeight="SemiBold" Text="{x:Bind ViewModel.PreviewTitle, Mode=OneWay}" TextAlignment="Center" />
                                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.PreviewMessage, Mode=OneWay}" TextAlignment="Center" TextWrapping="WrapWholeWords" />
                             </StackPanel>
-                            <Viewbox Stretch="Uniform">
+                            <Viewbox Width="320" Height="240" HorizontalAlignment="Center" Stretch="Uniform">
                                 <Border Width="640" Height="480" Padding="16" Background="{ThemeResource PreviewCardBrush}" BorderBrush="{ThemeResource CardBorderBrush}" BorderThickness="1" CornerRadius="24">
                                     <Grid>
                                         <TextBlock Foreground="{ThemeResource PreviewPrimaryTextBrush}" FontSize="16" FontWeight="SemiBold" Text="Mock TrackIR Preview" />
@@ -93,31 +136,35 @@
                                 <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource CardBorderStyle}"><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock FontSize="18" FontWeight="SemiBold" Text="Enable Mouse Movement" /><TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Toggle mouse movement." /></StackPanel><ToggleSwitch Grid.Column="1" IsOn="{x:Bind ViewModel.IsMouseMovementEnabled, Mode=TwoWay}" /></Grid></Border>
                                 <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock FontSize="18" FontWeight="SemiBold" Text="Mouse Speed" /><TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Adjust cursor speed." /></StackPanel><TextBlock Grid.Column="1" FontSize="20" FontWeight="SemiBold" Text="{x:Bind ViewModel.MouseSpeedLabel, Mode=OneWay}" /></Grid><Slider Minimum="1" Maximum="5" StepFrequency="0.2" Value="{x:Bind ViewModel.MouseMovementSpeed, Mode=TwoWay}" /></StackPanel></Border>
                                 <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock FontSize="18" FontWeight="SemiBold" Text="TrackIR FPS" /><TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Cap TrackIR processing." /></StackPanel><TextBlock Grid.Column="1" FontSize="20" FontWeight="SemiBold" Text="{x:Bind ViewModel.TrackIRFramesPerSecondLabel, Mode=OneWay}" /></Grid><Slider Minimum="0" Maximum="125" StepFrequency="1" Value="{x:Bind ViewModel.VideoFramesPerSecond, Mode=TwoWay}" /></StackPanel></Border>
-                                <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><TextBlock FontSize="18" FontWeight="SemiBold" Text="Mouse Toggle Hotkey" /><TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Store the hotkey chord for the future backend." /><TextBox Text="{x:Bind ViewModel.MouseToggleHotkeyText, Mode=TwoWay}" /><TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.HotkeyHelperText, Mode=OneWay}" TextWrapping="WrapWholeWords" /></StackPanel></Border>
+                                <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><TextBlock FontSize="18" FontWeight="SemiBold" Text="Mouse Toggle Hotkey" /><TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Capture the hotkey chord for the future backend." /><TextBox x:Name="MouseToggleHotkeyCaptureBox" IsReadOnly="True" PlaceholderText="Click here and press a shortcut" Text="{x:Bind ViewModel.MouseToggleHotkeyText, Mode=OneWay}" KeyDown="MouseToggleHotkeyCaptureBox_KeyDown" /><TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.HotkeyHelperText, Mode=OneWay}" TextWrapping="WrapWholeWords" /></StackPanel></Border>
                                 <Border Grid.Row="3" Grid.ColumnSpan="2" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><TextBlock FontSize="18" FontWeight="SemiBold" Text="Video Controls" /><StackPanel Orientation="Horizontal" Spacing="16"><CheckBox Content="Flip Horizontal" IsChecked="{x:Bind ViewModel.IsVideoFlipHorizontalEnabled, Mode=TwoWay}" /><CheckBox Content="Flip Vertical" IsChecked="{x:Bind ViewModel.IsVideoFlipVerticalEnabled, Mode=TwoWay}" /></StackPanel><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock FontSize="18" FontWeight="SemiBold" Text="Rotate" /><TextBlock Grid.Column="1" FontSize="20" FontWeight="SemiBold" Text="{x:Bind ViewModel.VideoRotationLabel, Mode=OneWay}" /></Grid><Slider Minimum="0" Maximum="360" StepFrequency="1" Value="{x:Bind ViewModel.VideoRotationDegrees, Mode=TwoWay}" /></StackPanel></Border>
                             </Grid>
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource SectionBorderStyle}">
-                        <Expander Header="Advanced Controls" IsExpanded="{x:Bind ViewModel.IsAdvancedExpanded, Mode=TwoWay}">
-                            <StackPanel Margin="0,16,0,0" Spacing="16">
+                        <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" IsExpanded="{x:Bind ViewModel.IsAdvancedExpanded, Mode=TwoWay}">
+                            <Expander.Header>
+                                <TextBlock FontSize="24" FontWeight="SemiBold" Text="Advanced Controls" />
+                            </Expander.Header>
+                            <StackPanel Margin="0,16,0,0" HorizontalAlignment="Stretch" Spacing="16">
                                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.AdvancedDescription, Mode=OneWay}" TextWrapping="WrapWholeWords" />
                                 <Grid ColumnSpacing="14" RowSpacing="14">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><TextBlock FontSize="18" FontWeight="SemiBold" Text="Smoothing" /><Slider Minimum="1" Maximum="10" StepFrequency="1" Value="{x:Bind ViewModel.MouseSmoothing, Mode=TwoWay}" /></StackPanel></Border>
+                                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock FontSize="18" FontWeight="SemiBold" Text="Smoothing" /><TextBlock Grid.Column="1" FontSize="20" FontWeight="SemiBold" Text="{x:Bind ViewModel.MouseSmoothingLabel, Mode=OneWay}" /></Grid><Slider Minimum="1" Maximum="10" StepFrequency="1" Value="{x:Bind ViewModel.MouseSmoothing, Mode=TwoWay}" /></StackPanel></Border>
                                     <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><TextBlock FontSize="18" FontWeight="SemiBold" Text="Dead Zone" /><TextBlock Text="{x:Bind ViewModel.MouseDeadzoneLabel, Mode=OneWay}" /><Slider Minimum="0" Maximum="1" StepFrequency="0.01" Value="{x:Bind ViewModel.MouseDeadzone, Mode=TwoWay}" /></StackPanel></Border>
                                     <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><TextBlock FontSize="18" FontWeight="SemiBold" Text="Avoid Mouse Jumps" /><CheckBox Content="Enable Jump Filter" IsChecked="{x:Bind ViewModel.IsAvoidMouseJumpsEnabled, Mode=TwoWay}" /><StackPanel Visibility="{x:Bind ViewModel.JumpThresholdVisibility, Mode=OneWay}"><TextBlock Text="Jump Threshold (px)" /><NumberBox SmallChange="1" SpinButtonPlacementMode="Inline" Value="{x:Bind ViewModel.MouseJumpThresholdPixels, Mode=TwoWay}" /></StackPanel></StackPanel></Border>
                                     <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><TextBlock FontSize="18" FontWeight="SemiBold" Text="Keep Awake" /><TextBlock Text="Interval (sec)" /><NumberBox SmallChange="1" SpinButtonPlacementMode="Inline" Value="{x:Bind ViewModel.KeepAwakeSeconds, Mode=TwoWay}" /></StackPanel></Border>
                                     <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><TextBlock FontSize="18" FontWeight="SemiBold" Text="Timeout" /><CheckBox Content="Enable Timeout" IsChecked="{x:Bind ViewModel.IsTimeoutEnabled, Mode=TwoWay}" /><StackPanel Visibility="{x:Bind ViewModel.TimeoutDurationVisibility, Mode=OneWay}"><TextBlock Text="Duration (sec)" /><NumberBox SmallChange="1" SpinButtonPlacementMode="Inline" Value="{x:Bind ViewModel.TimeoutSeconds, Mode=TwoWay}" /><TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.TimeoutHelperText, Mode=OneWay}" TextWrapping="WrapWholeWords" /></StackPanel></StackPanel></Border>
                                     <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><TextBlock FontSize="18" FontWeight="SemiBold" Text="Blob Detection" /><TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.BlobDetectionDescription, Mode=OneWay}" TextWrapping="WrapWholeWords" /><TextBlock Text="Minimum Blob Area (pts)" /><NumberBox SmallChange="1" SpinButtonPlacementMode="Inline" Value="{x:Bind ViewModel.MinimumBlobAreaPoints, Mode=TwoWay}" /><TextBlock FontWeight="SemiBold" Text="{x:Bind ViewModel.BlobCentroidFormulaText, Mode=OneWay}" /></StackPanel></Border>
-                                    <Border Grid.Row="3" Grid.ColumnSpan="2" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock FontSize="18" FontWeight="SemiBold" Text="X-keys Fast Mode" /><CheckBox Grid.Column="1" Content="Enable" IsChecked="{x:Bind ViewModel.IsXKeysFastMouseEnabled, Mode=TwoWay}" /></Grid><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock Text="{x:Bind ViewModel.XKeysIndicatorText, Mode=OneWay}" /><TextBlock Grid.Column="1" HorizontalAlignment="Right" Text="{x:Bind ViewModel.RuntimeModeLabel, Mode=OneWay}" /></Grid></StackPanel></Border>
+                                    <Border Grid.Row="3" Grid.ColumnSpan="2" Style="{StaticResource CardBorderStyle}"><StackPanel Spacing="12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock FontSize="18" FontWeight="SemiBold" Text="X-keys Fast Mode" /><CheckBox Grid.Column="1" Content="Enable" IsChecked="{x:Bind ViewModel.IsXKeysFastMouseEnabled, Mode=TwoWay}" /></Grid><Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><Ellipse Width="14" Height="14" VerticalAlignment="Center" Fill="{x:Bind ViewModel.XKeysIndicatorBrush, Mode=OneWay}" /><TextBlock Grid.Column="1" Text="{x:Bind ViewModel.XKeysIndicatorText, Mode=OneWay}" /><TextBlock Grid.Column="2" HorizontalAlignment="Right" Text="{x:Bind ViewModel.RuntimeModeLabel, Mode=OneWay}" /></Grid></StackPanel></Border>
                                 </Grid>
                             </StackPanel>
                         </Expander>
                     </Border>
-                </StackPanel>
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Grid>
     </ScrollViewer>

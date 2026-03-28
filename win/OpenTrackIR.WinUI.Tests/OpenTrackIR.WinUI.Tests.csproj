@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\HotkeyCaptureLogic.cs" Link="Shared\HotkeyCaptureLogic.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\DashboardLayoutMode.cs" Link="Shared\DashboardLayoutMode.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRControlState.cs" Link="Shared\TrackIRControlState.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRPresentationState.cs" Link="Shared\TrackIRPresentationState.cs" />

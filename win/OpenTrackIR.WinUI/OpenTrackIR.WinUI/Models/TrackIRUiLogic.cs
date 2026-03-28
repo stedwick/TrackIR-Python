@@ -172,6 +172,11 @@ namespace OpenTrackIR.WinUI.Models
             return speed.ToString("0.##", CultureInfo.InvariantCulture) + "x";
         }
 
+        public static string MouseSmoothingValueLabel(double smoothing)
+        {
+            return Math.Round(smoothing).ToString("0", CultureInfo.InvariantCulture);
+        }
+
         public static string MouseDeadzoneValueLabel(double deadzone)
         {
             return deadzone.ToString("0.00", CultureInfo.InvariantCulture);
@@ -212,6 +217,28 @@ namespace OpenTrackIR.WinUI.Models
                 XKeysIndicatorState.Pressed => "Pressed",
                 _ => "Disabled",
             };
+        }
+
+        public static string XKeysIndicatorColorHex(XKeysIndicatorState state)
+        {
+            return state switch
+            {
+                XKeysIndicatorState.Disabled => "#7A8797",
+                XKeysIndicatorState.NotDetected => "#FFB020",
+                XKeysIndicatorState.Ready => "#31C48D",
+                XKeysIndicatorState.Pressed => "#F05252",
+                _ => "#7A8797",
+            };
+        }
+
+        public static string ToggleStateLabel(bool isEnabled, string enabledLabel, string disabledLabel)
+        {
+            return isEnabled ? enabledLabel : disabledLabel;
+        }
+
+        public static string ToggleStateColorHex(bool isEnabled)
+        {
+            return isEnabled ? "#31C48D" : "#7A8797";
         }
 
         public static DashboardLayoutMode DashboardLayoutForWidth(double width)

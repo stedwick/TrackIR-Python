@@ -108,9 +108,13 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.Equal("Uncapped", TrackIRUiLogic.TrackIRFramesPerSecondValueLabel(0));
             Assert.Equal("60 / max 75", TrackIRUiLogic.TrackIRRateSummaryLabel(60, 75));
             Assert.Equal("2.5x", TrackIRUiLogic.MouseSpeedValueLabel(2.5));
+            Assert.Equal("3", TrackIRUiLogic.MouseSmoothingValueLabel(3.4));
             Assert.Equal("0.04", TrackIRUiLogic.MouseDeadzoneValueLabel(0.04));
             Assert.Equal("270°", TrackIRUiLogic.VideoRotationValueLabel(-90));
             Assert.Equal("No Pedal", TrackIRUiLogic.XKeysIndicatorLabel(XKeysIndicatorState.NotDetected));
+            Assert.Equal("#FFB020", TrackIRUiLogic.XKeysIndicatorColorHex(XKeysIndicatorState.NotDetected));
+            Assert.Equal("Visible", TrackIRUiLogic.ToggleStateLabel(true, "Visible", "Hidden"));
+            Assert.Equal("#7A8797", TrackIRUiLogic.ToggleStateColorHex(false));
         }
 
         [Fact]
@@ -119,6 +123,16 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.Equal(DashboardLayoutMode.Narrow, TrackIRUiLogic.DashboardLayoutForWidth(700));
             Assert.Equal(DashboardLayoutMode.Medium, TrackIRUiLogic.DashboardLayoutForWidth(800));
             Assert.Equal(DashboardLayoutMode.Wide, TrackIRUiLogic.DashboardLayoutForWidth(1100));
+        }
+
+        [Fact]
+        public void HotkeyCaptureLogic_formats_display_text_and_ignores_modifier_only_keys()
+        {
+            Assert.Equal("Ctrl+Shift+F7", HotkeyCaptureLogic.FormatHotkeyText(true, false, true, false, "F7"));
+            Assert.True(HotkeyCaptureLogic.IsModifierKey(16));
+            Assert.Equal("A", HotkeyCaptureLogic.KeyTokenForVirtualKey(65));
+            Assert.Equal("F7", HotkeyCaptureLogic.KeyTokenForVirtualKey(118));
+            Assert.Null(HotkeyCaptureLogic.KeyTokenForVirtualKey(17));
         }
     }
 }

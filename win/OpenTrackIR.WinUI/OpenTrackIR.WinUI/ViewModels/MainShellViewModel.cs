@@ -1,5 +1,7 @@
 using System.Windows.Input;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using OpenTrackIR.WinUI.Models;
 using OpenTrackIR.WinUI.Runtime;
 using OpenTrackIR.WinUI.Services;
@@ -49,7 +51,7 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         public string AdvancedDescription => "Advanced tuning for blob detection, smoothing, keep-awake, and timeout.";
 
-        public string HotkeyHelperText => "The shortcut is stored locally for the future backend, but it is not registered system-wide yet.";
+        public string HotkeyHelperText => "Click the field and press a shortcut. It is stored locally for the future backend, but it is not registered system-wide yet.";
 
         public string BlobDetectionDescription => "Filter tiny blobs and keep the previous-regularized centroid mode for steadier results.";
 
@@ -187,9 +189,21 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         public string TrackIRStatusText => IsTrackIREnabled ? "TrackIR On" : "TrackIR Off";
 
+        public string TrackIRStatusValue => TrackIRUiLogic.ToggleStateLabel(IsTrackIREnabled, "On", "Off");
+
         public string VideoStatusText => IsVideoEnabled ? "Video Visible" : "Video Hidden";
 
+        public string VideoStatusValue => TrackIRUiLogic.ToggleStateLabel(IsVideoEnabled, "Visible", "Hidden");
+
         public string MouseStatusText => IsMouseMovementEnabled ? "Mouse On" : "Mouse Off";
+
+        public string MouseStatusValue => TrackIRUiLogic.ToggleStateLabel(IsMouseMovementEnabled, "On", "Off");
+
+        public Brush TrackIRStatusBrush => CreateBrush(TrackIRUiLogic.ToggleStateColorHex(IsTrackIREnabled));
+
+        public Brush VideoStatusBrush => CreateBrush(TrackIRUiLogic.ToggleStateColorHex(IsVideoEnabled));
+
+        public Brush MouseStatusBrush => CreateBrush(TrackIRUiLogic.ToggleStateColorHex(IsMouseMovementEnabled));
 
         public string PreviewTitle => TrackIRUiLogic.PreviewTitle(_controlState, _snapshot);
 
@@ -209,6 +223,8 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         public string MouseSpeedLabel => TrackIRUiLogic.MouseSpeedValueLabel(MouseMovementSpeed);
 
+        public string MouseSmoothingLabel => TrackIRUiLogic.MouseSmoothingValueLabel(MouseSmoothing);
+
         public string MouseDeadzoneLabel => TrackIRUiLogic.MouseDeadzoneValueLabel(MouseDeadzone);
 
         public string VideoRotationLabel => TrackIRUiLogic.VideoRotationValueLabel(VideoRotationDegrees);
@@ -216,6 +232,8 @@ namespace OpenTrackIR.WinUI.ViewModels
         public string PacketTypeLabel => TrackIRUiLogic.PacketTypeLabel(_snapshot.PacketType);
 
         public string XKeysIndicatorText => TrackIRUiLogic.XKeysIndicatorLabel(_snapshot.XKeysIndicatorState);
+
+        public Brush XKeysIndicatorBrush => CreateBrush(TrackIRUiLogic.XKeysIndicatorColorHex(_snapshot.XKeysIndicatorState));
 
         public string RuntimeModeLabel => _snapshot.IsLowPowerMode ? "Background" : "Interactive";
 
@@ -292,10 +310,17 @@ namespace OpenTrackIR.WinUI.ViewModels
             OnPropertyChanged(nameof(VideoFramesPerSecond));
             OnPropertyChanged(nameof(MouseToggleHotkeyText));
             OnPropertyChanged(nameof(TrackIRStatusText));
+            OnPropertyChanged(nameof(TrackIRStatusValue));
+            OnPropertyChanged(nameof(TrackIRStatusBrush));
             OnPropertyChanged(nameof(VideoStatusText));
+            OnPropertyChanged(nameof(VideoStatusValue));
+            OnPropertyChanged(nameof(VideoStatusBrush));
             OnPropertyChanged(nameof(MouseStatusText));
+            OnPropertyChanged(nameof(MouseStatusValue));
+            OnPropertyChanged(nameof(MouseStatusBrush));
             OnPropertyChanged(nameof(TrackIRFramesPerSecondLabel));
             OnPropertyChanged(nameof(MouseSpeedLabel));
+            OnPropertyChanged(nameof(MouseSmoothingLabel));
             OnPropertyChanged(nameof(MouseDeadzoneLabel));
             OnPropertyChanged(nameof(VideoRotationLabel));
             OnPropertyChanged(nameof(JumpThresholdVisibility));
@@ -312,10 +337,29 @@ namespace OpenTrackIR.WinUI.ViewModels
             OnPropertyChanged(nameof(BackendLabel));
             OnPropertyChanged(nameof(PacketTypeLabel));
             OnPropertyChanged(nameof(XKeysIndicatorText));
+            OnPropertyChanged(nameof(XKeysIndicatorBrush));
             OnPropertyChanged(nameof(RuntimeModeLabel));
             OnPropertyChanged(nameof(PreviewMarkerVisibility));
             OnPropertyChanged(nameof(PreviewMarkerLeft));
             OnPropertyChanged(nameof(PreviewMarkerTop));
+        }
+
+        private static SolidColorBrush CreateBrush(string hexColor)
+        {
+            string normalized = hexColor.TrimStart('#');
+            byte a = 0xFF;
+            int offset = 0;
+
+            if (normalized.Length == 8)
+            {
+                a = Convert.ToByte(normalized[..2], 16);
+                offset = 2;
+            }
+
+            byte r = Convert.ToByte(normalized.Substring(offset, 2), 16);
+            byte g = Convert.ToByte(normalized.Substring(offset + 2, 2), 16);
+            byte b = Convert.ToByte(normalized.Substring(offset + 4, 2), 16);
+            return new SolidColorBrush(ColorHelper.FromArgb(a, r, g, b));
         }
     }
 }
