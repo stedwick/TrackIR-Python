@@ -4,6 +4,7 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Project Path="../OpenTrackIR.WinUI.Tests/OpenTrackIR.WinUI.Tests.csproj" />
   <Project Path="OpenTrackIR.WinUI/OpenTrackIR.WinUI.csproj">
     <Platform Solution="*|ARM64" Project="ARM64" />
     <Platform Solution="*|x64" Project="x64" />
