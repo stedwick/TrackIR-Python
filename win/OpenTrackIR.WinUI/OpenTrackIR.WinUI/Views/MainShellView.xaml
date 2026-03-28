@@ -9,24 +9,17 @@
 
     <UserControl.Resources>
         <ResourceDictionary>
-            <LinearGradientBrush x:Key="PageBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Color="#EFF5FC" Offset="0" />
-                <GradientStop Color="#DBE8F7" Offset="1" />
-            </LinearGradientBrush>
-            <SolidColorBrush x:Key="SurfaceBrush" Color="#F7FFFFFF" />
-            <SolidColorBrush x:Key="CardBrush" Color="#EEFFFFFF" />
-            <SolidColorBrush x:Key="CardBorderBrush" Color="#22151D2A" />
             <Style x:Key="SectionBorderStyle" TargetType="Border">
                 <Setter Property="Padding" Value="24" />
-                <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+                <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardBorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="CornerRadius" Value="24" />
             </Style>
             <Style x:Key="CardBorderStyle" TargetType="Border">
                 <Setter Property="Padding" Value="18" />
-                <Setter Property="Background" Value="{StaticResource CardBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource CardBorderBrush}" />
+                <Setter Property="Background" Value="{ThemeResource CardBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardBorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="CornerRadius" Value="18" />
             </Style>
@@ -34,7 +27,7 @@
     </UserControl.Resources>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-        <Grid Background="{StaticResource PageBackgroundBrush}">
+        <Grid Background="{ThemeResource PageBackgroundBrush}">
             <Grid Padding="24">
                 <StackPanel MaxWidth="1120" HorizontalAlignment="Center" Spacing="20">
                     <Grid ColumnSpacing="16">
@@ -62,17 +55,17 @@
                                 <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.PreviewMessage, Mode=OneWay}" TextAlignment="Center" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                             <Viewbox Stretch="Uniform">
-                                <Border Width="640" Height="480" Padding="16" Background="#17202C" BorderBrush="{StaticResource CardBorderBrush}" BorderThickness="1" CornerRadius="24">
+                                <Border Width="640" Height="480" Padding="16" Background="{ThemeResource PreviewCardBrush}" BorderBrush="{ThemeResource CardBorderBrush}" BorderThickness="1" CornerRadius="24">
                                     <Grid>
-                                        <TextBlock Foreground="White" FontSize="16" FontWeight="SemiBold" Text="Mock TrackIR Preview" />
+                                        <TextBlock Foreground="{ThemeResource PreviewPrimaryTextBrush}" FontSize="16" FontWeight="SemiBold" Text="Mock TrackIR Preview" />
                                         <Canvas Margin="0,40,0,0">
-                                            <Rectangle Width="608" Height="408" RadiusX="18" RadiusY="18" Fill="#26364A" />
-                                            <Line X1="0" Y1="204" X2="608" Y2="204" Stroke="#2293C5FD" StrokeThickness="1" />
-                                            <Line X1="304" Y1="0" X2="304" Y2="408" Stroke="#2293C5FD" StrokeThickness="1" />
+                                            <Rectangle Width="608" Height="408" RadiusX="18" RadiusY="18" Fill="{ThemeResource PreviewSurfaceBrush}" />
+                                            <Line X1="0" Y1="204" X2="608" Y2="204" Stroke="{ThemeResource PreviewGridBrush}" StrokeThickness="1" />
+                                            <Line X1="304" Y1="0" X2="304" Y2="408" Stroke="{ThemeResource PreviewGridBrush}" StrokeThickness="1" />
                                             <Ellipse Width="20" Height="20" Canvas.Left="{x:Bind ViewModel.PreviewMarkerLeft, Mode=OneWay}" Canvas.Top="{x:Bind ViewModel.PreviewMarkerTop, Mode=OneWay}" Fill="#FFFF6B6B" Stroke="White" StrokeThickness="2" Visibility="{x:Bind ViewModel.PreviewMarkerVisibility, Mode=OneWay}" />
-                                            <TextBlock Canvas.Left="24" Canvas.Top="24" Foreground="#CCFFFFFF" FontSize="22" FontWeight="SemiBold" Text="640 x 480 placeholder surface" />
+                                            <TextBlock Canvas.Left="24" Canvas.Top="24" Foreground="{ThemeResource PreviewSecondaryTextBrush}" FontSize="22" FontWeight="SemiBold" Text="640 x 480 placeholder surface" />
                                         </Canvas>
-                                        <TextBlock HorizontalAlignment="Right" Foreground="#CCFFFFFF" Text="{x:Bind ViewModel.PacketTypeLabel, Mode=OneWay}" />
+                                        <TextBlock HorizontalAlignment="Right" Foreground="{ThemeResource PreviewSecondaryTextBrush}" Text="{x:Bind ViewModel.PacketTypeLabel, Mode=OneWay}" />
                                     </Grid>
                                 </Border>
                             </Viewbox>

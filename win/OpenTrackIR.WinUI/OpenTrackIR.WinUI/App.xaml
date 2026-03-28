@@ -8,9 +8,37 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
-                <!-- Other merged dictionaries here -->
             </ResourceDictionary.MergedDictionaries>
-            <!-- Other app resources here -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <LinearGradientBrush x:Key="PageBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#EFF5FC" Offset="0" />
+                        <GradientStop Color="#DBE8F7" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="SurfaceBrush" Color="#F7FFFFFF" />
+                    <SolidColorBrush x:Key="CardBrush" Color="#EEFFFFFF" />
+                    <SolidColorBrush x:Key="CardBorderBrush" Color="#22151D2A" />
+                    <SolidColorBrush x:Key="PreviewCardBrush" Color="#17202C" />
+                    <SolidColorBrush x:Key="PreviewSurfaceBrush" Color="#26364A" />
+                    <SolidColorBrush x:Key="PreviewGridBrush" Color="#2293C5FD" />
+                    <SolidColorBrush x:Key="PreviewPrimaryTextBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="PreviewSecondaryTextBrush" Color="#CCFFFFFF" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <LinearGradientBrush x:Key="PageBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#101723" Offset="0" />
+                        <GradientStop Color="#172333" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="SurfaceBrush" Color="#CC182231" />
+                    <SolidColorBrush x:Key="CardBrush" Color="#D9212D40" />
+                    <SolidColorBrush x:Key="CardBorderBrush" Color="#66778AA3" />
+                    <SolidColorBrush x:Key="PreviewCardBrush" Color="#08111C" />
+                    <SolidColorBrush x:Key="PreviewSurfaceBrush" Color="#132233" />
+                    <SolidColorBrush x:Key="PreviewGridBrush" Color="#33A3D7FF" />
+                    <SolidColorBrush x:Key="PreviewPrimaryTextBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="PreviewSecondaryTextBrush" Color="#D9E7F3FF" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
