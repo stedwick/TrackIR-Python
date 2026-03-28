@@ -26,6 +26,7 @@
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRRuntimePhase.cs" Link="Shared\TrackIRRuntimePhase.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRSnapshot.cs" Link="Shared\TrackIRSnapshot.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRUiLogic.cs" Link="Shared\TrackIRUiLogic.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrayUiLogic.cs" Link="Shared\TrayUiLogic.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\XKeysIndicatorState.cs" Link="Shared\XKeysIndicatorState.cs" />
   </ItemGroup>
 

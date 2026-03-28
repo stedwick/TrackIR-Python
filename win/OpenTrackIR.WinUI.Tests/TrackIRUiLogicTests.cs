@@ -134,5 +134,14 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.Equal("F7", HotkeyCaptureLogic.KeyTokenForVirtualKey(118));
             Assert.Null(HotkeyCaptureLogic.KeyTokenForVirtualKey(17));
         }
+
+        [Fact]
+        public void TrayUiLogic_builds_short_notify_icon_tooltip_text()
+        {
+            Assert.Equal(
+                "OpenTrackIR: TrackIR On, Mouse Off",
+                TrayUiLogic.TooltipText(isTrackIREnabled: true, isMouseMovementEnabled: false)
+            );
+        }
     }
 }

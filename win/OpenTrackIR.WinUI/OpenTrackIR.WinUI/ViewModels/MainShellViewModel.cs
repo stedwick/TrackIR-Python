@@ -19,7 +19,7 @@ namespace OpenTrackIR.WinUI.ViewModels
         private bool _showDetectedBlobCenter = true;
 
         public MainShellViewModel()
-            : this(new LocalSettingsStore(), new MockTrackIRRuntimeController(), new NoOpTrayService())
+            : this(new LocalSettingsStore(), new MockTrackIRRuntimeController(), AppServices.TrayService)
         {
         }
 
