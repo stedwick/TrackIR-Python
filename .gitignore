@@ -12,3 +12,28 @@ cpp/build/
 *.xcuserstate
 DerivedData/
 *.profraw
+
+# Visual Studio Windows
+
+.dotnet-cli/ 
+
+# User-specific IDE files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / ReSharper if they appear
+.idea/
+_ReSharper*/
+*.DotSettings.user
+
+# NuGet / package artifacts if generated locally
+packages/
+
+# If you want to keep the ignore rules scoped to the Windows work, use:
+
+win/**/.vs/
+win/**/bin/
+win/**/obj/
+win/**/TestResults/

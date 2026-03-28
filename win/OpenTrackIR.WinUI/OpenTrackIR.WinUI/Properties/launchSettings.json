@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "OpenTrackIR.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "OpenTrackIR.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
