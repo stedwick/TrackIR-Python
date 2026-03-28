@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -16,6 +16,16 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\DashboardLayoutMode.cs" Link="Shared\DashboardLayoutMode.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRControlState.cs" Link="Shared\TrackIRControlState.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRPresentationState.cs" Link="Shared\TrackIRPresentationState.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRRuntimePhase.cs" Link="Shared\TrackIRRuntimePhase.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRSnapshot.cs" Link="Shared\TrackIRSnapshot.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRUiLogic.cs" Link="Shared\TrackIRUiLogic.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\XKeysIndicatorState.cs" Link="Shared\XKeysIndicatorState.cs" />
   </ItemGroup>
 
 </Project>

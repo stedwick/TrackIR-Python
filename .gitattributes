@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+win/**/*.cs text eol=crlf
+win/**/*.csproj text eol=crlf
+win/**/*.json text eol=crlf
+win/**/*.pubxml text eol=crlf
+win/**/*.slnx text eol=crlf
+win/**/*.xaml text eol=crlf
+win/**/app.manifest text eol=crlf
+win/**/Package.appxmanifest text eol=crlf
