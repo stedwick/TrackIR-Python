@@ -344,6 +344,8 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.True(XKeysReportLogic.IsMatchingFootPedal(0x05F3, 0x042C, 0x000C, 0x0001));
             Assert.True(XKeysReportLogic.IsMatchingFootPedal(0x05F3, 0x0438, 0x000C, 0x0001));
             Assert.False(XKeysReportLogic.IsMatchingFootPedal(0x05F3, 0x9999, 0x000C, 0x0001));
+            Assert.True(XKeysReportLogic.MiddlePedalPressed(new byte[] { 0x00, 0x01, 0x01, 0x04 }));
+            Assert.True(XKeysReportLogic.MiddlePedalPressed(new byte[] { 0x00, 0x04, 0x00 }));
             Assert.True(XKeysReportLogic.MiddlePedalPressed(new byte[] { 0x00, 0x00, 0x04 }));
             Assert.False(XKeysReportLogic.MiddlePedalPressed(new byte[] { 0x00, 0x00, 0x00 }));
             Assert.Equal(
@@ -361,6 +363,12 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.Equal(
                 XKeysIndicatorState.Pressed,
                 XKeysReportLogic.Snapshot(isEnabled: true, didDetectPedal: true, isPressed: true).IndicatorState
+            );
+            Assert.True(
+                XKeysReportLogic.AggregateSnapshot(
+                    isEnabled: true,
+                    pressedStates: new[] { false, true, false }
+                ).IsPressed
             );
         }
 

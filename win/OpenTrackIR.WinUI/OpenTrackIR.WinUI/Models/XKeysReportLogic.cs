@@ -8,6 +8,7 @@ namespace OpenTrackIR.WinUI.Models
         public const int UsagePageConsumer = 0x000C;
         public const int UsageConsumerControl = 0x0001;
         public const double FastMouseMultiplier = 2.5;
+        public const byte MiddlePedalMask = 0x04;
 
         public static bool IsMatchingFootPedal(
             int vendorId,
@@ -24,7 +25,17 @@ namespace OpenTrackIR.WinUI.Models
 
         public static bool MiddlePedalPressed(ReadOnlySpan<byte> report)
         {
-            return report.Length > 2 && (report[2] & 0x04) != 0;
+            if (report.Length > 3 && (report[3] & MiddlePedalMask) != 0)
+            {
+                return true;
+            }
+
+            if (report.Length > 1 && (report[1] & MiddlePedalMask) != 0)
+            {
+                return true;
+            }
+
+            return report.Length > 2 && (report[2] & MiddlePedalMask) != 0;
         }
 
         public static XKeysIndicatorState IndicatorState(
@@ -56,6 +67,26 @@ namespace OpenTrackIR.WinUI.Models
                 IndicatorState: IndicatorState(isEnabled, didDetectPedal, isPressed),
                 IsPressed: isEnabled && didDetectPedal && isPressed
             );
+        }
+
+        public static XKeysMonitorSnapshot AggregateSnapshot(
+            bool isEnabled,
+            IEnumerable<bool> pressedStates
+        )
+        {
+            bool didDetectPedal = false;
+            bool isPressed = false;
+            foreach (bool pressedState in pressedStates)
+            {
+                didDetectPedal = true;
+                if (pressedState)
+                {
+                    isPressed = true;
+                    break;
+                }
+            }
+
+            return Snapshot(isEnabled, didDetectPedal, isPressed);
         }
     }
 }

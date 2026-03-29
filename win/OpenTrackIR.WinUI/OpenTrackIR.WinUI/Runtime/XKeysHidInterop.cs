@@ -12,16 +12,24 @@ namespace OpenTrackIR.WinUI.Runtime
         private const uint FileShareRead = 0x00000001;
         private const uint FileShareWrite = 0x00000002;
         private const uint OpenExisting = 3;
-        private const uint FileFlagOverlapped = 0x40000000;
         private const int HidpStatusSuccess = 0x00110000;
         private static readonly nint InvalidHandleValue = new(-1);
 
-        internal readonly record struct XKeysDeviceConnection(
-            SafeFileHandle Handle,
+        internal readonly record struct XKeysDeviceDescriptor(
+            string DevicePath,
+            ushort VendorId,
+            ushort ProductId,
+            short UsagePage,
+            short Usage,
             int InputReportByteLength
         );
 
-        public static XKeysDeviceConnection? TryOpenMatchingDevice()
+        internal readonly record struct XKeysDeviceConnection(
+            XKeysDeviceDescriptor Descriptor,
+            SafeFileHandle Handle
+        );
+
+        public static IReadOnlyList<XKeysDeviceDescriptor> EnumerateMatchingDevices()
         {
             HidD_GetHidGuid(out Guid hidGuid);
             nint deviceInfoSet = SetupDiGetClassDevs(
@@ -33,11 +41,12 @@ namespace OpenTrackIR.WinUI.Runtime
 
             if (deviceInfoSet == InvalidHandleValue)
             {
-                return null;
+                return Array.Empty<XKeysDeviceDescriptor>();
             }
 
             try
             {
+                List<XKeysDeviceDescriptor> devices = new();
                 uint memberIndex = 0;
                 while (true)
                 {
@@ -53,15 +62,21 @@ namespace OpenTrackIR.WinUI.Runtime
                         ref interfaceData
                     ))
                     {
-                        return null;
+                        break;
                     }
 
                     memberIndex += 1;
-                    if (TryOpenMatchingDeviceConnection(deviceInfoSet, interfaceData) is XKeysDeviceConnection connection)
+                    XKeysDeviceDescriptor? descriptor = TryGetMatchingDeviceDescriptor(
+                        deviceInfoSet,
+                        interfaceData
+                    );
+                    if (descriptor.HasValue)
                     {
-                        return connection;
+                        devices.Add(descriptor.Value);
                     }
                 }
+
+                return devices;
             }
             finally
             {
@@ -69,19 +84,43 @@ namespace OpenTrackIR.WinUI.Runtime
             }
         }
 
-        private static XKeysDeviceConnection? TryOpenMatchingDeviceConnection(
+        public static XKeysDeviceConnection? TryOpenDevice(XKeysDeviceDescriptor descriptor)
+        {
+            SafeFileHandle handle = CreateFile(
+                descriptor.DevicePath,
+                GenericRead,
+                FileShareRead | FileShareWrite,
+                nint.Zero,
+                OpenExisting,
+                0,
+                nint.Zero
+            );
+            if (handle.IsInvalid)
+            {
+                handle.Dispose();
+                return null;
+            }
+
+            return new XKeysDeviceConnection(
+                Descriptor: descriptor,
+                Handle: handle
+            );
+        }
+
+        private static XKeysDeviceDescriptor? TryGetMatchingDeviceDescriptor(
             nint deviceInfoSet,
             SpDeviceInterfaceData interfaceData
         )
         {
-            if (!SetupDiGetDeviceInterfaceDetail(
+            SetupDiGetDeviceInterfaceDetail(
                 deviceInfoSet,
                 ref interfaceData,
                 nint.Zero,
                 0,
                 out uint requiredSize,
                 nint.Zero
-            ) || requiredSize == 0)
+            );
+            if (requiredSize == 0)
             {
                 return null;
             }
@@ -114,7 +153,7 @@ namespace OpenTrackIR.WinUI.Runtime
                     FileShareRead | FileShareWrite,
                     nint.Zero,
                     OpenExisting,
-                    FileFlagOverlapped,
+                    0,
                     nint.Zero
                 );
                 if (handle.IsInvalid)
@@ -123,16 +162,14 @@ namespace OpenTrackIR.WinUI.Runtime
                     return null;
                 }
 
-                if (!TryGetMatchingCaps(handle, out HidpCaps caps))
+                try
+                {
+                    return TryGetMatchingDescriptor(handle, devicePath);
+                }
+                finally
                 {
                     handle.Dispose();
-                    return null;
                 }
-
-                return new XKeysDeviceConnection(
-                    Handle: handle,
-                    InputReportByteLength: caps.InputReportByteLength
-                );
             }
             finally
             {
@@ -140,36 +177,50 @@ namespace OpenTrackIR.WinUI.Runtime
             }
         }
 
-        private static bool TryGetMatchingCaps(SafeFileHandle handle, out HidpCaps caps)
+        private static XKeysDeviceDescriptor? TryGetMatchingDescriptor(
+            SafeFileHandle handle,
+            string devicePath
+        )
         {
-            caps = default;
             HiddAttributes attributes = new()
             {
                 Size = Marshal.SizeOf<HiddAttributes>(),
             };
             if (!HidD_GetAttributes(handle, ref attributes))
             {
-                return false;
+                return null;
             }
 
             if (!HidD_GetPreparsedData(handle, out nint preparsedData))
             {
-                return false;
+                return null;
             }
 
             try
             {
-                if (HidP_GetCaps(preparsedData, out caps) != HidpStatusSuccess)
+                if (HidP_GetCaps(preparsedData, out HidpCaps caps) != HidpStatusSuccess)
                 {
-                    return false;
+                    return null;
                 }
 
-                return XKeysReportLogic.IsMatchingFootPedal(
+                if (!XKeysReportLogic.IsMatchingFootPedal(
                     attributes.VendorID,
                     attributes.ProductID,
                     caps.UsagePage,
                     caps.Usage
-                ) && caps.InputReportByteLength > 0;
+                ) || caps.InputReportByteLength <= 0)
+                {
+                    return null;
+                }
+
+                return new XKeysDeviceDescriptor(
+                    DevicePath: devicePath,
+                    VendorId: attributes.VendorID,
+                    ProductId: attributes.ProductID,
+                    UsagePage: caps.UsagePage,
+                    Usage: caps.Usage,
+                    InputReportByteLength: caps.InputReportByteLength
+                );
             }
             finally
             {
