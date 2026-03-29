@@ -2,6 +2,19 @@ namespace OpenTrackIR.WinUI.Models
 {
     public static class TrackIRPreviewBitmapLogic
     {
+        public static bool ShouldRecreateBitmap(
+            bool hasBitmap,
+            int currentWidth,
+            int currentHeight,
+            int nextWidth,
+            int nextHeight
+        )
+        {
+            return !hasBitmap ||
+                currentWidth != nextWidth ||
+                currentHeight != nextHeight;
+        }
+
         public static int Gray8BufferLength(int width, int height)
         {
             return checked(width * height);

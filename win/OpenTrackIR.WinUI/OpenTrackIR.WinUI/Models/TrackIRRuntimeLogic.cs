@@ -55,9 +55,9 @@ namespace OpenTrackIR.WinUI.Models
                     : BackgroundPollIntervalMilliseconds;
         }
 
-        public static bool ShouldApplyRuntimeUpdate(bool isDisposed)
+        public static bool ShouldApplyRuntimeUpdate(bool isDisposed, bool isShuttingDown)
         {
-            return !isDisposed;
+            return !isDisposed && !isShuttingDown;
         }
 
         public static bool ShouldReadSnapshot(
@@ -80,9 +80,13 @@ namespace OpenTrackIR.WinUI.Models
             );
         }
 
-        public static bool ShouldQueuePreviewApply(bool isDisposed, bool isPreviewApplyQueued)
+        public static bool ShouldQueuePreviewApply(
+            bool isDisposed,
+            bool isShuttingDown,
+            bool isPreviewApplyQueued
+        )
         {
-            return !isDisposed && !isPreviewApplyQueued;
+            return ShouldApplyRuntimeUpdate(isDisposed, isShuttingDown) && !isPreviewApplyQueued;
         }
 
         public static bool ShouldPublishSnapshot(TrackIRSnapshot previousSnapshot, TrackIRSnapshot nextSnapshot)

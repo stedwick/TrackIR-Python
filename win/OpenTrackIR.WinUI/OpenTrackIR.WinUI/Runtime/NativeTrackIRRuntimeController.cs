@@ -24,6 +24,8 @@ namespace OpenTrackIR.WinUI.Runtime
         private DateTimeOffset? _lastTelemetryPublishTime;
         private TrackIRSnapshot? _lastPublishedTelemetrySnapshot;
         private byte[] _previewPixels = Array.Empty<byte>();
+        private bool _isStopped;
+        private bool _isDisposed;
 
         public TrackIRSnapshot CurrentSnapshot { get; private set; }
         public TrackIRPreviewFrame? CurrentPreviewFrame { get; private set; }
@@ -68,8 +70,27 @@ namespace OpenTrackIR.WinUI.Runtime
 
         public void Refresh()
         {
+            if (_isStopped)
+            {
+                return;
+            }
+
             _nativeRuntimeUnavailable = false;
             SyncSession(forceRestart: true);
+        }
+
+        public void Stop()
+        {
+            if (_isStopped)
+            {
+                return;
+            }
+
+            _isStopped = true;
+            _xKeysFootPedalMonitor.SnapshotChanged -= OnXKeysSnapshotChanged;
+            _xKeysFootPedalMonitor.SetEnabled(false);
+            StopSession(waitForShutdown: false);
+            PublishPreviewFrame(null);
         }
 
         public bool TryCopyCurrentPreviewFrame(byte[] destination, out TrackIRPreviewFrame? previewFrame)
@@ -99,13 +120,22 @@ namespace OpenTrackIR.WinUI.Runtime
 
         public void Dispose()
         {
-            _xKeysFootPedalMonitor.SnapshotChanged -= OnXKeysSnapshotChanged;
-            _xKeysFootPedalMonitor.Dispose();
-            StopSession(waitForShutdown: true);
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            _isDisposed = true;
+            Stop();
         }
 
         private void OnXKeysSnapshotChanged(object? sender, XKeysMonitorSnapshot snapshot)
         {
+            if (_isStopped)
+            {
+                return;
+            }
+
             lock (_syncRoot)
             {
                 _xKeysMonitorSnapshot = snapshot;
@@ -116,6 +146,11 @@ namespace OpenTrackIR.WinUI.Runtime
 
         private void SyncSession(bool forceRestart)
         {
+            if (_isStopped)
+            {
+                return;
+            }
+
             TrackIRControlState controlState;
             lock (_syncRoot)
             {
@@ -147,7 +182,7 @@ namespace OpenTrackIR.WinUI.Runtime
 
             if (forceRestart)
             {
-                StopPollLoop();
+                StopPollLoop(waitForShutdown: true);
                 TryNativeCall(() => TrackIRNativeMethods.TrackIRSessionStop(_session, true));
             }
 
@@ -178,6 +213,11 @@ namespace OpenTrackIR.WinUI.Runtime
 
         private void SyncXKeysMonitor()
         {
+            if (_isStopped)
+            {
+                return;
+            }
+
             _xKeysFootPedalMonitor.SetEnabled(_controlState.IsXKeysFastMouseEnabled);
         }
 
@@ -199,6 +239,11 @@ namespace OpenTrackIR.WinUI.Runtime
 
         private bool EnsureSessionCreated()
         {
+            if (_isStopped)
+            {
+                return false;
+            }
+
             if (_session != 0)
             {
                 return true;
@@ -229,6 +274,11 @@ namespace OpenTrackIR.WinUI.Runtime
 
         private void StartPollLoopIfNeeded()
         {
+            if (_isStopped)
+            {
+                return;
+            }
+
             if (_pollTask is { IsCompleted: false })
             {
                 return;
@@ -252,7 +302,7 @@ namespace OpenTrackIR.WinUI.Runtime
             }, cancellationToken);
         }
 
-        private void StopPollLoop()
+        private void StopPollLoop(bool waitForShutdown)
         {
             if (_pollCancellationSource is null)
             {
@@ -260,6 +310,11 @@ namespace OpenTrackIR.WinUI.Runtime
             }
 
             _pollCancellationSource.Cancel();
+            if (!waitForShutdown)
+            {
+                return;
+            }
+
             try
             {
                 _pollTask?.Wait();
@@ -277,7 +332,7 @@ namespace OpenTrackIR.WinUI.Runtime
 
         private void StopSession(bool waitForShutdown)
         {
-            StopPollLoop();
+            StopPollLoop(waitForShutdown);
 
             if (_session == 0)
             {
@@ -285,6 +340,19 @@ namespace OpenTrackIR.WinUI.Runtime
             }
 
             TryNativeCall(() => TrackIRNativeMethods.TrackIRSessionStop(_session, waitForShutdown));
+            if (!waitForShutdown)
+            {
+                _lastPreviewGeneration = 0;
+                _lastTelemetryPublishTime = null;
+                _lastPublishedTelemetrySnapshot = null;
+                lock (_previewSyncRoot)
+                {
+                    _previewPixels = Array.Empty<byte>();
+                }
+                _mouseBridge.Reset();
+                return;
+            }
+
             TryNativeCall(() => TrackIRNativeMethods.TrackIRSessionDestroy(_session));
             _session = 0;
             _lastPreviewGeneration = 0;
@@ -299,7 +367,7 @@ namespace OpenTrackIR.WinUI.Runtime
 
         private void PollOnce()
         {
-            if (_session == 0 || _nativeRuntimeUnavailable)
+            if (_isStopped || _session == 0 || _nativeRuntimeUnavailable)
             {
                 return;
             }
@@ -476,6 +544,12 @@ namespace OpenTrackIR.WinUI.Runtime
 
         private void PublishSnapshot(TrackIRSnapshot snapshot)
         {
+            if (_isStopped)
+            {
+                CurrentSnapshot = snapshot;
+                return;
+            }
+
             if (!TrackIRRuntimeLogic.ShouldPublishSnapshot(CurrentSnapshot, snapshot))
             {
                 return;
@@ -498,7 +572,7 @@ namespace OpenTrackIR.WinUI.Runtime
                 }
             }
 
-            if (didChange)
+            if (didChange && !_isStopped)
             {
                 PreviewFrameChanged?.Invoke(this, previewFrame);
             }

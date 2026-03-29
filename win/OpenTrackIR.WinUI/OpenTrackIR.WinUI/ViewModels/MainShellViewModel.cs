@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using OpenTrackIR.WinUI.Models;
 using OpenTrackIR.WinUI.Runtime;
 using OpenTrackIR.WinUI.Services;
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace OpenTrackIR.WinUI.ViewModels
@@ -32,11 +33,14 @@ namespace OpenTrackIR.WinUI.ViewModels
         private byte[] _previewGrayPixels = Array.Empty<byte>();
         private byte[] _previewBgraPixels = Array.Empty<byte>();
         private WriteableBitmap? _previewBitmap;
+        private int _previewBitmapWidth;
+        private int _previewBitmapHeight;
         private TrackIRPreviewFrame? _pendingPreviewFrame;
         private readonly DispatcherQueue? _dispatcherQueue;
         private bool _isAdvancedExpanded;
         private bool _showDetectedBlobCenter = true;
         private bool _isDisposed;
+        private bool _isShuttingDown;
         private bool _isPreviewApplyQueued;
         private CancellationTokenSource? _timeoutCancellationSource;
 
@@ -318,21 +322,35 @@ namespace OpenTrackIR.WinUI.ViewModels
                 return;
             }
 
+            BeginShutdown();
             _isDisposed = true;
+            ResetPreviewState(raisePropertyChanged: false);
+            if (_runtimeController is IDisposable disposableRuntimeController)
+            {
+                disposableRuntimeController.Dispose();
+            }
+        }
+
+        public void BeginShutdown()
+        {
+            if (_isShuttingDown)
+            {
+                return;
+            }
+
+            _isShuttingDown = true;
             lock (_previewQueueSyncRoot)
             {
                 _pendingPreviewFrame = null;
                 _isPreviewApplyQueued = false;
             }
+            ResetPreviewState(raisePropertyChanged: false);
             _runtimeController.SnapshotChanged -= OnRuntimeSnapshotChanged;
             _runtimeController.PreviewFrameChanged -= OnRuntimePreviewFrameChanged;
             _timeoutCancellationSource?.Cancel();
             _timeoutCancellationSource?.Dispose();
             _timeoutCancellationSource = null;
-            if (_runtimeController is IDisposable disposableRuntimeController)
-            {
-                disposableRuntimeController.Dispose();
-            }
+            _runtimeController.Stop();
         }
 
         private void Refresh()
@@ -367,7 +385,7 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         private void OnRuntimeSnapshotChanged(object? sender, TrackIRSnapshot snapshot)
         {
-            if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed))
+            if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed, _isShuttingDown))
             {
                 return;
             }
@@ -382,7 +400,7 @@ namespace OpenTrackIR.WinUI.ViewModels
 
             _dispatcherQueue.TryEnqueue(() =>
             {
-                if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed))
+                if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed, _isShuttingDown))
                 {
                     return;
                 }
@@ -395,7 +413,7 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         private void OnRuntimePreviewFrameChanged(object? sender, TrackIRPreviewFrame? previewFrame)
         {
-            if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed))
+            if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed, _isShuttingDown))
             {
                 return;
             }
@@ -412,6 +430,7 @@ namespace OpenTrackIR.WinUI.ViewModels
                 _pendingPreviewFrame = previewFrame;
                 shouldEnqueue = TrackIRRuntimeLogic.ShouldQueuePreviewApply(
                     _isDisposed,
+                    _isShuttingDown,
                     _isPreviewApplyQueued
                 );
                 if (shouldEnqueue)
@@ -442,7 +461,7 @@ namespace OpenTrackIR.WinUI.ViewModels
                 lock (_previewQueueSyncRoot)
                 {
                     _isPreviewApplyQueued = false;
-                    if (_isDisposed)
+                    if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed, _isShuttingDown))
                     {
                         _pendingPreviewFrame = null;
                         return;
@@ -456,7 +475,11 @@ namespace OpenTrackIR.WinUI.ViewModels
 
                 lock (_previewQueueSyncRoot)
                 {
-                    if (!TrackIRRuntimeLogic.ShouldQueuePreviewApply(_isDisposed, _isPreviewApplyQueued) ||
+                    if (!TrackIRRuntimeLogic.ShouldQueuePreviewApply(
+                        _isDisposed,
+                        _isShuttingDown,
+                        _isPreviewApplyQueued
+                    ) ||
                         _pendingPreviewFrame is null)
                     {
                         return;
@@ -688,7 +711,7 @@ namespace OpenTrackIR.WinUI.ViewModels
                 }
 
                 if (cancellationSource.IsCancellationRequested ||
-                    !TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed)) {
+                    !TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed, _isShuttingDown)) {
                     return;
                 }
 
@@ -701,7 +724,7 @@ namespace OpenTrackIR.WinUI.ViewModels
                 _dispatcherQueue.TryEnqueue(() =>
                 {
                     if (cancellationSource.IsCancellationRequested ||
-                        !TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed))
+                        !TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed, _isShuttingDown))
                     {
                         return;
                     }
@@ -751,16 +774,14 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         private void ApplyPreviewFrame(TrackIRPreviewFrame? previewFrame)
         {
+            if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed, _isShuttingDown))
+            {
+                return;
+            }
+
             if (previewFrame is null)
             {
-                _previewBitmap = null;
-                _previewGrayPixels = Array.Empty<byte>();
-                _previewBgraPixels = Array.Empty<byte>();
-                _previewImageSource = null;
-                OnPropertyChanged(nameof(PreviewImageSource));
-                OnPropertyChanged(nameof(PreviewImageVisibility));
-                OnPropertyChanged(nameof(PreviewPlaceholderVisibility));
-                OnPropertyChanged(nameof(PreviewMarkerVisibility));
+                ResetPreviewState(raisePropertyChanged: true);
                 return;
             }
 
@@ -787,23 +808,55 @@ namespace OpenTrackIR.WinUI.ViewModels
 
             TrackIRPreviewBitmapLogic.ExpandGray8ToBgra32(_previewGrayPixels, _previewBgraPixels);
 
-            bool didCreateBitmap = _previewBitmap is null ||
-                _previewBitmap.PixelWidth != copiedPreviewFrame.Width ||
-                _previewBitmap.PixelHeight != copiedPreviewFrame.Height;
+            bool didCreateBitmap = TrackIRPreviewBitmapLogic.ShouldRecreateBitmap(
+                hasBitmap: _previewBitmap is not null,
+                currentWidth: _previewBitmapWidth,
+                currentHeight: _previewBitmapHeight,
+                nextWidth: copiedPreviewFrame.Width,
+                nextHeight: copiedPreviewFrame.Height
+            );
             if (didCreateBitmap)
             {
                 _previewBitmap = new WriteableBitmap(copiedPreviewFrame.Width, copiedPreviewFrame.Height);
+                _previewBitmapWidth = copiedPreviewFrame.Width;
+                _previewBitmapHeight = copiedPreviewFrame.Height;
             }
 
-            using Stream pixelStream = _previewBitmap!.PixelBuffer.AsStream();
-            pixelStream.Position = 0;
-            pixelStream.Write(_previewBgraPixels, 0, _previewBgraPixels.Length);
-            _previewBitmap.Invalidate();
-            _previewImageSource = _previewBitmap;
-            if (didCreateBitmap)
+            try
             {
-                OnPropertyChanged(nameof(PreviewImageSource));
+                using Stream pixelStream = _previewBitmap!.PixelBuffer.AsStream();
+                pixelStream.Position = 0;
+                pixelStream.Write(_previewBgraPixels, 0, _previewBgraPixels.Length);
+                _previewBitmap.Invalidate();
+                _previewImageSource = _previewBitmap;
+                if (didCreateBitmap)
+                {
+                    OnPropertyChanged(nameof(PreviewImageSource));
+                }
+                OnPropertyChanged(nameof(PreviewImageVisibility));
+                OnPropertyChanged(nameof(PreviewPlaceholderVisibility));
+                OnPropertyChanged(nameof(PreviewMarkerVisibility));
             }
+            catch (COMException)
+            {
+                ResetPreviewState(raisePropertyChanged: false);
+            }
+        }
+
+        private void ResetPreviewState(bool raisePropertyChanged)
+        {
+            _previewBitmap = null;
+            _previewBitmapWidth = 0;
+            _previewBitmapHeight = 0;
+            _previewGrayPixels = Array.Empty<byte>();
+            _previewBgraPixels = Array.Empty<byte>();
+            _previewImageSource = null;
+            if (!raisePropertyChanged)
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(PreviewImageSource));
             OnPropertyChanged(nameof(PreviewImageVisibility));
             OnPropertyChanged(nameof(PreviewPlaceholderVisibility));
             OnPropertyChanged(nameof(PreviewMarkerVisibility));

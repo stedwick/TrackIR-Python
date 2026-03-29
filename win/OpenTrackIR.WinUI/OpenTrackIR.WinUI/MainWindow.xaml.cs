@@ -63,6 +63,7 @@ namespace OpenTrackIR.WinUI
         {
             if (_allowClose)
             {
+                RootView.ViewModel.BeginShutdown();
                 DisposeWindowResources();
                 return;
             }
@@ -96,22 +97,23 @@ namespace OpenTrackIR.WinUI
 
         private void ExitApplication()
         {
-            if (_isDisposed || _isExitRequested)
+            if (!MainWindowLogic.ShouldBeginExit(_isDisposed, _isExitRequested))
             {
                 return;
             }
 
             _isExitRequested = true;
             _allowClose = true;
+            if (_dispatcherQueue.HasThreadAccess)
+            {
+                RootView.ViewModel.BeginShutdown();
+                Close();
+                return;
+            }
+
             _dispatcherQueue.TryEnqueue(() =>
             {
-                if (_isDisposed)
-                {
-                    return;
-                }
-
-                RootView.Dispose();
-                Content = null;
+                RootView.ViewModel.BeginShutdown();
                 Close();
             });
         }

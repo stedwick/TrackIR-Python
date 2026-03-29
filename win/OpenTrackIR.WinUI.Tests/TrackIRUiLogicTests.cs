@@ -157,6 +157,8 @@ namespace OpenTrackIR.WinUI.Tests
         [Fact]
         public void MainWindowLogic_blocks_tray_restore_once_exit_starts()
         {
+            Assert.True(MainWindowLogic.ShouldBeginExit(isDisposed: false, isExitRequested: false));
+            Assert.False(MainWindowLogic.ShouldBeginExit(isDisposed: false, isExitRequested: true));
             Assert.True(
                 MainWindowLogic.ShouldProcessTrayWindowAction(
                     isDisposed: false,
@@ -401,11 +403,37 @@ namespace OpenTrackIR.WinUI.Tests
         [Fact]
         public void TrackIRRuntimeLogic_ignores_runtime_updates_after_dispose()
         {
-            Assert.True(TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(isDisposed: false));
-            Assert.False(TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(isDisposed: true));
-            Assert.True(TrackIRRuntimeLogic.ShouldQueuePreviewApply(isDisposed: false, isPreviewApplyQueued: false));
-            Assert.False(TrackIRRuntimeLogic.ShouldQueuePreviewApply(isDisposed: false, isPreviewApplyQueued: true));
-            Assert.False(TrackIRRuntimeLogic.ShouldQueuePreviewApply(isDisposed: true, isPreviewApplyQueued: false));
+            Assert.True(TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(isDisposed: false, isShuttingDown: false));
+            Assert.False(TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(isDisposed: true, isShuttingDown: false));
+            Assert.False(TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(isDisposed: false, isShuttingDown: true));
+            Assert.True(
+                TrackIRRuntimeLogic.ShouldQueuePreviewApply(
+                    isDisposed: false,
+                    isShuttingDown: false,
+                    isPreviewApplyQueued: false
+                )
+            );
+            Assert.False(
+                TrackIRRuntimeLogic.ShouldQueuePreviewApply(
+                    isDisposed: false,
+                    isShuttingDown: false,
+                    isPreviewApplyQueued: true
+                )
+            );
+            Assert.False(
+                TrackIRRuntimeLogic.ShouldQueuePreviewApply(
+                    isDisposed: true,
+                    isShuttingDown: false,
+                    isPreviewApplyQueued: false
+                )
+            );
+            Assert.False(
+                TrackIRRuntimeLogic.ShouldQueuePreviewApply(
+                    isDisposed: false,
+                    isShuttingDown: true,
+                    isPreviewApplyQueued: false
+                )
+            );
         }
 
         [Fact]
@@ -446,6 +474,24 @@ namespace OpenTrackIR.WinUI.Tests
 
             TrackIRPreviewBitmapLogic.ExpandGray8ToBgra32(new byte[] { 0x12, 0xAB }, bgra);
 
+            Assert.True(
+                TrackIRPreviewBitmapLogic.ShouldRecreateBitmap(
+                    hasBitmap: false,
+                    currentWidth: 0,
+                    currentHeight: 0,
+                    nextWidth: 2,
+                    nextHeight: 1
+                )
+            );
+            Assert.False(
+                TrackIRPreviewBitmapLogic.ShouldRecreateBitmap(
+                    hasBitmap: true,
+                    currentWidth: 2,
+                    currentHeight: 1,
+                    nextWidth: 2,
+                    nextHeight: 1
+                )
+            );
             Assert.Equal(2, TrackIRPreviewBitmapLogic.Gray8BufferLength(2, 1));
             Assert.Equal(new byte[] { 0x12, 0x12, 0x12, 0xFF, 0xAB, 0xAB, 0xAB, 0xFF }, bgra);
         }

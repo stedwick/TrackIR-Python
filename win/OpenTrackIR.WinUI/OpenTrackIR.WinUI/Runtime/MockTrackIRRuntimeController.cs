@@ -39,6 +39,10 @@ namespace OpenTrackIR.WinUI.Runtime
             PublishNextSnapshot();
         }
 
+        public void Stop()
+        {
+        }
+
         public bool TryCopyCurrentPreviewFrame(byte[] destination, out TrackIRPreviewFrame? previewFrame)
         {
             previewFrame = CurrentPreviewFrame;
