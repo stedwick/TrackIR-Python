@@ -59,6 +59,11 @@ namespace OpenTrackIR.WinUI.Models
             return !isDisposed;
         }
 
+        public static bool ShouldQueuePreviewApply(bool isDisposed, bool isPreviewApplyQueued)
+        {
+            return !isDisposed && !isPreviewApplyQueued;
+        }
+
         public static bool ShouldPublishSnapshot(TrackIRSnapshot previousSnapshot, TrackIRSnapshot nextSnapshot)
         {
             return previousSnapshot != nextSnapshot;

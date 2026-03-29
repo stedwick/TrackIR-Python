@@ -13,19 +13,31 @@ namespace OpenTrackIR.WinUI.ViewModels
 {
     public sealed class MainShellViewModel : ObservableObject, IDisposable
     {
+        private static readonly IReadOnlyDictionary<string, SolidColorBrush> CachedBrushes =
+            new Dictionary<string, SolidColorBrush>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["#31C48D"] = CreateBrushCore("#31C48D"),
+                ["#7A8797"] = CreateBrushCore("#7A8797"),
+                ["#FFB020"] = CreateBrushCore("#FFB020"),
+                ["#F05252"] = CreateBrushCore("#F05252"),
+            };
+
         private readonly ISettingsStore _settingsStore;
         private readonly ITrackIRRuntimeController _runtimeController;
         private readonly ITrayService _trayService;
+        private readonly object _previewQueueSyncRoot = new();
         private TrackIRControlState _controlState;
         private TrackIRSnapshot _snapshot;
         private ImageSource? _previewImageSource;
         private byte[] _previewGrayPixels = Array.Empty<byte>();
         private byte[] _previewBgraPixels = Array.Empty<byte>();
         private WriteableBitmap? _previewBitmap;
+        private TrackIRPreviewFrame? _pendingPreviewFrame;
         private readonly DispatcherQueue? _dispatcherQueue;
         private bool _isAdvancedExpanded;
         private bool _showDetectedBlobCenter = true;
         private bool _isDisposed;
+        private bool _isPreviewApplyQueued;
         private CancellationTokenSource? _timeoutCancellationSource;
 
         public MainShellViewModel()
@@ -299,6 +311,11 @@ namespace OpenTrackIR.WinUI.ViewModels
             }
 
             _isDisposed = true;
+            lock (_previewQueueSyncRoot)
+            {
+                _pendingPreviewFrame = null;
+                _isPreviewApplyQueued = false;
+            }
             _runtimeController.SnapshotChanged -= OnRuntimeSnapshotChanged;
             _runtimeController.PreviewFrameChanged -= OnRuntimePreviewFrameChanged;
             _timeoutCancellationSource?.Cancel();
@@ -337,7 +354,7 @@ namespace OpenTrackIR.WinUI.ViewModels
             {
                 SyncTimeoutTask();
             }
-            OnControlStateChanged();
+            OnControlStateChanged(previousControlState);
         }
 
         private void OnRuntimeSnapshotChanged(object? sender, TrackIRSnapshot snapshot)
@@ -349,8 +366,9 @@ namespace OpenTrackIR.WinUI.ViewModels
 
             if (_dispatcherQueue is null)
             {
+                TrackIRSnapshot previousSnapshot = _snapshot;
                 _snapshot = snapshot;
-                OnSnapshotChanged();
+                OnSnapshotChanged(previousSnapshot);
                 return;
             }
 
@@ -361,8 +379,9 @@ namespace OpenTrackIR.WinUI.ViewModels
                     return;
                 }
 
+                TrackIRSnapshot previousSnapshot = _snapshot;
                 _snapshot = snapshot;
-                OnSnapshotChanged();
+                OnSnapshotChanged(previousSnapshot);
             });
         }
 
@@ -379,75 +398,255 @@ namespace OpenTrackIR.WinUI.ViewModels
                 return;
             }
 
-            _dispatcherQueue.TryEnqueue(() =>
+            bool shouldEnqueue;
+            lock (_previewQueueSyncRoot)
             {
-                if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed))
+                _pendingPreviewFrame = previewFrame;
+                shouldEnqueue = TrackIRRuntimeLogic.ShouldQueuePreviewApply(
+                    _isDisposed,
+                    _isPreviewApplyQueued
+                );
+                if (shouldEnqueue)
                 {
-                    return;
+                    _isPreviewApplyQueued = true;
+                }
+            }
+
+            if (!shouldEnqueue)
+            {
+                return;
+            }
+
+            if (!_dispatcherQueue.TryEnqueue(ProcessPendingPreviewFrame))
+            {
+                lock (_previewQueueSyncRoot)
+                {
+                    _isPreviewApplyQueued = false;
+                }
+            }
+        }
+
+        private void ProcessPendingPreviewFrame()
+        {
+            while (true)
+            {
+                TrackIRPreviewFrame? previewFrame;
+                lock (_previewQueueSyncRoot)
+                {
+                    _isPreviewApplyQueued = false;
+                    if (_isDisposed)
+                    {
+                        _pendingPreviewFrame = null;
+                        return;
+                    }
+
+                    previewFrame = _pendingPreviewFrame;
+                    _pendingPreviewFrame = null;
                 }
 
                 ApplyPreviewFrame(previewFrame);
-            });
+
+                lock (_previewQueueSyncRoot)
+                {
+                    if (!TrackIRRuntimeLogic.ShouldQueuePreviewApply(_isDisposed, _isPreviewApplyQueued) ||
+                        _pendingPreviewFrame is null)
+                    {
+                        return;
+                    }
+
+                    _isPreviewApplyQueued = true;
+                }
+            }
         }
 
-        private void OnControlStateChanged()
+        private void OnControlStateChanged(TrackIRControlState previousControlState)
         {
-            OnPropertyChanged(nameof(IsTrackIREnabled));
-            OnPropertyChanged(nameof(IsVideoEnabled));
-            OnPropertyChanged(nameof(IsMouseMovementEnabled));
-            OnPropertyChanged(nameof(MouseMovementSpeed));
-            OnPropertyChanged(nameof(IsXKeysFastMouseEnabled));
-            OnPropertyChanged(nameof(MouseSmoothing));
-            OnPropertyChanged(nameof(MouseDeadzone));
-            OnPropertyChanged(nameof(IsAvoidMouseJumpsEnabled));
-            OnPropertyChanged(nameof(MouseJumpThresholdPixels));
-            OnPropertyChanged(nameof(MinimumBlobAreaPoints));
-            OnPropertyChanged(nameof(KeepAwakeSeconds));
-            OnPropertyChanged(nameof(IsTimeoutEnabled));
-            OnPropertyChanged(nameof(TimeoutSeconds));
-            OnPropertyChanged(nameof(IsVideoFlipHorizontalEnabled));
-            OnPropertyChanged(nameof(IsVideoFlipVerticalEnabled));
-            OnPropertyChanged(nameof(VideoRotationDegrees));
-            OnPropertyChanged(nameof(VideoFramesPerSecond));
-            OnPropertyChanged(nameof(MouseToggleHotkeyText));
-            OnPropertyChanged(nameof(PreviewScaleX));
-            OnPropertyChanged(nameof(PreviewScaleY));
-            OnPropertyChanged(nameof(PreviewRotationDegrees));
-            OnPropertyChanged(nameof(TrackIRStatusText));
-            OnPropertyChanged(nameof(TrackIRStatusValue));
-            OnPropertyChanged(nameof(TrackIRStatusBrush));
-            OnPropertyChanged(nameof(VideoStatusText));
-            OnPropertyChanged(nameof(VideoStatusValue));
-            OnPropertyChanged(nameof(VideoStatusBrush));
-            OnPropertyChanged(nameof(MouseStatusText));
-            OnPropertyChanged(nameof(MouseStatusValue));
-            OnPropertyChanged(nameof(MouseStatusBrush));
-            OnPropertyChanged(nameof(TrackIRFramesPerSecondLabel));
-            OnPropertyChanged(nameof(MouseSpeedLabel));
-            OnPropertyChanged(nameof(MouseSmoothingLabel));
-            OnPropertyChanged(nameof(MouseDeadzoneLabel));
-            OnPropertyChanged(nameof(VideoRotationLabel));
-            OnPropertyChanged(nameof(JumpThresholdVisibility));
-            OnPropertyChanged(nameof(TimeoutDurationVisibility));
+            NotifyIfChanged(previousControlState.IsTrackIREnabled, _controlState.IsTrackIREnabled, nameof(IsTrackIREnabled));
+            NotifyIfChanged(previousControlState.IsVideoEnabled, _controlState.IsVideoEnabled, nameof(IsVideoEnabled));
+            NotifyIfChanged(
+                previousControlState.IsMouseMovementEnabled,
+                _controlState.IsMouseMovementEnabled,
+                nameof(IsMouseMovementEnabled)
+            );
+            NotifyIfChanged(
+                previousControlState.MouseMovementSpeed,
+                _controlState.MouseMovementSpeed,
+                nameof(MouseMovementSpeed)
+            );
+            NotifyIfChanged(
+                previousControlState.IsXKeysFastMouseEnabled,
+                _controlState.IsXKeysFastMouseEnabled,
+                nameof(IsXKeysFastMouseEnabled)
+            );
+            NotifyIfChanged(previousControlState.MouseSmoothing, _controlState.MouseSmoothing, nameof(MouseSmoothing));
+            NotifyIfChanged(previousControlState.MouseDeadzone, _controlState.MouseDeadzone, nameof(MouseDeadzone));
+            NotifyIfChanged(
+                previousControlState.IsAvoidMouseJumpsEnabled,
+                _controlState.IsAvoidMouseJumpsEnabled,
+                nameof(IsAvoidMouseJumpsEnabled)
+            );
+            NotifyIfChanged(
+                previousControlState.MouseJumpThresholdPixels,
+                _controlState.MouseJumpThresholdPixels,
+                nameof(MouseJumpThresholdPixels)
+            );
+            NotifyIfChanged(
+                previousControlState.MinimumBlobAreaPoints,
+                _controlState.MinimumBlobAreaPoints,
+                nameof(MinimumBlobAreaPoints)
+            );
+            NotifyIfChanged(previousControlState.KeepAwakeSeconds, _controlState.KeepAwakeSeconds, nameof(KeepAwakeSeconds));
+            NotifyIfChanged(previousControlState.IsTimeoutEnabled, _controlState.IsTimeoutEnabled, nameof(IsTimeoutEnabled));
+            NotifyIfChanged(previousControlState.TimeoutSeconds, _controlState.TimeoutSeconds, nameof(TimeoutSeconds));
+            NotifyIfChanged(
+                previousControlState.IsVideoFlipHorizontalEnabled,
+                _controlState.IsVideoFlipHorizontalEnabled,
+                nameof(IsVideoFlipHorizontalEnabled)
+            );
+            NotifyIfChanged(
+                previousControlState.IsVideoFlipVerticalEnabled,
+                _controlState.IsVideoFlipVerticalEnabled,
+                nameof(IsVideoFlipVerticalEnabled)
+            );
+            NotifyIfChanged(
+                previousControlState.VideoRotationDegrees,
+                _controlState.VideoRotationDegrees,
+                nameof(VideoRotationDegrees)
+            );
+            NotifyIfChanged(
+                previousControlState.VideoFramesPerSecond,
+                _controlState.VideoFramesPerSecond,
+                nameof(VideoFramesPerSecond)
+            );
+            NotifyIfChanged(
+                previousControlState.MouseToggleHotkeyText,
+                _controlState.MouseToggleHotkeyText,
+                nameof(MouseToggleHotkeyText)
+            );
+
+            if (previousControlState.IsTrackIREnabled != _controlState.IsTrackIREnabled)
+            {
+                OnPropertyChanged(nameof(TrackIRStatusText));
+                OnPropertyChanged(nameof(TrackIRStatusValue));
+                OnPropertyChanged(nameof(TrackIRStatusBrush));
+                OnPropertyChanged(nameof(PreviewTitle));
+                OnPropertyChanged(nameof(PreviewMessage));
+            }
+
+            if (previousControlState.IsVideoEnabled != _controlState.IsVideoEnabled)
+            {
+                OnPropertyChanged(nameof(VideoStatusText));
+                OnPropertyChanged(nameof(VideoStatusValue));
+                OnPropertyChanged(nameof(VideoStatusBrush));
+                OnPropertyChanged(nameof(PreviewTitle));
+                OnPropertyChanged(nameof(PreviewMessage));
+            }
+
+            if (previousControlState.IsMouseMovementEnabled != _controlState.IsMouseMovementEnabled)
+            {
+                OnPropertyChanged(nameof(MouseStatusText));
+                OnPropertyChanged(nameof(MouseStatusValue));
+                OnPropertyChanged(nameof(MouseStatusBrush));
+            }
+
+            if (previousControlState.MouseMovementSpeed != _controlState.MouseMovementSpeed)
+            {
+                OnPropertyChanged(nameof(MouseSpeedLabel));
+            }
+
+            if (previousControlState.MouseSmoothing != _controlState.MouseSmoothing)
+            {
+                OnPropertyChanged(nameof(MouseSmoothingLabel));
+            }
+
+            if (previousControlState.MouseDeadzone != _controlState.MouseDeadzone)
+            {
+                OnPropertyChanged(nameof(MouseDeadzoneLabel));
+            }
+
+            if (previousControlState.IsAvoidMouseJumpsEnabled != _controlState.IsAvoidMouseJumpsEnabled)
+            {
+                OnPropertyChanged(nameof(JumpThresholdVisibility));
+            }
+
+            if (previousControlState.IsTimeoutEnabled != _controlState.IsTimeoutEnabled)
+            {
+                OnPropertyChanged(nameof(TimeoutDurationVisibility));
+            }
+
+            if (previousControlState.IsVideoFlipHorizontalEnabled != _controlState.IsVideoFlipHorizontalEnabled)
+            {
+                OnPropertyChanged(nameof(PreviewScaleX));
+            }
+
+            if (previousControlState.IsVideoFlipVerticalEnabled != _controlState.IsVideoFlipVerticalEnabled)
+            {
+                OnPropertyChanged(nameof(PreviewScaleY));
+            }
+
+            if (previousControlState.VideoRotationDegrees != _controlState.VideoRotationDegrees)
+            {
+                OnPropertyChanged(nameof(PreviewRotationDegrees));
+                OnPropertyChanged(nameof(VideoRotationLabel));
+            }
+
+            if (previousControlState.VideoFramesPerSecond != _controlState.VideoFramesPerSecond)
+            {
+                OnPropertyChanged(nameof(TrackIRFramesPerSecondLabel));
+                OnPropertyChanged(nameof(FramesPerSecondSummary));
+            }
         }
 
-        private void OnSnapshotChanged()
+        private void OnSnapshotChanged(TrackIRSnapshot previousSnapshot)
         {
-            OnPropertyChanged(nameof(PreviewTitle));
-            OnPropertyChanged(nameof(PreviewMessage));
-            OnPropertyChanged(nameof(DeviceLabel));
-            OnPropertyChanged(nameof(FramesPerSecondSummary));
-            OnPropertyChanged(nameof(PositionLabel));
-            OnPropertyChanged(nameof(BackendLabel));
-            OnPropertyChanged(nameof(PacketTypeLabel));
-            OnPropertyChanged(nameof(XKeysIndicatorText));
-            OnPropertyChanged(nameof(XKeysIndicatorBrush));
-            OnPropertyChanged(nameof(RuntimeModeLabel));
-            OnPropertyChanged(nameof(PreviewImageVisibility));
-            OnPropertyChanged(nameof(PreviewPlaceholderVisibility));
-            OnPropertyChanged(nameof(PreviewMarkerVisibility));
-            OnPropertyChanged(nameof(PreviewMarkerLeft));
-            OnPropertyChanged(nameof(PreviewMarkerTop));
+            NotifyIfChanged(
+                TrackIRUiLogic.PreviewTitle(_controlState, previousSnapshot),
+                TrackIRUiLogic.PreviewTitle(_controlState, _snapshot),
+                nameof(PreviewTitle)
+            );
+            NotifyIfChanged(
+                TrackIRUiLogic.PreviewMessage(_controlState, previousSnapshot),
+                TrackIRUiLogic.PreviewMessage(_controlState, _snapshot),
+                nameof(PreviewMessage)
+            );
+            NotifyIfChanged(previousSnapshot.DeviceLabel, _snapshot.DeviceLabel, nameof(DeviceLabel));
+            NotifyIfChanged(
+                TrackIRUiLogic.TrackIRRateSummaryLabel(_controlState.VideoFramesPerSecond, previousSnapshot.SourceFrameRate),
+                TrackIRUiLogic.TrackIRRateSummaryLabel(_controlState.VideoFramesPerSecond, _snapshot.SourceFrameRate),
+                nameof(FramesPerSecondSummary)
+            );
+            NotifyIfChanged(
+                TrackIRUiLogic.CentroidPairLabel(previousSnapshot.CentroidX, previousSnapshot.CentroidY),
+                TrackIRUiLogic.CentroidPairLabel(_snapshot.CentroidX, _snapshot.CentroidY),
+                nameof(PositionLabel)
+            );
+            NotifyIfChanged(previousSnapshot.BackendLabel, _snapshot.BackendLabel, nameof(BackendLabel));
+            NotifyIfChanged(
+                TrackIRUiLogic.PacketTypeLabel(previousSnapshot.PacketType),
+                TrackIRUiLogic.PacketTypeLabel(_snapshot.PacketType),
+                nameof(PacketTypeLabel)
+            );
+            if (previousSnapshot.XKeysIndicatorState != _snapshot.XKeysIndicatorState)
+            {
+                OnPropertyChanged(nameof(XKeysIndicatorText));
+                OnPropertyChanged(nameof(XKeysIndicatorBrush));
+            }
+
+            if (previousSnapshot.IsLowPowerMode != _snapshot.IsLowPowerMode)
+            {
+                OnPropertyChanged(nameof(RuntimeModeLabel));
+            }
+
+            bool didPreviewMarkerChange =
+                previousSnapshot.HasPreview != _snapshot.HasPreview ||
+                previousSnapshot.CentroidX != _snapshot.CentroidX ||
+                previousSnapshot.CentroidY != _snapshot.CentroidY;
+            if (didPreviewMarkerChange)
+            {
+                OnPropertyChanged(nameof(PreviewMarkerVisibility));
+                OnPropertyChanged(nameof(PreviewMarkerLeft));
+                OnPropertyChanged(nameof(PreviewMarkerTop));
+            }
         }
 
         private void SyncTimeoutTask()
@@ -506,6 +705,13 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         private static SolidColorBrush CreateBrush(string hexColor)
         {
+            return CachedBrushes.TryGetValue(hexColor, out SolidColorBrush? cachedBrush)
+                ? cachedBrush
+                : CreateBrushCore(hexColor);
+        }
+
+        private static SolidColorBrush CreateBrushCore(string hexColor)
+        {
             string normalized = hexColor.TrimStart('#');
             byte a = 0xFF;
             int offset = 0;
@@ -520,6 +726,14 @@ namespace OpenTrackIR.WinUI.ViewModels
             byte g = Convert.ToByte(normalized.Substring(offset + 2, 2), 16);
             byte b = Convert.ToByte(normalized.Substring(offset + 4, 2), 16);
             return new SolidColorBrush(ColorHelper.FromArgb(a, r, g, b));
+        }
+
+        private void NotifyIfChanged<T>(T previousValue, T currentValue, string propertyName)
+        {
+            if (!EqualityComparer<T>.Default.Equals(previousValue, currentValue))
+            {
+                OnPropertyChanged(propertyName);
+            }
         }
 
         private void ApplyPreviewFrame(TrackIRPreviewFrame? previewFrame)

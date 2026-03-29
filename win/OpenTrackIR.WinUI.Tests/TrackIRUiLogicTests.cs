@@ -255,6 +255,9 @@ namespace OpenTrackIR.WinUI.Tests
         {
             Assert.True(TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(isDisposed: false));
             Assert.False(TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(isDisposed: true));
+            Assert.True(TrackIRRuntimeLogic.ShouldQueuePreviewApply(isDisposed: false, isPreviewApplyQueued: false));
+            Assert.False(TrackIRRuntimeLogic.ShouldQueuePreviewApply(isDisposed: false, isPreviewApplyQueued: true));
+            Assert.False(TrackIRRuntimeLogic.ShouldQueuePreviewApply(isDisposed: true, isPreviewApplyQueued: false));
         }
 
         [Fact]
