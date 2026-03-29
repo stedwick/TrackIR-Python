@@ -10,7 +10,7 @@ If you want to try the current macOS app, download it from the [releases page](h
 
 ## Windows 11 download app
 
-If you want to try the current Windows 11 app, download it from the [releases page](https://github.com/stedwick/OpenTrackIR/releases).
+If you want to try the current Windows 11 app, download it from the [releases page](https://github.com/stedwick/OpenTrackIR/releases). Don't forget to install the drivers! See instructions below 👇
 
 ![OpenTrackIR macOS demo](screenshots/OpenTrackIR-023-Win-11-Gif.gif)
 
