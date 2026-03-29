@@ -204,6 +204,22 @@ namespace OpenTrackIR.WinUI.Tests
                     new TrackIRPresentationState(true, true)
                 ).Phase
             );
+            Assert.True(
+                TrackIRRuntimeLogic.ShouldPublishSnapshot(
+                    TrackIRUiLogic.BuildMockSnapshot(state, new TrackIRPresentationState(true, true), 1),
+                    TrackIRUiLogic.BuildMockSnapshot(
+                        state with { IsVideoEnabled = false },
+                        new TrackIRPresentationState(true, true),
+                        1
+                    )
+                )
+            );
+            Assert.False(
+                TrackIRRuntimeLogic.ShouldPublishSnapshot(
+                    TrackIRUiLogic.BuildMockSnapshot(state, new TrackIRPresentationState(true, true), 1),
+                    TrackIRUiLogic.BuildMockSnapshot(state, new TrackIRPresentationState(true, true), 1)
+                )
+            );
         }
 
         [Fact]
@@ -258,13 +274,28 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.False(timedOut.IsTrackIREnabled);
             Assert.False(timedOut.IsVideoEnabled);
             Assert.False(timedOut.IsMouseMovementEnabled);
+            Assert.False(
+                TrackIRRuntimeLogic.ShouldRescheduleTimeout(
+                    defaults,
+                    defaults with { MouseMovementSpeed = 1.5 }
+                )
+            );
+            Assert.True(
+                TrackIRRuntimeLogic.ShouldRescheduleTimeout(
+                    defaults,
+                    defaults with { TimeoutSeconds = defaults.TimeoutSeconds + 1 }
+                )
+            );
         }
 
         [Fact]
-        public void TrackIRPreviewBitmapLogic_expands_gray8_pixels_to_bgra()
+        public void TrackIRPreviewBitmapLogic_expands_gray8_pixels_to_bgra_in_place()
         {
-            byte[] bgra = TrackIRPreviewBitmapLogic.ExpandGray8ToBgra32(new byte[] { 0x12, 0xAB });
+            byte[] bgra = new byte[TrackIRPreviewBitmapLogic.Bgra32BufferLength(2, 1)];
 
+            TrackIRPreviewBitmapLogic.ExpandGray8ToBgra32(new byte[] { 0x12, 0xAB }, bgra);
+
+            Assert.Equal(2, TrackIRPreviewBitmapLogic.Gray8BufferLength(2, 1));
             Assert.Equal(new byte[] { 0x12, 0x12, 0x12, 0xFF, 0xAB, 0xAB, 0xAB, 0xFF }, bgra);
         }
     }

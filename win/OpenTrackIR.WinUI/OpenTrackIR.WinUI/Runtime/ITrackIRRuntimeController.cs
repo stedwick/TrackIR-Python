@@ -10,6 +10,8 @@ namespace OpenTrackIR.WinUI.Runtime
         event EventHandler<TrackIRSnapshot>? SnapshotChanged;
         event EventHandler<TrackIRPreviewFrame?>? PreviewFrameChanged;
 
+        bool TryCopyCurrentPreviewFrame(byte[] destination, out TrackIRPreviewFrame? previewFrame);
+
         void UpdateControlState(TrackIRControlState controlState);
 
         void UpdatePresentationState(TrackIRPresentationState presentationState);

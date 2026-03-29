@@ -19,6 +19,9 @@ namespace OpenTrackIR.WinUI.ViewModels
         private TrackIRControlState _controlState;
         private TrackIRSnapshot _snapshot;
         private ImageSource? _previewImageSource;
+        private byte[] _previewGrayPixels = Array.Empty<byte>();
+        private byte[] _previewBgraPixels = Array.Empty<byte>();
+        private WriteableBitmap? _previewBitmap;
         private readonly DispatcherQueue? _dispatcherQueue;
         private bool _isAdvancedExpanded;
         private bool _showDetectedBlobCenter = true;
@@ -320,6 +323,7 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         private void ApplyControlState(TrackIRControlState controlState, bool persist)
         {
+            TrackIRControlState previousControlState = _controlState;
             _controlState = TrackIRUiLogic.Normalize(controlState);
             if (persist)
             {
@@ -328,7 +332,11 @@ namespace OpenTrackIR.WinUI.ViewModels
 
             _trayService.UpdateState(_controlState.IsTrackIREnabled, _controlState.IsMouseMovementEnabled);
             _runtimeController.UpdateControlState(_controlState);
-            SyncTimeoutTask();
+            if ((_timeoutCancellationSource is null && TrackIRRuntimeLogic.ShouldScheduleTimeout(_controlState)) ||
+                TrackIRRuntimeLogic.ShouldRescheduleTimeout(previousControlState, _controlState))
+            {
+                SyncTimeoutTask();
+            }
             OnControlStateChanged();
         }
 
@@ -518,6 +526,9 @@ namespace OpenTrackIR.WinUI.ViewModels
         {
             if (previewFrame is null)
             {
+                _previewBitmap = null;
+                _previewGrayPixels = Array.Empty<byte>();
+                _previewBgraPixels = Array.Empty<byte>();
                 _previewImageSource = null;
                 OnPropertyChanged(nameof(PreviewImageSource));
                 OnPropertyChanged(nameof(PreviewImageVisibility));
@@ -526,13 +537,46 @@ namespace OpenTrackIR.WinUI.ViewModels
                 return;
             }
 
-            byte[] bgraPixels = TrackIRPreviewBitmapLogic.ExpandGray8ToBgra32(previewFrame.Gray8Pixels);
-            WriteableBitmap bitmap = new(previewFrame.Width, previewFrame.Height);
-            using Stream pixelStream = bitmap.PixelBuffer.AsStream();
+            int grayLength = TrackIRPreviewBitmapLogic.Gray8BufferLength(previewFrame.Width, previewFrame.Height);
+            if (_previewGrayPixels.Length != grayLength)
+            {
+                _previewGrayPixels = new byte[grayLength];
+            }
+
+            if (!_runtimeController.TryCopyCurrentPreviewFrame(_previewGrayPixels, out TrackIRPreviewFrame? copiedPreviewFrame) ||
+                copiedPreviewFrame is null)
+            {
+                return;
+            }
+
+            int bgraLength = TrackIRPreviewBitmapLogic.Bgra32BufferLength(
+                copiedPreviewFrame.Width,
+                copiedPreviewFrame.Height
+            );
+            if (_previewBgraPixels.Length != bgraLength)
+            {
+                _previewBgraPixels = new byte[bgraLength];
+            }
+
+            TrackIRPreviewBitmapLogic.ExpandGray8ToBgra32(_previewGrayPixels, _previewBgraPixels);
+
+            bool didCreateBitmap = _previewBitmap is null ||
+                _previewBitmap.PixelWidth != copiedPreviewFrame.Width ||
+                _previewBitmap.PixelHeight != copiedPreviewFrame.Height;
+            if (didCreateBitmap)
+            {
+                _previewBitmap = new WriteableBitmap(copiedPreviewFrame.Width, copiedPreviewFrame.Height);
+            }
+
+            using Stream pixelStream = _previewBitmap!.PixelBuffer.AsStream();
             pixelStream.Position = 0;
-            pixelStream.Write(bgraPixels, 0, bgraPixels.Length);
-            _previewImageSource = bitmap;
-            OnPropertyChanged(nameof(PreviewImageSource));
+            pixelStream.Write(_previewBgraPixels, 0, _previewBgraPixels.Length);
+            _previewBitmap.Invalidate();
+            _previewImageSource = _previewBitmap;
+            if (didCreateBitmap)
+            {
+                OnPropertyChanged(nameof(PreviewImageSource));
+            }
             OnPropertyChanged(nameof(PreviewImageVisibility));
             OnPropertyChanged(nameof(PreviewPlaceholderVisibility));
             OnPropertyChanged(nameof(PreviewMarkerVisibility));

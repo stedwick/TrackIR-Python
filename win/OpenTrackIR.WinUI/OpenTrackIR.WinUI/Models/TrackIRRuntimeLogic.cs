@@ -59,11 +59,27 @@ namespace OpenTrackIR.WinUI.Models
             return !isDisposed;
         }
 
+        public static bool ShouldPublishSnapshot(TrackIRSnapshot previousSnapshot, TrackIRSnapshot nextSnapshot)
+        {
+            return previousSnapshot != nextSnapshot;
+        }
+
         public static bool ShouldScheduleTimeout(TrackIRControlState controlState)
         {
             return controlState.IsTrackIREnabled &&
                 controlState.IsTimeoutEnabled &&
                 controlState.TimeoutSeconds > 0;
+        }
+
+        public static bool ShouldRescheduleTimeout(
+            TrackIRControlState previousControlState,
+            TrackIRControlState nextControlState
+        )
+        {
+            bool wasScheduled = ShouldScheduleTimeout(previousControlState);
+            bool isScheduled = ShouldScheduleTimeout(nextControlState);
+            return wasScheduled != isScheduled ||
+                (isScheduled && previousControlState.TimeoutSeconds != nextControlState.TimeoutSeconds);
         }
 
         public static TrackIRControlState TimedOutControlState(TrackIRControlState controlState)

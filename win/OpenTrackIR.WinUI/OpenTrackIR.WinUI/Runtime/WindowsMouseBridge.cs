@@ -7,8 +7,10 @@ namespace OpenTrackIR.WinUI.Runtime
     {
         private const uint InputMouse = 0;
         private const uint MouseEventMove = 0x0001;
+        private static readonly int InputSize = Marshal.SizeOf<Input>();
 
         private TrackIRNativeMethods.NativeTrackIRMouseTrackerState _trackerState;
+        private readonly Input[] _sendInputBuffer = new Input[1];
         private double _pendingDeltaX;
         private double _pendingDeltaY;
         private int _keepAwakeDirection = 1;
@@ -108,10 +110,9 @@ namespace OpenTrackIR.WinUI.Runtime
             };
         }
 
-        private static bool SendRelativeMouseInput(int deltaX, int deltaY)
+        private bool SendRelativeMouseInput(int deltaX, int deltaY)
         {
-            Input[] inputs =
-            [
+            _sendInputBuffer[0] =
                 new Input
                 {
                     Type = InputMouse,
@@ -127,10 +128,10 @@ namespace OpenTrackIR.WinUI.Runtime
                             ExtraInfo = nint.Zero,
                         },
                     },
-                },
-            ];
+                };
 
-            return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>()) == inputs.Length;
+            return SendInput((uint)_sendInputBuffer.Length, _sendInputBuffer, InputSize) ==
+                _sendInputBuffer.Length;
         }
 
         [StructLayout(LayoutKind.Sequential)]

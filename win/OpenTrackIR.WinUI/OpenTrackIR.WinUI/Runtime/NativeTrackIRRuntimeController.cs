@@ -5,6 +5,7 @@ namespace OpenTrackIR.WinUI.Runtime
     public sealed class NativeTrackIRRuntimeController : ITrackIRRuntimeController, IDisposable
     {
         private readonly object _syncRoot = new();
+        private readonly object _previewSyncRoot = new();
         private TrackIRControlState _controlState = TrackIRUiLogic.CreateDefaultControlState();
         private TrackIRPresentationState _presentationState = new(true, true);
         private CancellationTokenSource? _pollCancellationSource;
@@ -14,6 +15,7 @@ namespace OpenTrackIR.WinUI.Runtime
         private bool _nativeRuntimeUnavailable;
         private readonly WindowsMouseBridge _mouseBridge = new();
         private DateTimeOffset _lastMouseMovementTime = DateTimeOffset.UtcNow;
+        private byte[] _previewPixels = Array.Empty<byte>();
 
         public TrackIRSnapshot CurrentSnapshot { get; private set; }
         public TrackIRPreviewFrame? CurrentPreviewFrame { get; private set; }
@@ -54,6 +56,31 @@ namespace OpenTrackIR.WinUI.Runtime
         {
             _nativeRuntimeUnavailable = false;
             SyncSession(forceRestart: true);
+        }
+
+        public bool TryCopyCurrentPreviewFrame(byte[] destination, out TrackIRPreviewFrame? previewFrame)
+        {
+            lock (_previewSyncRoot)
+            {
+                previewFrame = CurrentPreviewFrame;
+                if (previewFrame is null)
+                {
+                    return false;
+                }
+
+                int requiredLength = TrackIRPreviewBitmapLogic.Gray8BufferLength(
+                    previewFrame.Width,
+                    previewFrame.Height
+                );
+                if (destination.Length < requiredLength || _previewPixels.Length < requiredLength)
+                {
+                    previewFrame = null;
+                    return false;
+                }
+
+                Array.Copy(_previewPixels, destination, requiredLength);
+                return true;
+            }
         }
 
         public void Dispose()
@@ -228,6 +255,10 @@ namespace OpenTrackIR.WinUI.Runtime
             TryNativeCall(() => TrackIRNativeMethods.TrackIRSessionDestroy(_session));
             _session = 0;
             _lastPreviewGeneration = 0;
+            lock (_previewSyncRoot)
+            {
+                _previewPixels = Array.Empty<byte>();
+            }
             _mouseBridge.Reset();
         }
 
@@ -286,23 +317,34 @@ namespace OpenTrackIR.WinUI.Runtime
                     return;
                 }
 
-                int frameLength = nativeSnapshot.PreviewWidth * nativeSnapshot.PreviewHeight;
+                int frameLength = TrackIRPreviewBitmapLogic.Gray8BufferLength(
+                    nativeSnapshot.PreviewWidth,
+                    nativeSnapshot.PreviewHeight
+                );
                 if (frameLength <= 0)
                 {
                     PublishPreviewFrame(null);
                     return;
                 }
 
-                byte[] previewPixels = new byte[frameLength];
-                if (!TrackIRNativeMethods.TrackIRSessionCopyPreviewFrame(
-                    _session,
-                    previewPixels,
-                    (nuint)previewPixels.Length,
-                    out ulong generation
-                ))
+                ulong generation;
+                lock (_previewSyncRoot)
                 {
-                    PublishPreviewFrame(null);
-                    return;
+                    if (_previewPixels.Length != frameLength)
+                    {
+                        _previewPixels = new byte[frameLength];
+                    }
+
+                    if (!TrackIRNativeMethods.TrackIRSessionCopyPreviewFrame(
+                        _session,
+                        _previewPixels,
+                        (nuint)frameLength,
+                        out generation
+                    ))
+                    {
+                        PublishPreviewFrame(null);
+                        return;
+                    }
                 }
 
                 _lastPreviewGeneration = generation;
@@ -310,8 +352,7 @@ namespace OpenTrackIR.WinUI.Runtime
                     new TrackIRPreviewFrame(
                         Generation: generation,
                         Width: nativeSnapshot.PreviewWidth,
-                        Height: nativeSnapshot.PreviewHeight,
-                        Gray8Pixels: previewPixels
+                        Height: nativeSnapshot.PreviewHeight
                     )
                 );
             }
@@ -363,14 +404,28 @@ namespace OpenTrackIR.WinUI.Runtime
 
         private void PublishSnapshot(TrackIRSnapshot snapshot)
         {
+            if (!TrackIRRuntimeLogic.ShouldPublishSnapshot(CurrentSnapshot, snapshot))
+            {
+                return;
+            }
+
             CurrentSnapshot = snapshot;
             SnapshotChanged?.Invoke(this, snapshot);
         }
 
         private void PublishPreviewFrame(TrackIRPreviewFrame? previewFrame)
         {
-            bool didChange = !Equals(CurrentPreviewFrame, previewFrame);
-            CurrentPreviewFrame = previewFrame;
+            bool didChange;
+            lock (_previewSyncRoot)
+            {
+                didChange = !Equals(CurrentPreviewFrame, previewFrame);
+                CurrentPreviewFrame = previewFrame;
+                if (previewFrame is null)
+                {
+                    _previewPixels = Array.Empty<byte>();
+                }
+            }
+
             if (didChange)
             {
                 PreviewFrameChanged?.Invoke(this, previewFrame);

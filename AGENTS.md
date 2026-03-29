@@ -67,6 +67,9 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - The final release zip must contain `OpenTrackIR.app` at the top level. Do not ship a renamed staging bundle such as `OpenTrackIR-0.2-stapled.app`; if a temporary copy is used during notarization, rename or recopy it back to `OpenTrackIR.app` before creating the GitHub asset.
 - Verify the stapled app with `spctl -a -vv`; the accepted result should say `source=Notarized Developer ID`.
 - Check the previous release metadata with `gh release view v0.1` before drafting notes or naming assets so naming stays consistent.
+- Each new GitHub release should list the latest available asset for every supported platform, even if only one platform was rebuilt for that version.
+- If a platform was not rebuilt for the new version, download the most up-to-date existing release asset for that platform and re-upload that same file to the new release instead of recompiling it just to match version numbering.
+- It is acceptable for carried-forward assets to keep their original filenames and embedded version numbers such as `0.2.2` when they are attached to a newer release like `v0.2.3`; the goal is that users can always find the latest available macOS, Windows, and future Linux downloads on the newest release page.
 - Each GitHub release description should include a short release-specific summary of what changed in that version. Example:
   `0.2.2 release.`
 
