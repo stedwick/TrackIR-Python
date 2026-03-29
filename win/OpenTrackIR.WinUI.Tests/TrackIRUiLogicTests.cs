@@ -180,6 +180,13 @@ namespace OpenTrackIR.WinUI.Tests
         }
 
         [Fact]
+        public void TrackIRRuntimeLogic_ignores_runtime_updates_after_dispose()
+        {
+            Assert.True(TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(isDisposed: false));
+            Assert.False(TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(isDisposed: true));
+        }
+
+        [Fact]
         public void TrackIRPreviewBitmapLogic_expands_gray8_pixels_to_bgra()
         {
             byte[] bgra = TrackIRPreviewBitmapLogic.ExpandGray8ToBgra32(new byte[] { 0x12, 0xAB });

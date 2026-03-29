@@ -8,13 +8,26 @@ using Windows.UI.Core;
 
 namespace OpenTrackIR.WinUI.Views
 {
-    public sealed partial class MainShellView : UserControl
+    public sealed partial class MainShellView : UserControl, IDisposable
     {
+        private bool _isDisposed;
         public MainShellViewModel ViewModel { get; } = new();
 
         public MainShellView()
         {
             InitializeComponent();
+        }
+
+        public void Dispose()
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            _isDisposed = true;
+            Bindings?.StopTracking();
+            ViewModel.Dispose();
         }
 
         private void MouseToggleHotkeyCaptureBox_KeyDown(object sender, KeyRoutedEventArgs e)

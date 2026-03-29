@@ -13,5 +13,5 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <views:MainShellView />
+    <views:MainShellView x:Name="RootView" />
 </Window>

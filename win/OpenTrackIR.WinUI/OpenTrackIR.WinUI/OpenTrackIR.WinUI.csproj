@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
@@ -63,21 +63,23 @@
     <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
   </PropertyGroup>
 
-  <Target Name="CopyNativeTrackIRRuntime" AfterTargets="Build" Condition="'$(Platform)' == 'x64'">
-    <PropertyGroup>
-      <OpenTrackIRRepoRoot>$(MSBuildThisFileDirectory)..\..\..\</OpenTrackIRRepoRoot>
-      <OpenTrackIRNativeDll>$(OpenTrackIRRepoRoot)build\c\$(Configuration)\opentrackir.dll</OpenTrackIRNativeDll>
-      <OpenTrackIRLibUsbSubdirectory Condition="'$(Configuration)' == 'Debug'">debug\</OpenTrackIRLibUsbSubdirectory>
-      <OpenTrackIRLibUsbDll>$(OpenTrackIRRepoRoot)build\vcpkg_installed\x64-windows\$(OpenTrackIRLibUsbSubdirectory)bin\libusb-1.0.dll</OpenTrackIRLibUsbDll>
-    </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)' == 'x64'">
+    <OpenTrackIRRepoRoot>$(MSBuildThisFileDirectory)..\..\..\</OpenTrackIRRepoRoot>
+    <OpenTrackIRNativeDll>$(OpenTrackIRRepoRoot)build\c\$(Configuration)\opentrackir.dll</OpenTrackIRNativeDll>
+    <OpenTrackIRLibUsbSubdirectory Condition="'$(Configuration)' == 'Debug'">debug\</OpenTrackIRLibUsbSubdirectory>
+    <OpenTrackIRLibUsbDll>$(OpenTrackIRRepoRoot)build\vcpkg_installed\x64-windows\$(OpenTrackIRLibUsbSubdirectory)bin\libusb-1.0.dll</OpenTrackIRLibUsbDll>
+  </PropertyGroup>
 
-    <ItemGroup>
-      <NativeTrackIRRuntime Include="$(OpenTrackIRNativeDll)" Condition="Exists('$(OpenTrackIRNativeDll)')" />
-      <NativeTrackIRRuntime Include="$(OpenTrackIRLibUsbDll)" Condition="Exists('$(OpenTrackIRLibUsbDll)')" />
-    </ItemGroup>
+  <ItemGroup Condition="'$(Platform)' == 'x64'">
+    <Content Include="$(OpenTrackIRNativeDll)" Link="opentrackir.dll" Condition="Exists('$(OpenTrackIRNativeDll)')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="$(OpenTrackIRLibUsbDll)" Link="libusb-1.0.dll" Condition="Exists('$(OpenTrackIRLibUsbDll)')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 
-    <Copy SourceFiles="@(NativeTrackIRRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(NativeTrackIRRuntime)' != ''" />
-    <Message Text="Copied native TrackIR runtime DLLs to $(OutDir)." Importance="High" Condition="'@(NativeTrackIRRuntime)' != ''" />
+  <Target Name="WarnMissingNativeTrackIRRuntime" BeforeTargets="Build" Condition="'$(Platform)' == 'x64'">
     <Warning Text="Native TrackIR runtime DLL not found at $(OpenTrackIRNativeDll). Build the CMake opentrackir target first." Condition="!Exists('$(OpenTrackIRNativeDll)')" />
     <Warning Text="libusb runtime DLL not found at $(OpenTrackIRLibUsbDll). Configure and build the native CMake project first." Condition="!Exists('$(OpenTrackIRLibUsbDll)')" />
   </Target>

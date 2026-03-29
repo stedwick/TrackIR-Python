@@ -11,7 +11,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace OpenTrackIR.WinUI.ViewModels
 {
-    public sealed class MainShellViewModel : ObservableObject
+    public sealed class MainShellViewModel : ObservableObject, IDisposable
     {
         private readonly ISettingsStore _settingsStore;
         private readonly ITrackIRRuntimeController _runtimeController;
@@ -22,6 +22,7 @@ namespace OpenTrackIR.WinUI.ViewModels
         private readonly DispatcherQueue? _dispatcherQueue;
         private bool _isAdvancedExpanded;
         private bool _showDetectedBlobCenter = true;
+        private bool _isDisposed;
 
         public MainShellViewModel()
             : this(new LocalSettingsStore(), new NativeTrackIRRuntimeController(), AppServices.TrayService)
@@ -275,6 +276,22 @@ namespace OpenTrackIR.WinUI.ViewModels
             _runtimeController.UpdatePresentationState(new TrackIRPresentationState(isWindowVisible, isAppActive));
         }
 
+        public void Dispose()
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            _isDisposed = true;
+            _runtimeController.SnapshotChanged -= OnRuntimeSnapshotChanged;
+            _runtimeController.PreviewFrameChanged -= OnRuntimePreviewFrameChanged;
+            if (_runtimeController is IDisposable disposableRuntimeController)
+            {
+                disposableRuntimeController.Dispose();
+            }
+        }
+
         private void Refresh()
         {
             ApplyControlState(_settingsStore.Load(), persist: false);
@@ -301,6 +318,11 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         private void OnRuntimeSnapshotChanged(object? sender, TrackIRSnapshot snapshot)
         {
+            if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed))
+            {
+                return;
+            }
+
             if (_dispatcherQueue is null)
             {
                 _snapshot = snapshot;
@@ -310,6 +332,11 @@ namespace OpenTrackIR.WinUI.ViewModels
 
             _dispatcherQueue.TryEnqueue(() =>
             {
+                if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed))
+                {
+                    return;
+                }
+
                 _snapshot = snapshot;
                 OnSnapshotChanged();
             });
@@ -317,13 +344,26 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         private void OnRuntimePreviewFrameChanged(object? sender, TrackIRPreviewFrame? previewFrame)
         {
+            if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed))
+            {
+                return;
+            }
+
             if (_dispatcherQueue is null)
             {
                 ApplyPreviewFrame(previewFrame);
                 return;
             }
 
-            _dispatcherQueue.TryEnqueue(() => ApplyPreviewFrame(previewFrame));
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                if (!TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed))
+                {
+                    return;
+                }
+
+                ApplyPreviewFrame(previewFrame);
+            });
         }
 
         private void OnControlStateChanged()

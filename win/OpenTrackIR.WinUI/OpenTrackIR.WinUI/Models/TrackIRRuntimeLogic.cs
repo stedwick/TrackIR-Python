@@ -36,6 +36,11 @@ namespace OpenTrackIR.WinUI.Models
                 : BackgroundPollIntervalMilliseconds;
         }
 
+        public static bool ShouldApplyRuntimeUpdate(bool isDisposed)
+        {
+            return !isDisposed;
+        }
+
         public static TrackIRSnapshot MissingNativeRuntimeSnapshot(TrackIRControlState controlState)
         {
             return MissingNativeRuntimeSnapshot(controlState, new TrackIRPresentationState(true, true));
