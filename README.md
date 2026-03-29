@@ -8,6 +8,25 @@ If you want to try the current macOS app, download it from the [releases page](h
 
 ![OpenTrackIR macOS demo](screenshots/OpenTrackIR-021-macOS-26-Gif.gif)
 
+## Windows 11 download app
+
+If you want to try the current Windows 11 app, download it from the [releases page](https://github.com/stedwick/OpenTrackIR/releases).
+
+![OpenTrackIR macOS demo](screenshots/OpenTrackIR-023-Win-11-Gif.gif)
+
+### Windows 11 USB Drivers setup
+
+On Windows, we require WinUSB drivers for the TrackIR.
+
+- Download Zadig from [zadig.akeo.ie](https://zadig.akeo.ie/), and plug in the TrackIR.
+- Open Zadig, choose the TrackIR device, select `WinUSB`, and click `Install Driver`.
+- The TrackIR may show up as an "Unknown Device".
+- Then restart the OpenTrackIR Windows app and press `Refresh`.
+
+![Zadig WinUSB driver setup](screenshots/zadig-WinUSB-driver.png)
+
+## Repo outline
+
 The repo is organized by implementation target:
 
 - `python/`: active protocol exploration, USB transport work, packet decoding, logging, and preview tooling.
@@ -118,17 +137,6 @@ The current macOS transport path is still temporary: the Xcode target compiles t
 ## Windows app status
 
 The WinUI Windows app now has a native runtime path wired to the shared C session API, live preview rendering, relative mouse movement through the shared C tracker logic plus native Windows `SendInput`, and optional X-keys foot-pedal fast mode through the Windows HID stack. The default global mouse-toggle hotkey is `Shift+F7`, and it stays active while OpenTrackIR is running, even if the window is hidden to the tray. The Windows UI expects an `opentrackir.dll` built from the shared native library to be present next to the app at runtime; until that native DLL is available, the app shows a native-runtime-missing error state instead of a live TrackIR feed.
-
-## Windows 11 setup
-
-On Windows, we require WinUSB drivers for the TrackIR.
-
-- Download Zadig from [zadig.akeo.ie](https://zadig.akeo.ie/), and plug in the TrackIR.
-- Open Zadig, choose the TrackIR device, select `WinUSB`, and click `Install Driver`.
-- The TrackIR may show up as an "Unknown Device".
-- Then restart the OpenTrackIR Windows app and press `Refresh`.
-
-![Zadig WinUSB driver setup](screenshots/zadig-WinUSB-driver.png)
 
 ## macOS app build and run
 
