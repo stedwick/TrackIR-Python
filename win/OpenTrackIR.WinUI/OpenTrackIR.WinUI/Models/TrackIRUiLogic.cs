@@ -14,6 +14,7 @@ namespace OpenTrackIR.WinUI.Models
                 IsVideoEnabled: true,
                 IsTrackIREnabled: true,
                 IsMouseMovementEnabled: true,
+                IsWindowsAbsoluteMousePositioningEnabled: false,
                 MouseMovementSpeed: 2.0,
                 IsXKeysFastMouseEnabled: false,
                 MouseSmoothing: 3,

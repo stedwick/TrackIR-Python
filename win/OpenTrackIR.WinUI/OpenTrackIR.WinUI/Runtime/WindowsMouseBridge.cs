@@ -13,7 +13,6 @@ namespace OpenTrackIR.WinUI.Runtime
         private readonly Input[] _sendInputBuffer = new Input[1];
         private double _pendingDeltaX;
         private double _pendingDeltaY;
-        private int _keepAwakeDirection = 1;
 
         public WindowsMouseBridge()
         {
@@ -26,7 +25,6 @@ namespace OpenTrackIR.WinUI.Runtime
             TrackIRNativeMethods.TrackIRMouseTrackerReset(ref _trackerState);
             _pendingDeltaX = 0.0;
             _pendingDeltaY = 0.0;
-            _keepAwakeDirection = 1;
         }
 
         public bool TryApplyTrackingDelta(
@@ -67,14 +65,36 @@ namespace OpenTrackIR.WinUI.Runtime
                 return false;
             }
 
-            return SendRelativeMouseInput(dispatch.DeltaX, dispatch.DeltaY);
+            return TryMoveCursor(dispatch.DeltaX, dispatch.DeltaY, controlState);
         }
 
-        public bool TryNudge()
+        public bool TryNudge(TrackIRControlState controlState)
         {
-            int direction = _keepAwakeDirection == 0 ? 1 : _keepAwakeDirection;
-            _keepAwakeDirection = -direction;
-            return SendRelativeMouseInput(direction, 0);
+            KeepAwakeNudge nudge = TrackIRMouseRuntimeLogic.KeepAwakeNudgeForIndex(
+                Random.Shared.Next(TrackIRMouseRuntimeLogic.KeepAwakeDirectionCount)
+            );
+            return TryMoveCursor(nudge.DeltaX, nudge.DeltaY, controlState);
+        }
+
+        private bool TryMoveCursor(int deltaX, int deltaY, TrackIRControlState controlState)
+        {
+            if (controlState.IsWindowsAbsoluteMousePositioningEnabled)
+            {
+                if (!GetCursorPos(out Point currentCursorPosition))
+                {
+                    return false;
+                }
+
+                AbsoluteCursorTarget target = TrackIRMouseRuntimeLogic.AbsoluteCursorTargetForDelta(
+                    currentCursorPosition.X,
+                    currentCursorPosition.Y,
+                    deltaX,
+                    deltaY
+                );
+                return SetCursorPos(target.X, target.Y);
+            }
+
+            return SendRelativeMouseInput(deltaX, deltaY);
         }
 
         private static TrackIRNativeMethods.NativeTrackIRMouseTrackerState CreateTrackerState()
@@ -159,7 +179,20 @@ namespace OpenTrackIR.WinUI.Runtime
             public nint ExtraInfo;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Point
+        {
+            public int X;
+            public int Y;
+        }
+
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint SendInput(uint inputCount, [In] Input[] inputs, int inputSize);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool GetCursorPos(out Point point);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetCursorPos(int x, int y);
     }
 }

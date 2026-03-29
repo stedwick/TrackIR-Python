@@ -12,6 +12,7 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.True(state.IsVideoEnabled);
             Assert.True(state.IsTrackIREnabled);
             Assert.True(state.IsMouseMovementEnabled);
+            Assert.False(state.IsWindowsAbsoluteMousePositioningEnabled);
             Assert.Equal(2.0, state.MouseMovementSpeed);
             Assert.Equal(3, state.MouseSmoothing);
             Assert.Equal(0.04, state.MouseDeadzone);
@@ -32,6 +33,7 @@ namespace OpenTrackIR.WinUI.Tests
                 IsVideoEnabled: true,
                 IsTrackIREnabled: true,
                 IsMouseMovementEnabled: true,
+                IsWindowsAbsoluteMousePositioningEnabled: false,
                 MouseMovementSpeed: 0.05,
                 IsXKeysFastMouseEnabled: false,
                 MouseSmoothing: 99,
@@ -306,6 +308,18 @@ namespace OpenTrackIR.WinUI.Tests
                     defaults with { IsMouseMovementEnabled = true, KeepAwakeSeconds = 5 },
                     TimeSpan.FromSeconds(10)
                 )
+            );
+            Assert.Equal(
+                new KeepAwakeNudge(TrackIRMouseRuntimeLogic.KeepAwakeNudgePixels, 0),
+                TrackIRMouseRuntimeLogic.KeepAwakeNudgeForIndex(0)
+            );
+            Assert.Equal(
+                new KeepAwakeNudge(0, -TrackIRMouseRuntimeLogic.KeepAwakeNudgePixels),
+                TrackIRMouseRuntimeLogic.KeepAwakeNudgeForIndex(3)
+            );
+            Assert.Equal(
+                new AbsoluteCursorTarget(104, 193),
+                TrackIRMouseRuntimeLogic.AbsoluteCursorTargetForDelta(100, 200, 4, -7)
             );
 
             RelativeMouseDispatch dispatch = TrackIRMouseRuntimeLogic.ConsumeRelativeDelta(1.75, -0.4);
