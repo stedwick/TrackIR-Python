@@ -22,6 +22,8 @@ On Windows, we require WinUSB drivers for the TrackIR.
 - Open Zadig, choose the TrackIR device, select `WinUSB`, and click `Install Driver`.
 - The TrackIR may show up as an "Unknown Device".
 - Then restart the OpenTrackIR Windows app and press `Refresh`.
+- Important! You can't use OpenTrackIR and NaturalPoint TrackIR at the same time.
+  - Only one driver can be installed. It won't break anything, but you'll have to reinstall if you want to use their official software again.
 
 ![Zadig WinUSB driver setup](screenshots/zadig-WinUSB-driver.png)
 
