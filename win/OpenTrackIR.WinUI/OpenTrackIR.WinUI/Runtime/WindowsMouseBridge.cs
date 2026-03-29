@@ -33,7 +33,8 @@ namespace OpenTrackIR.WinUI.Runtime
             bool hasCentroid,
             double centroidX,
             double centroidY,
-            TrackIRControlState controlState
+            TrackIRControlState controlState,
+            double effectiveMouseSpeed
         )
         {
             TrackIRNativeMethods.NativeTrackIRMouseStep mouseStep =
@@ -45,7 +46,7 @@ namespace OpenTrackIR.WinUI.Runtime
                         X = centroidX,
                         Y = centroidY,
                     },
-                    CreateTrackerConfig(controlState)
+                    CreateTrackerConfig(controlState, effectiveMouseSpeed)
                 );
 
             if (!mouseStep.HasCursorDelta)
@@ -88,13 +89,14 @@ namespace OpenTrackIR.WinUI.Runtime
         }
 
         private static TrackIRNativeMethods.NativeTrackIRMouseTrackerConfig CreateTrackerConfig(
-            TrackIRControlState controlState
+            TrackIRControlState controlState,
+            double effectiveMouseSpeed
         )
         {
             return new TrackIRNativeMethods.NativeTrackIRMouseTrackerConfig
             {
                 IsMovementEnabled = controlState.IsMouseMovementEnabled,
-                Speed = TrackIRMouseRuntimeLogic.MouseBackendSpeed(controlState.MouseMovementSpeed),
+                Speed = TrackIRMouseRuntimeLogic.MouseBackendSpeed(effectiveMouseSpeed),
                 Smoothing = controlState.MouseSmoothing,
                 Deadzone = controlState.MouseDeadzone,
                 AvoidMouseJumps = controlState.IsAvoidMouseJumpsEnabled,

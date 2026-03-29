@@ -9,6 +9,18 @@ namespace OpenTrackIR.WinUI.Models
 
     public static class TrackIRMouseRuntimeLogic
     {
+        public static double EffectiveMouseSpeed(
+            double baseSpeed,
+            bool isXKeysFastMouseEnabled,
+            bool isXKeysPedalPressed,
+            double multiplier = XKeysReportLogic.FastMouseMultiplier
+        )
+        {
+            return isXKeysFastMouseEnabled && isXKeysPedalPressed
+                ? baseSpeed * multiplier
+                : baseSpeed;
+        }
+
         public static double MouseBackendSpeed(double controlSpeed)
         {
             return Math.Clamp(controlSpeed, 0.1, 5.0) * 10.0;

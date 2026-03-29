@@ -229,6 +229,14 @@ namespace OpenTrackIR.WinUI.Tests
 
             Assert.Equal(20.0, TrackIRMouseRuntimeLogic.MouseBackendSpeed(2.0));
             Assert.Equal(1.0, TrackIRMouseRuntimeLogic.MouseBackendSpeed(0.05));
+            Assert.Equal(
+                5.0,
+                TrackIRMouseRuntimeLogic.EffectiveMouseSpeed(
+                    2.0,
+                    isXKeysFastMouseEnabled: true,
+                    isXKeysPedalPressed: true
+                )
+            );
             Assert.True(
                 TrackIRMouseRuntimeLogic.ShouldFireKeepAwake(
                     defaults with { IsMouseMovementEnabled = false, KeepAwakeSeconds = 5 },
@@ -248,6 +256,32 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.Equal(0, dispatch.DeltaY);
             Assert.Equal(0.75, dispatch.RemainingX, 10);
             Assert.Equal(-0.4, dispatch.RemainingY, 10);
+        }
+
+        [Fact]
+        public void XKeysReportLogic_matches_devices_reports_and_indicator_states()
+        {
+            Assert.True(XKeysReportLogic.IsMatchingFootPedal(0x05F3, 0x042C, 0x000C, 0x0001));
+            Assert.True(XKeysReportLogic.IsMatchingFootPedal(0x05F3, 0x0438, 0x000C, 0x0001));
+            Assert.False(XKeysReportLogic.IsMatchingFootPedal(0x05F3, 0x9999, 0x000C, 0x0001));
+            Assert.True(XKeysReportLogic.MiddlePedalPressed(new byte[] { 0x00, 0x00, 0x04 }));
+            Assert.False(XKeysReportLogic.MiddlePedalPressed(new byte[] { 0x00, 0x00, 0x00 }));
+            Assert.Equal(
+                XKeysIndicatorState.Disabled,
+                XKeysReportLogic.IndicatorState(isEnabled: false, didDetectPedal: false, isPressed: false)
+            );
+            Assert.Equal(
+                XKeysIndicatorState.NotDetected,
+                XKeysReportLogic.IndicatorState(isEnabled: true, didDetectPedal: false, isPressed: false)
+            );
+            Assert.Equal(
+                XKeysIndicatorState.Ready,
+                XKeysReportLogic.IndicatorState(isEnabled: true, didDetectPedal: true, isPressed: false)
+            );
+            Assert.Equal(
+                XKeysIndicatorState.Pressed,
+                XKeysReportLogic.Snapshot(isEnabled: true, didDetectPedal: true, isPressed: true).IndicatorState
+            );
         }
 
         [Fact]

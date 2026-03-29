@@ -117,7 +117,7 @@ The current macOS transport path is still temporary: the Xcode target compiles t
 
 ## Windows app status
 
-The WinUI Windows app now has a native runtime path wired to the shared C session API, live preview rendering, and relative mouse movement through the shared C tracker logic plus native Windows `SendInput`. The default global mouse-toggle hotkey is `Shift+F7`, and it stays active while OpenTrackIR is running, even if the window is hidden to the tray. The Windows UI expects an `opentrackir.dll` built from the shared native library to be present next to the app at runtime; until that native DLL is available, the app shows a native-runtime-missing error state instead of a live TrackIR feed.
+The WinUI Windows app now has a native runtime path wired to the shared C session API, live preview rendering, relative mouse movement through the shared C tracker logic plus native Windows `SendInput`, and optional X-keys foot-pedal fast mode through the Windows HID stack. The default global mouse-toggle hotkey is `Shift+F7`, and it stays active while OpenTrackIR is running, even if the window is hidden to the tray. The Windows UI expects an `opentrackir.dll` built from the shared native library to be present next to the app at runtime; until that native DLL is available, the app shows a native-runtime-missing error state instead of a live TrackIR feed.
 
 ## Windows 11 setup
 

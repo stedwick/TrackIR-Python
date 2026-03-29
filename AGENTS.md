@@ -104,6 +104,7 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - Keep `cpp/` responsible for consuming the C API and validating it in native desktop flows.
 - Keep `mac/` responsible for native app presentation, preview/image conversion, app lifecycle, and platform event bridges on top of the shared C layer.
 - Keep the Windows mouse backend following the same split: shared tracking, smoothing, dead-zone, jump filtering, and transform math in `c/`, with Windows-specific `SendInput` posting and hotkey handling in `win/`.
+- Keep the Windows X-keys foot pedal path independent from the TrackIR USB transport: use the Windows HID stack in `win/`, not `WinUSB`, and keep the pedal optional so it can fail without destabilizing the camera path.
 - Keep `mac/OpenTrackIR/TrackIRNativeSources.c` thin until the planned transport split removes the temporary source-inclusion bridge.
 - If protocol logic appears in C++ app code, that is usually a sign it belongs back in `c/`.
 

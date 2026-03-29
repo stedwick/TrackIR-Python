@@ -8,12 +8,18 @@ namespace OpenTrackIR.WinUI.Runtime
         private readonly object _previewSyncRoot = new();
         private TrackIRControlState _controlState = TrackIRUiLogic.CreateDefaultControlState();
         private TrackIRPresentationState _presentationState = new(true, true);
+        private XKeysMonitorSnapshot _xKeysMonitorSnapshot = XKeysReportLogic.Snapshot(
+            isEnabled: false,
+            didDetectPedal: false,
+            isPressed: false
+        );
         private CancellationTokenSource? _pollCancellationSource;
         private Task? _pollTask;
         private nint _session;
         private ulong _lastPreviewGeneration;
         private bool _nativeRuntimeUnavailable;
         private readonly WindowsMouseBridge _mouseBridge = new();
+        private readonly XKeysFootPedalMonitor _xKeysFootPedalMonitor = new();
         private DateTimeOffset _lastMouseMovementTime = DateTimeOffset.UtcNow;
         private byte[] _previewPixels = Array.Empty<byte>();
 
@@ -26,6 +32,7 @@ namespace OpenTrackIR.WinUI.Runtime
         public NativeTrackIRRuntimeController()
         {
             CurrentSnapshot = TrackIRRuntimeLogic.IdleSnapshot(_controlState, _presentationState);
+            _xKeysFootPedalMonitor.SnapshotChanged += OnXKeysSnapshotChanged;
         }
 
         public void UpdateControlState(TrackIRControlState controlState)
@@ -35,6 +42,7 @@ namespace OpenTrackIR.WinUI.Runtime
                 _controlState = TrackIRUiLogic.Normalize(controlState);
             }
 
+            SyncXKeysMonitor();
             SyncSession(forceRestart: false);
         }
 
@@ -85,7 +93,19 @@ namespace OpenTrackIR.WinUI.Runtime
 
         public void Dispose()
         {
+            _xKeysFootPedalMonitor.SnapshotChanged -= OnXKeysSnapshotChanged;
+            _xKeysFootPedalMonitor.Dispose();
             StopSession(waitForShutdown: true);
+        }
+
+        private void OnXKeysSnapshotChanged(object? sender, XKeysMonitorSnapshot snapshot)
+        {
+            lock (_syncRoot)
+            {
+                _xKeysMonitorSnapshot = snapshot;
+            }
+
+            PublishSnapshot(CurrentSnapshot with { XKeysIndicatorState = snapshot.IndicatorState });
         }
 
         private void SyncSession(bool forceRestart)
@@ -146,6 +166,11 @@ namespace OpenTrackIR.WinUI.Runtime
             });
 
             StartPollLoopIfNeeded();
+        }
+
+        private void SyncXKeysMonitor()
+        {
+            _xKeysFootPedalMonitor.SetEnabled(_controlState.IsXKeysFastMouseEnabled);
         }
 
         private void ApplyPresentationState()
@@ -273,20 +298,29 @@ namespace OpenTrackIR.WinUI.Runtime
             {
                 TrackIRControlState controlState;
                 TrackIRPresentationState presentationState;
+                XKeysMonitorSnapshot xKeysMonitorSnapshot;
                 lock (_syncRoot)
                 {
                     controlState = _controlState;
                     presentationState = _presentationState;
+                    xKeysMonitorSnapshot = _xKeysMonitorSnapshot;
                 }
 
                 TrackIRNativeMethods.TrackIRSessionCopySnapshot(_session, out TrackIRNativeMethods.NativeTrackIRSessionSnapshot nativeSnapshot);
                 PublishSnapshot(MapSnapshot(nativeSnapshot));
 
+                double effectiveMouseSpeed = TrackIRMouseRuntimeLogic.EffectiveMouseSpeed(
+                    controlState.MouseMovementSpeed,
+                    controlState.IsXKeysFastMouseEnabled,
+                    xKeysMonitorSnapshot.IsPressed
+                );
+
                 bool didMoveMouse = _mouseBridge.TryApplyTrackingDelta(
                     nativeSnapshot.HasCentroid != 0,
                     nativeSnapshot.CentroidX,
                     nativeSnapshot.CentroidY,
-                    controlState
+                    controlState,
+                    effectiveMouseSpeed
                 );
                 if (didMoveMouse)
                 {
@@ -370,6 +404,12 @@ namespace OpenTrackIR.WinUI.Runtime
 
         private TrackIRSnapshot MapSnapshot(TrackIRNativeMethods.NativeTrackIRSessionSnapshot nativeSnapshot)
         {
+            XKeysIndicatorState xKeysIndicatorState;
+            lock (_syncRoot)
+            {
+                xKeysIndicatorState = _xKeysMonitorSnapshot.IndicatorState;
+            }
+
             return new TrackIRSnapshot(
                 Phase: nativeSnapshot.Phase switch
                 {
@@ -394,9 +434,7 @@ namespace OpenTrackIR.WinUI.Runtime
                     _ => "Idle",
                 },
                 BackendLabel: "C + libusb",
-                XKeysIndicatorState: _controlState.IsXKeysFastMouseEnabled
-                    ? XKeysIndicatorState.NotDetected
-                    : XKeysIndicatorState.Disabled,
+                XKeysIndicatorState: xKeysIndicatorState,
                 HasPreview: nativeSnapshot.HasPreviewFrame != 0,
                 IsLowPowerMode: nativeSnapshot.IsLowPowerMode != 0
             );

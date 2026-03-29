@@ -32,6 +32,8 @@
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRUiLogic.cs" Link="Shared\TrackIRUiLogic.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrayUiLogic.cs" Link="Shared\TrayUiLogic.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\XKeysIndicatorState.cs" Link="Shared\XKeysIndicatorState.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\XKeysMonitorSnapshot.cs" Link="Shared\XKeysMonitorSnapshot.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\XKeysReportLogic.cs" Link="Shared\XKeysReportLogic.cs" />
   </ItemGroup>
 
 </Project>
