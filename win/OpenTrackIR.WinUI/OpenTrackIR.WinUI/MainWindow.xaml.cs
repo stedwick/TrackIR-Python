@@ -32,6 +32,7 @@ namespace OpenTrackIR.WinUI
         private readonly nint _windowProcedurePointer;
         private readonly nint _previousWindowProcedure;
         private bool _allowClose;
+        private bool _isExitRequested;
         private bool _isDisposed;
         private RegisteredHotkey? _registeredMouseToggleHotkey;
 
@@ -73,18 +74,44 @@ namespace OpenTrackIR.WinUI
 
         private void ShowWindowFromTray()
         {
-            AppWindow.Show();
+            if (!MainWindowLogic.ShouldProcessTrayWindowAction(
+                _isDisposed,
+                _isExitRequested,
+                Content is not null
+            ))
+            {
+                return;
+            }
+
+            AppWindow? appWindow = AppWindow;
+            if (appWindow is null)
+            {
+                return;
+            }
+
+            appWindow.Show();
             Activate();
             UpdateRuntimePresentationState();
         }
 
         private void ExitApplication()
         {
+            if (_isDisposed || _isExitRequested)
+            {
+                return;
+            }
+
+            _isExitRequested = true;
+            _allowClose = true;
             _dispatcherQueue.TryEnqueue(() =>
             {
+                if (_isDisposed)
+                {
+                    return;
+                }
+
                 RootView.Dispose();
                 Content = null;
-                _allowClose = true;
                 Close();
             });
         }
@@ -168,7 +195,11 @@ namespace OpenTrackIR.WinUI
 
         private void UpdateRuntimePresentationState()
         {
-            if (_isDisposed)
+            if (!MainWindowLogic.ShouldProcessTrayWindowAction(
+                _isDisposed,
+                _isExitRequested,
+                Content is not null
+            ))
             {
                 return;
             }
@@ -194,6 +225,7 @@ namespace OpenTrackIR.WinUI
                 return;
             }
 
+            _isExitRequested = true;
             _isDisposed = true;
             RootView.ViewModel.PropertyChanged -= OnRootViewModelPropertyChanged;
             UnregisterMouseToggleHotkey();

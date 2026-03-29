@@ -155,6 +155,32 @@ namespace OpenTrackIR.WinUI.Tests
         }
 
         [Fact]
+        public void MainWindowLogic_blocks_tray_restore_once_exit_starts()
+        {
+            Assert.True(
+                MainWindowLogic.ShouldProcessTrayWindowAction(
+                    isDisposed: false,
+                    isExitRequested: false,
+                    hasContent: true
+                )
+            );
+            Assert.False(
+                MainWindowLogic.ShouldProcessTrayWindowAction(
+                    isDisposed: false,
+                    isExitRequested: true,
+                    hasContent: true
+                )
+            );
+            Assert.False(
+                MainWindowLogic.ShouldProcessTrayWindowAction(
+                    isDisposed: true,
+                    isExitRequested: false,
+                    hasContent: true
+                )
+            );
+        }
+
+        [Fact]
         public void TrackIRRuntimeLogic_uses_preview_visibility_and_background_rules()
         {
             TrackIRControlState state = TrackIRUiLogic.CreateDefaultControlState();
