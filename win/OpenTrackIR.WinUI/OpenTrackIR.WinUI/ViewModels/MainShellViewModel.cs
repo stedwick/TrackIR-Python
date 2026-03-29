@@ -1,10 +1,13 @@
 using System.Windows.Input;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using OpenTrackIR.WinUI.Models;
 using OpenTrackIR.WinUI.Runtime;
 using OpenTrackIR.WinUI.Services;
+using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace OpenTrackIR.WinUI.ViewModels
 {
@@ -15,11 +18,13 @@ namespace OpenTrackIR.WinUI.ViewModels
         private readonly ITrayService _trayService;
         private TrackIRControlState _controlState;
         private TrackIRSnapshot _snapshot;
+        private ImageSource? _previewImageSource;
+        private readonly DispatcherQueue? _dispatcherQueue;
         private bool _isAdvancedExpanded;
         private bool _showDetectedBlobCenter = true;
 
         public MainShellViewModel()
-            : this(new LocalSettingsStore(), new MockTrackIRRuntimeController(), AppServices.TrayService)
+            : this(new LocalSettingsStore(), new NativeTrackIRRuntimeController(), AppServices.TrayService)
         {
         }
 
@@ -32,11 +37,14 @@ namespace OpenTrackIR.WinUI.ViewModels
             _settingsStore = settingsStore;
             _runtimeController = runtimeController;
             _trayService = trayService;
+            _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
             _controlState = TrackIRUiLogic.Normalize(_settingsStore.Load());
             _snapshot = _runtimeController.CurrentSnapshot;
+            _previewImageSource = null;
 
             RefreshCommand = new RelayCommand(Refresh);
             _runtimeController.SnapshotChanged += OnRuntimeSnapshotChanged;
+            _runtimeController.PreviewFrameChanged += OnRuntimePreviewFrameChanged;
             ApplyControlState(_controlState, persist: false);
             _runtimeController.UpdatePresentationState(new TrackIRPresentationState(true, true));
         }
@@ -237,6 +245,14 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         public string RuntimeModeLabel => _snapshot.IsLowPowerMode ? "Background" : "Interactive";
 
+        public ImageSource? PreviewImageSource => _previewImageSource;
+
+        public Visibility PreviewImageVisibility =>
+            _previewImageSource is null ? Visibility.Collapsed : Visibility.Visible;
+
+        public Visibility PreviewPlaceholderVisibility =>
+            _previewImageSource is null ? Visibility.Visible : Visibility.Collapsed;
+
         public Visibility PreviewMarkerVisibility =>
             ShowDetectedBlobCenter && _snapshot.HasPreview && _snapshot.CentroidX.HasValue && _snapshot.CentroidY.HasValue
                 ? Visibility.Visible
@@ -285,8 +301,29 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         private void OnRuntimeSnapshotChanged(object? sender, TrackIRSnapshot snapshot)
         {
-            _snapshot = snapshot;
-            OnSnapshotChanged();
+            if (_dispatcherQueue is null)
+            {
+                _snapshot = snapshot;
+                OnSnapshotChanged();
+                return;
+            }
+
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                _snapshot = snapshot;
+                OnSnapshotChanged();
+            });
+        }
+
+        private void OnRuntimePreviewFrameChanged(object? sender, TrackIRPreviewFrame? previewFrame)
+        {
+            if (_dispatcherQueue is null)
+            {
+                ApplyPreviewFrame(previewFrame);
+                return;
+            }
+
+            _dispatcherQueue.TryEnqueue(() => ApplyPreviewFrame(previewFrame));
         }
 
         private void OnControlStateChanged()
@@ -339,6 +376,8 @@ namespace OpenTrackIR.WinUI.ViewModels
             OnPropertyChanged(nameof(XKeysIndicatorText));
             OnPropertyChanged(nameof(XKeysIndicatorBrush));
             OnPropertyChanged(nameof(RuntimeModeLabel));
+            OnPropertyChanged(nameof(PreviewImageVisibility));
+            OnPropertyChanged(nameof(PreviewPlaceholderVisibility));
             OnPropertyChanged(nameof(PreviewMarkerVisibility));
             OnPropertyChanged(nameof(PreviewMarkerLeft));
             OnPropertyChanged(nameof(PreviewMarkerTop));
@@ -360,6 +399,30 @@ namespace OpenTrackIR.WinUI.ViewModels
             byte g = Convert.ToByte(normalized.Substring(offset + 2, 2), 16);
             byte b = Convert.ToByte(normalized.Substring(offset + 4, 2), 16);
             return new SolidColorBrush(ColorHelper.FromArgb(a, r, g, b));
+        }
+
+        private void ApplyPreviewFrame(TrackIRPreviewFrame? previewFrame)
+        {
+            if (previewFrame is null)
+            {
+                _previewImageSource = null;
+                OnPropertyChanged(nameof(PreviewImageSource));
+                OnPropertyChanged(nameof(PreviewImageVisibility));
+                OnPropertyChanged(nameof(PreviewPlaceholderVisibility));
+                OnPropertyChanged(nameof(PreviewMarkerVisibility));
+                return;
+            }
+
+            byte[] bgraPixels = TrackIRPreviewBitmapLogic.ExpandGray8ToBgra32(previewFrame.Gray8Pixels);
+            WriteableBitmap bitmap = new(previewFrame.Width, previewFrame.Height);
+            using Stream pixelStream = bitmap.PixelBuffer.AsStream();
+            pixelStream.Position = 0;
+            pixelStream.Write(bgraPixels, 0, bgraPixels.Length);
+            _previewImageSource = bitmap;
+            OnPropertyChanged(nameof(PreviewImageSource));
+            OnPropertyChanged(nameof(PreviewImageVisibility));
+            OnPropertyChanged(nameof(PreviewPlaceholderVisibility));
+            OnPropertyChanged(nameof(PreviewMarkerVisibility));
         }
     }
 }

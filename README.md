@@ -113,6 +113,10 @@ The macOS project now streams real TrackIR data through the shared C session lay
 
 The current macOS transport path is still temporary: the Xcode target compiles the shared C sources through `TrackIRNativeSources.c` and therefore still rides on the existing `libusb` backend. The planned transport split and IOKit migration are documented in [`PLAN-macOS-libusb-to-IOKit.md`](PLAN-macOS-libusb-to-IOKit.md).
 
+## Windows app status
+
+The WinUI Windows app now has a native runtime path that is wired for the shared C session API and live preview rendering. The Windows UI expects an `opentrackir.dll` built from the shared native library to be present next to the app at runtime; until that native DLL is available, the app shows a native-runtime-missing error state instead of a live TrackIR feed.
+
 ## macOS app build and run
 
 Open the app in Xcode:

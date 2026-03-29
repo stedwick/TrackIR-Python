@@ -21,9 +21,12 @@
   <ItemGroup>
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\HotkeyCaptureLogic.cs" Link="Shared\HotkeyCaptureLogic.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\DashboardLayoutMode.cs" Link="Shared\DashboardLayoutMode.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRPreviewBitmapLogic.cs" Link="Shared\TrackIRPreviewBitmapLogic.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRPreviewFrame.cs" Link="Shared\TrackIRPreviewFrame.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRControlState.cs" Link="Shared\TrackIRControlState.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRPresentationState.cs" Link="Shared\TrackIRPresentationState.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRRuntimePhase.cs" Link="Shared\TrackIRRuntimePhase.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRRuntimeLogic.cs" Link="Shared\TrackIRRuntimeLogic.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRSnapshot.cs" Link="Shared\TrackIRSnapshot.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRUiLogic.cs" Link="Shared\TrackIRUiLogic.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrayUiLogic.cs" Link="Shared\TrayUiLogic.cs" />

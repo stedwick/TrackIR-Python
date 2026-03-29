@@ -143,5 +143,48 @@ namespace OpenTrackIR.WinUI.Tests
                 TrayUiLogic.TooltipText(isTrackIREnabled: true, isMouseMovementEnabled: false)
             );
         }
+
+        [Fact]
+        public void TrackIRRuntimeLogic_uses_preview_visibility_and_background_rules()
+        {
+            TrackIRControlState state = TrackIRUiLogic.CreateDefaultControlState();
+
+            Assert.True(
+                TrackIRRuntimeLogic.ShouldPublishPreview(
+                    state,
+                    new TrackIRPresentationState(true, true),
+                    hasPreviewFrame: true
+                )
+            );
+            Assert.False(
+                TrackIRRuntimeLogic.ShouldPublishPreview(
+                    state,
+                    new TrackIRPresentationState(false, true),
+                    hasPreviewFrame: true
+                )
+            );
+            Assert.Equal(
+                33,
+                TrackIRRuntimeLogic.PollIntervalMilliseconds(
+                    state,
+                    new TrackIRPresentationState(true, true)
+                )
+            );
+            Assert.Equal(
+                TrackIRRuntimePhase.Idle,
+                TrackIRRuntimeLogic.IdleSnapshot(
+                    state with { IsTrackIREnabled = false },
+                    new TrackIRPresentationState(true, true)
+                ).Phase
+            );
+        }
+
+        [Fact]
+        public void TrackIRPreviewBitmapLogic_expands_gray8_pixels_to_bgra()
+        {
+            byte[] bgra = TrackIRPreviewBitmapLogic.ExpandGray8ToBgra32(new byte[] { 0x12, 0xAB });
+
+            Assert.Equal(new byte[] { 0x12, 0x12, 0x12, 0xFF, 0xAB, 0xAB, 0xAB, 0xFF }, bgra);
+        }
     }
 }

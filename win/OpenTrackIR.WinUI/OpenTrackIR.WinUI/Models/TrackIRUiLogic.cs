@@ -141,7 +141,7 @@ namespace OpenTrackIR.WinUI.Models
                 TrackIRRuntimePhase.Streaming when snapshot.IsLowPowerMode =>
                     "TrackIR stays active while the window is hidden, but preview work is paused for low power mode.",
                 TrackIRRuntimePhase.Streaming =>
-                    "Live preview and telemetry are coming from a mock runtime with the same UI boundary the native backend will use later.",
+                    "Live camera feed from the shared C library.",
                 TrackIRRuntimePhase.Unavailable or TrackIRRuntimePhase.Failed =>
                     snapshot.ErrorDescription ?? "TrackIR camera unavailable.",
                 _ =>

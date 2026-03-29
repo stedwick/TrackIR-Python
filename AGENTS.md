@@ -89,6 +89,9 @@ When making changes here, optimize for protocol clarity and cross-platform porta
 - Prefer the top-level `build/` tree for documented CMake commands unless a subproject has a stronger reason to diverge.
 - Treat `libusb-1.0` as required for the native C hardware library.
 - Treat OpenCV as optional and scoped only to the C++ preview harness.
+- On Windows automation shells, `vcpkg` may fail to detect an otherwise normal Git install unless `C:\Program Files\Git\cmd` is explicitly on `PATH` for the `cmake -S ... -B ...` configure command. The working pattern in this repo was:
+  `$env:PATH='C:\Program Files\Git\cmd;' + $env:PATH`
+  `cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE='C:\Program Files\Microsoft Visual Studio\18\Community\VC\vcpkg\scripts\buildsystems\vcpkg.cmake'`
 
 ## Native direction
 

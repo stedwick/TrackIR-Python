@@ -1,0 +1,90 @@
+namespace OpenTrackIR.WinUI.Models
+{
+    public static class TrackIRRuntimeLogic
+    {
+        public const double VisiblePreviewFramesPerSecond = 30.0;
+        public const int BackgroundPollIntervalMilliseconds = 250;
+        public const string MissingNativeRuntimeMessage =
+            "OpenTrackIR native runtime is unavailable. Build opentrackir.dll and place it next to the app.";
+
+        public static bool ShouldRunSession(TrackIRControlState controlState)
+        {
+            return controlState.IsTrackIREnabled;
+        }
+
+        public static bool ShouldPublishPreview(
+            TrackIRControlState controlState,
+            TrackIRPresentationState presentationState,
+            bool hasPreviewFrame
+        )
+        {
+            return controlState.IsTrackIREnabled &&
+                controlState.IsVideoEnabled &&
+                presentationState.IsWindowVisible &&
+                hasPreviewFrame;
+        }
+
+        public static int PollIntervalMilliseconds(
+            TrackIRControlState controlState,
+            TrackIRPresentationState presentationState
+        )
+        {
+            return controlState.IsTrackIREnabled &&
+                controlState.IsVideoEnabled &&
+                presentationState.IsWindowVisible
+                ? (int)Math.Round(1000.0 / VisiblePreviewFramesPerSecond)
+                : BackgroundPollIntervalMilliseconds;
+        }
+
+        public static TrackIRSnapshot MissingNativeRuntimeSnapshot(TrackIRControlState controlState)
+        {
+            return MissingNativeRuntimeSnapshot(controlState, new TrackIRPresentationState(true, true));
+        }
+
+        public static TrackIRSnapshot MissingNativeRuntimeSnapshot(
+            TrackIRControlState controlState,
+            TrackIRPresentationState presentationState
+        )
+        {
+            return new TrackIRSnapshot(
+                Phase: controlState.IsTrackIREnabled ? TrackIRRuntimePhase.Failed : TrackIRRuntimePhase.Idle,
+                ErrorDescription: controlState.IsTrackIREnabled ? MissingNativeRuntimeMessage : null,
+                FrameIndex: 0,
+                SourceFrameRate: null,
+                CentroidX: null,
+                CentroidY: null,
+                PacketType: null,
+                DeviceLabel: controlState.IsTrackIREnabled ? "Native runtime missing" : "Idle",
+                BackendLabel: "C session / pending",
+                XKeysIndicatorState: controlState.IsXKeysFastMouseEnabled
+                    ? XKeysIndicatorState.NotDetected
+                    : XKeysIndicatorState.Disabled,
+                HasPreview: false,
+                IsLowPowerMode: !presentationState.IsWindowVisible || !presentationState.IsAppActive
+            );
+        }
+
+        public static TrackIRSnapshot IdleSnapshot(
+            TrackIRControlState controlState,
+            TrackIRPresentationState presentationState
+        )
+        {
+            return new TrackIRSnapshot(
+                Phase: TrackIRRuntimePhase.Idle,
+                ErrorDescription: null,
+                FrameIndex: 0,
+                SourceFrameRate: null,
+                CentroidX: null,
+                CentroidY: null,
+                PacketType: null,
+                DeviceLabel: "Idle",
+                BackendLabel: "C session / pending",
+                XKeysIndicatorState: controlState.IsXKeysFastMouseEnabled
+                    ? XKeysIndicatorState.NotDetected
+                    : XKeysIndicatorState.Disabled,
+                HasPreview: false,
+                IsLowPowerMode: !presentationState.IsWindowVisible || !presentationState.IsAppActive
+            );
+        }
+    }
+}

@@ -5,8 +5,10 @@ namespace OpenTrackIR.WinUI.Runtime
     public interface ITrackIRRuntimeController
     {
         TrackIRSnapshot CurrentSnapshot { get; }
+        TrackIRPreviewFrame? CurrentPreviewFrame { get; }
 
         event EventHandler<TrackIRSnapshot>? SnapshotChanged;
+        event EventHandler<TrackIRPreviewFrame?>? PreviewFrameChanged;
 
         void UpdateControlState(TrackIRControlState controlState);
 

@@ -1,4 +1,4 @@
-add_library(opentrackir
+add_library(opentrackir SHARED
   src/tir5_protocol.c
   src/tir5_frame.c
   src/tir5_mouse.c
@@ -6,6 +6,9 @@ add_library(opentrackir
   src/tir5_session.c
   src/tir5_tooling.c
 )
+if(WIN32)
+  set_target_properties(opentrackir PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
 find_package(Threads REQUIRED)
 target_include_directories(opentrackir PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(opentrackir PUBLIC opentrackir_libusb Threads::Threads)
@@ -13,11 +16,24 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(opentrackir PUBLIC m)
 endif()
 
+function(otir_copy_runtime_dlls target_name)
+  if(WIN32)
+    add_custom_command(TARGET ${target_name} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_RUNTIME_DLLS:${target_name}>
+        $<TARGET_FILE_DIR:${target_name}>
+      COMMAND_EXPAND_LISTS
+    )
+  endif()
+endfunction()
+
 if(OPENTRACKIR_BUILD_TESTS)
   add_executable(test_tir5 tests/test_tir5.c)
   target_link_libraries(test_tir5 PRIVATE opentrackir)
+  otir_copy_runtime_dlls(test_tir5)
   add_test(NAME test_tir5 COMMAND test_tir5)
 endif()
 
 add_executable(opentrackir_stream_dump examples/stream_dump.c)
 target_link_libraries(opentrackir_stream_dump PRIVATE opentrackir)
+otir_copy_runtime_dlls(opentrackir_stream_dump)

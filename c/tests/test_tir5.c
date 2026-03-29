@@ -5,6 +5,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -491,7 +492,9 @@ static void test_shutdown_steps_turns_led_off_even_without_streaming(void) {
 static void test_build_frame_marks_stripes_and_stats(void) {
     otir_tir5v3_packet packet;
     otir_tir5v3_frame_stats stats;
-    uint8_t frame[OTIR_TIR5V3_FRAME_HEIGHT][OTIR_TIR5V3_FRAME_WIDTH];
+    uint8_t *frame = calloc(OTIR_TIR5V3_FRAME_HEIGHT * OTIR_TIR5V3_FRAME_WIDTH, sizeof(*frame));
+
+    assert(frame != NULL);
 
     memset(&packet, 0, sizeof(packet));
     packet.packet_type = 0x05;
@@ -500,11 +503,11 @@ static void test_build_frame_marks_stripes_and_stats(void) {
     packet.stripes[0] = (otir_tir5v3_stripe){.hstart = 2, .hstop = 4, .vline = 1, .points = 3, .sum_x = 3, .sum = 300};
     packet.stripes[1] = (otir_tir5v3_stripe){.hstart = 10, .hstop = 11, .vline = 3, .points = 2, .sum_x = 1, .sum = 200};
 
-    otir_tir5v3_build_frame(&packet, &frame[0][0], OTIR_TIR5V3_FRAME_WIDTH);
-    assert(frame[1][2] == 100);
-    assert(frame[1][3] == 100);
-    assert(frame[1][4] == 100);
-    assert(frame[0][0] == 0);
+    otir_tir5v3_build_frame(&packet, frame, OTIR_TIR5V3_FRAME_WIDTH);
+    assert(frame[(1 * OTIR_TIR5V3_FRAME_WIDTH) + 2] == 100);
+    assert(frame[(1 * OTIR_TIR5V3_FRAME_WIDTH) + 3] == 100);
+    assert(frame[(1 * OTIR_TIR5V3_FRAME_WIDTH) + 4] == 100);
+    assert(frame[0] == 0);
 
     otir_tir5v3_packet_stats(&packet, 7, &stats);
     assert(stats.frame_index == 7);
@@ -516,6 +519,8 @@ static void test_build_frame_marks_stripes_and_stats(void) {
     assert(stats.selected_blob_area_points == 0);
     assert(stats.selected_blob_brightness_sum == 0);
     assert(stats.centroid_mode == OTIR_TIR5V3_CENTROID_MODE_NONE);
+
+    free(frame);
 }
 
 static void test_should_publish_frame_respects_maximum_rate(void) {

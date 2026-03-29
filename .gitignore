@@ -1,6 +1,7 @@
 **/.DS_Store
 tmp/
 build/
+build-windows-native-check/
 c/build/
 cpp/build/
 **/.venv/
@@ -16,6 +17,7 @@ DerivedData/
 # Visual Studio Windows
 
 .dotnet-cli/ 
+.dotnet-home/
 
 # User-specific IDE files
 *.user

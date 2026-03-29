@@ -1,10 +1,14 @@
 #include "opentrackir/tir5_session.h"
 
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
 #include <time.h>
+#endif
 
 #define OTIR_TRACKIR_SESSION_MAX_PREVIEW_FRAMES_PER_SECOND 30.0
 #define OTIR_TRACKIR_SESSION_LOW_POWER_FRAMES_PER_SECOND 2.0
@@ -17,9 +21,64 @@ typedef struct trackir_session_runtime_config {
     bool low_power_mode_enabled;
 } trackir_session_runtime_config;
 
+#ifdef _WIN32
+typedef CRITICAL_SECTION otir_mutex;
+typedef HANDLE otir_thread;
+#define OTIR_THREAD_RESULT DWORD
+#define OTIR_THREAD_CALL WINAPI
+#define OTIR_THREAD_RETURN 0
+typedef OTIR_THREAD_RESULT (OTIR_THREAD_CALL *otir_thread_entry)(void *);
+static int otir_mutex_init(otir_mutex *mutex) {
+    InitializeCriticalSection(mutex);
+    return 0;
+}
+static void otir_mutex_destroy(otir_mutex *mutex) {
+    DeleteCriticalSection(mutex);
+}
+static void otir_mutex_lock(otir_mutex *mutex) {
+    EnterCriticalSection(mutex);
+}
+static void otir_mutex_unlock(otir_mutex *mutex) {
+    LeaveCriticalSection(mutex);
+}
+static int otir_thread_create(otir_thread *thread, otir_thread_entry entry, void *context) {
+    *thread = CreateThread(NULL, 0, entry, context, 0, NULL);
+    return *thread == NULL ? -1 : 0;
+}
+static void otir_thread_join(otir_thread thread) {
+    WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread);
+}
+#else
+typedef pthread_mutex_t otir_mutex;
+typedef pthread_t otir_thread;
+#define OTIR_THREAD_RESULT void *
+#define OTIR_THREAD_CALL
+#define OTIR_THREAD_RETURN NULL
+typedef OTIR_THREAD_RESULT (*otir_thread_entry)(void *);
+static int otir_mutex_init(otir_mutex *mutex) {
+    return pthread_mutex_init(mutex, NULL);
+}
+static void otir_mutex_destroy(otir_mutex *mutex) {
+    pthread_mutex_destroy(mutex);
+}
+static void otir_mutex_lock(otir_mutex *mutex) {
+    pthread_mutex_lock(mutex);
+}
+static void otir_mutex_unlock(otir_mutex *mutex) {
+    pthread_mutex_unlock(mutex);
+}
+static int otir_thread_create(otir_thread *thread, otir_thread_entry entry, void *context) {
+    return pthread_create(thread, NULL, entry, context);
+}
+static void otir_thread_join(otir_thread thread) {
+    pthread_join(thread, NULL);
+}
+#endif
+
 struct otir_trackir_session {
-    pthread_mutex_t mutex;
-    pthread_t worker;
+    otir_mutex mutex;
+    otir_thread worker;
     bool worker_started;
     bool worker_exited;
     bool stop_requested;
@@ -32,7 +91,7 @@ struct otir_trackir_session {
     uint8_t preview_frame[OTIR_TRACKIR_SESSION_FRAME_BYTES];
 };
 
-static void *trackir_session_worker_main(void *context);
+static OTIR_THREAD_RESULT OTIR_THREAD_CALL trackir_session_worker_main(void *context);
 static void trackir_session_reset_snapshot_locked(otir_trackir_session *session);
 static void trackir_session_clear_preview_locked(otir_trackir_session *session);
 static void trackir_session_set_error_locked(otir_trackir_session *session, const char *message);
@@ -61,12 +120,12 @@ otir_trackir_session *otir_trackir_session_create(void) {
     if (session == NULL) {
         return NULL;
     }
-    if (pthread_mutex_init(&session->mutex, NULL) != 0) {
+    if (otir_mutex_init(&session->mutex) != 0) {
         free(session);
         return NULL;
     }
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     session->video_enabled = true;
     session->maximum_tracking_frames_per_second =
         otir_tir5v3_normalize_maximum_frames_per_second(0.0);
@@ -75,7 +134,7 @@ otir_trackir_session *otir_trackir_session_create(void) {
     session->centroid_mode = otir_tir5v3_default_blob_tracking_config().centroid_mode;
     session->low_power_mode_enabled = false;
     trackir_session_reset_snapshot_locked(session);
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
     return session;
 }
 
@@ -85,7 +144,7 @@ void otir_trackir_session_destroy(otir_trackir_session *session) {
     }
 
     otir_trackir_session_stop(session, true);
-    pthread_mutex_destroy(&session->mutex);
+    otir_mutex_destroy(&session->mutex);
     free(session);
 }
 
@@ -96,10 +155,10 @@ otir_status otir_trackir_session_start(otir_trackir_session *session) {
 
     trackir_session_join_worker_if_exited(session);
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
 
     if (session->worker_started) {
-        pthread_mutex_unlock(&session->mutex);
+        otir_mutex_unlock(&session->mutex);
         return OTIR_STATUS_OK;
     }
 
@@ -108,14 +167,14 @@ otir_status otir_trackir_session_start(otir_trackir_session *session) {
     session->stop_requested = false;
     session->worker_exited = false;
 
-    if (pthread_create(&session->worker, NULL, trackir_session_worker_main, session) != 0) {
+    if (otir_thread_create(&session->worker, trackir_session_worker_main, session) != 0) {
         trackir_session_set_failure_locked(session, OTIR_STATUS_IO, "Start session");
-        pthread_mutex_unlock(&session->mutex);
+        otir_mutex_unlock(&session->mutex);
         return OTIR_STATUS_IO;
     }
 
     session->worker_started = true;
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
     return OTIR_STATUS_OK;
 }
 
@@ -124,35 +183,35 @@ void otir_trackir_session_stop(otir_trackir_session *session, bool wait_for_shut
         return;
     }
 
-    pthread_t worker = (pthread_t){0};
+    otir_thread worker = 0;
     bool should_join = false;
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     if (session->worker_started) {
         session->stop_requested = true;
         worker = session->worker;
         should_join = wait_for_shutdown;
     }
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
 
     if (should_join) {
-        pthread_join(worker, NULL);
+        otir_thread_join(worker);
 
-        pthread_mutex_lock(&session->mutex);
+        otir_mutex_lock(&session->mutex);
         session->worker_started = false;
         session->worker_exited = false;
         trackir_session_reset_snapshot_locked(session);
-        pthread_mutex_unlock(&session->mutex);
+        otir_mutex_unlock(&session->mutex);
         return;
     }
 
     trackir_session_join_worker_if_exited(session);
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     if (!session->worker_started) {
         trackir_session_reset_snapshot_locked(session);
     }
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
 }
 
 void otir_trackir_session_set_video_enabled(otir_trackir_session *session, bool enabled) {
@@ -160,12 +219,12 @@ void otir_trackir_session_set_video_enabled(otir_trackir_session *session, bool 
         return;
     }
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     session->video_enabled = enabled;
     if (!enabled) {
         trackir_session_clear_preview_locked(session);
     }
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
 }
 
 void otir_trackir_session_set_maximum_tracking_frames_per_second(
@@ -176,10 +235,10 @@ void otir_trackir_session_set_maximum_tracking_frames_per_second(
         return;
     }
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     session->maximum_tracking_frames_per_second =
         otir_tir5v3_normalize_maximum_frames_per_second(maximum_frames_per_second);
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
 }
 
 void otir_trackir_session_set_minimum_blob_area_points(
@@ -190,10 +249,10 @@ void otir_trackir_session_set_minimum_blob_area_points(
         return;
     }
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     session->minimum_blob_area_points =
         otir_tir5v3_normalize_minimum_blob_area_points(minimum_blob_area_points);
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
 }
 
 void otir_trackir_session_set_scaled_hull_enabled(
@@ -216,13 +275,13 @@ void otir_trackir_session_set_centroid_mode(
         return;
     }
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     if (mode < OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB ||
         mode > OTIR_TIR5V3_CENTROID_MODE_REGULARIZED_BINARY) {
         mode = OTIR_TIR5V3_CENTROID_MODE_RAW_BLOB;
     }
     session->centroid_mode = mode;
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
 }
 
 void otir_trackir_session_set_low_power_mode_enabled(
@@ -233,10 +292,10 @@ void otir_trackir_session_set_low_power_mode_enabled(
         return;
     }
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     session->low_power_mode_enabled = enabled;
     session->snapshot.is_low_power_mode = enabled;
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
 }
 
 otir_trackir_session_processing_mode otir_trackir_session_select_processing_mode(
@@ -293,9 +352,9 @@ void otir_trackir_session_copy_snapshot(
 
     trackir_session_join_worker_if_exited(session);
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     memcpy(out_snapshot, &session->snapshot, sizeof(*out_snapshot));
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
 }
 
 bool otir_trackir_session_copy_preview_frame(
@@ -308,9 +367,9 @@ bool otir_trackir_session_copy_preview_frame(
         return false;
     }
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     if (!session->snapshot.has_preview_frame) {
-        pthread_mutex_unlock(&session->mutex);
+        otir_mutex_unlock(&session->mutex);
         return false;
     }
 
@@ -318,11 +377,11 @@ bool otir_trackir_session_copy_preview_frame(
     if (out_generation != NULL) {
         *out_generation = session->snapshot.preview_frame_generation;
     }
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
     return true;
 }
 
-static void *trackir_session_worker_main(void *context) {
+static OTIR_THREAD_RESULT OTIR_THREAD_CALL trackir_session_worker_main(void *context) {
     otir_trackir_session *session = context;
     otir_tir5v3_device *device = NULL;
     void *blob_workspace = malloc(otir_tir5v3_blob_workspace_bytes());
@@ -345,31 +404,31 @@ static void *trackir_session_worker_main(void *context) {
     uint8_t *frame_buffer = malloc(OTIR_TRACKIR_SESSION_FRAME_BYTES);
 
     if (blob_workspace == NULL || packet == NULL || frame_buffer == NULL) {
-        pthread_mutex_lock(&session->mutex);
+        otir_mutex_lock(&session->mutex);
         trackir_session_set_failure_locked(session, OTIR_STATUS_IO, "Allocate buffers");
         session->worker_exited = true;
-        pthread_mutex_unlock(&session->mutex);
+        otir_mutex_unlock(&session->mutex);
         free(blob_workspace);
         free(packet);
         free(frame_buffer);
-        return NULL;
+        return OTIR_THREAD_RETURN;
     }
 
     status = otir_tir5v3_open(&device);
     if (status != OTIR_STATUS_OK || device == NULL) {
-        pthread_mutex_lock(&session->mutex);
+        otir_mutex_lock(&session->mutex);
         trackir_session_set_failure_locked(session, status, "Open");
         session->worker_exited = true;
-        pthread_mutex_unlock(&session->mutex);
+        otir_mutex_unlock(&session->mutex);
         free(blob_workspace);
         free(packet);
         free(frame_buffer);
-        return NULL;
+        return OTIR_THREAD_RETURN;
     }
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     session->snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_STARTING;
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
 
     do {
         otir_tir5v3_status init_statuses[OTIR_TIR5V3_INIT_STATUS_COUNT];
@@ -390,11 +449,11 @@ static void *trackir_session_worker_main(void *context) {
             break;
         }
 
-        pthread_mutex_lock(&session->mutex);
+        otir_mutex_lock(&session->mutex);
         session->snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_STREAMING;
         session->snapshot.status = OTIR_STATUS_OK;
         session->snapshot.has_error_message = false;
-        pthread_mutex_unlock(&session->mutex);
+        otir_mutex_unlock(&session->mutex);
 
         while (!trackir_session_stop_requested(session)) {
             otir_tir5v3_blob_result blob_result;
@@ -501,7 +560,7 @@ static void *trackir_session_worker_main(void *context) {
                     }
                 }
 
-                pthread_mutex_lock(&session->mutex);
+                otir_mutex_lock(&session->mutex);
                 session->snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_STREAMING;
                 session->snapshot.status = OTIR_STATUS_OK;
                 session->snapshot.frame_index = frame_index;
@@ -514,12 +573,12 @@ static void *trackir_session_worker_main(void *context) {
                 session->snapshot.packet_type = packet->packet_type;
                 session->snapshot.is_low_power_mode =
                     processing_mode == OTIR_TRACKIR_SESSION_PROCESSING_MODE_LOW_POWER;
-                pthread_mutex_unlock(&session->mutex);
+                otir_mutex_unlock(&session->mutex);
 
                 last_tracking_process_time = now;
                 has_tracking_process_time = true;
             } else {
-                pthread_mutex_lock(&session->mutex);
+                otir_mutex_lock(&session->mutex);
                 session->snapshot.phase = OTIR_TRACKIR_SESSION_PHASE_STREAMING;
                 session->snapshot.status = OTIR_STATUS_OK;
                 session->snapshot.has_frame_rate = source_rate_sample.has_frame_rate;
@@ -527,7 +586,7 @@ static void *trackir_session_worker_main(void *context) {
                 session->snapshot.has_packet_type = true;
                 session->snapshot.packet_type = packet->packet_type;
                 session->snapshot.is_low_power_mode = false;
-                pthread_mutex_unlock(&session->mutex);
+                otir_mutex_unlock(&session->mutex);
             }
 
             if (!should_publish_preview) {
@@ -536,13 +595,13 @@ static void *trackir_session_worker_main(void *context) {
 
             otir_tir5v3_build_frame(packet, frame_buffer, OTIR_TIR5V3_FRAME_WIDTH);
 
-            pthread_mutex_lock(&session->mutex);
+            otir_mutex_lock(&session->mutex);
             memcpy(session->preview_frame, frame_buffer, OTIR_TRACKIR_SESSION_FRAME_BYTES);
             session->snapshot.has_preview_frame = true;
             session->snapshot.preview_width = OTIR_TIR5V3_FRAME_WIDTH;
             session->snapshot.preview_height = OTIR_TIR5V3_FRAME_HEIGHT;
             session->snapshot.preview_frame_generation += 1;
-            pthread_mutex_unlock(&session->mutex);
+            otir_mutex_unlock(&session->mutex);
 
             last_preview_publish_time = now;
             has_preview_publish_time = true;
@@ -550,9 +609,9 @@ static void *trackir_session_worker_main(void *context) {
     } while (0);
 
     if (status != OTIR_STATUS_OK && !trackir_session_stop_requested(session)) {
-        pthread_mutex_lock(&session->mutex);
+        otir_mutex_lock(&session->mutex);
         trackir_session_set_failure_locked(session, status, "TrackIR");
-        pthread_mutex_unlock(&session->mutex);
+        otir_mutex_unlock(&session->mutex);
     }
 
     (void)otir_tir5v3_stop_streaming(device);
@@ -561,13 +620,13 @@ static void *trackir_session_worker_main(void *context) {
     free(packet);
     free(frame_buffer);
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     if (session->stop_requested) {
         trackir_session_reset_snapshot_locked(session);
     }
     session->worker_exited = true;
-    pthread_mutex_unlock(&session->mutex);
-    return NULL;
+    otir_mutex_unlock(&session->mutex);
+    return OTIR_THREAD_RETURN;
 }
 
 static void trackir_session_reset_snapshot_locked(otir_trackir_session *session) {
@@ -615,35 +674,35 @@ static void trackir_session_set_failure_locked(
 }
 
 static void trackir_session_join_worker_if_exited(otir_trackir_session *session) {
-    pthread_t worker = (pthread_t){0};
+    otir_thread worker = 0;
     bool should_join = false;
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     if (session->worker_started && session->worker_exited) {
         worker = session->worker;
         should_join = true;
     }
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
 
     if (!should_join) {
         return;
     }
 
-    pthread_join(worker, NULL);
+    otir_thread_join(worker);
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     session->worker_started = false;
     session->worker_exited = false;
     session->stop_requested = false;
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
 }
 
 static bool trackir_session_stop_requested(otir_trackir_session *session) {
     bool stop_requested;
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     stop_requested = session->stop_requested;
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
     return stop_requested;
 }
 
@@ -652,14 +711,14 @@ static trackir_session_runtime_config trackir_session_runtime_config_snapshot(
 ) {
     trackir_session_runtime_config runtime_config;
 
-    pthread_mutex_lock(&session->mutex);
+    otir_mutex_lock(&session->mutex);
     runtime_config.video_enabled = session->video_enabled;
     runtime_config.maximum_tracking_frames_per_second =
         session->maximum_tracking_frames_per_second;
     runtime_config.minimum_blob_area_points = session->minimum_blob_area_points;
     runtime_config.centroid_mode = session->centroid_mode;
     runtime_config.low_power_mode_enabled = session->low_power_mode_enabled;
-    pthread_mutex_unlock(&session->mutex);
+    otir_mutex_unlock(&session->mutex);
     return runtime_config;
 }
 
@@ -706,6 +765,19 @@ static void trackir_session_format_failure_message(
 }
 
 static double trackir_session_now_seconds(void) {
+#ifdef _WIN32
+    static LARGE_INTEGER frequency;
+    LARGE_INTEGER counter;
+
+    if (frequency.QuadPart == 0) {
+        QueryPerformanceFrequency(&frequency);
+    }
+    if (!QueryPerformanceCounter(&counter) || frequency.QuadPart == 0) {
+        return 0.0;
+    }
+
+    return (double)counter.QuadPart / (double)frequency.QuadPart;
+#else
     struct timespec time_spec;
 
     if (clock_gettime(CLOCK_MONOTONIC, &time_spec) != 0) {
@@ -713,4 +785,5 @@ static double trackir_session_now_seconds(void) {
     }
 
     return (double)time_spec.tv_sec + ((double)time_spec.tv_nsec / 1000000000.0);
+#endif
 }

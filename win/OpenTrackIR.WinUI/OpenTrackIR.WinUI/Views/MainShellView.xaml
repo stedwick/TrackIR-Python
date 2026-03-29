@@ -100,14 +100,19 @@
                             <Viewbox Width="320" Height="240" HorizontalAlignment="Center" Stretch="Uniform">
                                 <Border Width="640" Height="480" Padding="16" Background="{ThemeResource PreviewCardBrush}" BorderBrush="{ThemeResource CardBorderBrush}" BorderThickness="1" CornerRadius="24">
                                     <Grid>
-                                        <TextBlock Foreground="{ThemeResource PreviewPrimaryTextBrush}" FontSize="16" FontWeight="SemiBold" Text="Mock TrackIR Preview" />
-                                        <Canvas Margin="0,40,0,0">
-                                            <Rectangle Width="608" Height="408" RadiusX="18" RadiusY="18" Fill="{ThemeResource PreviewSurfaceBrush}" />
-                                            <Line X1="0" Y1="204" X2="608" Y2="204" Stroke="{ThemeResource PreviewGridBrush}" StrokeThickness="1" />
-                                            <Line X1="304" Y1="0" X2="304" Y2="408" Stroke="{ThemeResource PreviewGridBrush}" StrokeThickness="1" />
-                                            <Ellipse Width="20" Height="20" Canvas.Left="{x:Bind ViewModel.PreviewMarkerLeft, Mode=OneWay}" Canvas.Top="{x:Bind ViewModel.PreviewMarkerTop, Mode=OneWay}" Fill="#FFFF6B6B" Stroke="White" StrokeThickness="2" Visibility="{x:Bind ViewModel.PreviewMarkerVisibility, Mode=OneWay}" />
-                                            <TextBlock Canvas.Left="24" Canvas.Top="24" Foreground="{ThemeResource PreviewSecondaryTextBrush}" FontSize="22" FontWeight="SemiBold" Text="640 x 480 placeholder surface" />
-                                        </Canvas>
+                                        <TextBlock Foreground="{ThemeResource PreviewPrimaryTextBrush}" FontSize="16" FontWeight="SemiBold" Text="TrackIR Preview" />
+                                        <Grid Margin="0,40,0,0">
+                                            <Border Width="608" Height="408" Background="{ThemeResource PreviewSurfaceBrush}" CornerRadius="18" />
+                                            <Image Width="608" Height="408" Source="{x:Bind ViewModel.PreviewImageSource, Mode=OneWay}" Stretch="Fill" Visibility="{x:Bind ViewModel.PreviewImageVisibility, Mode=OneWay}" />
+                                            <Canvas Width="608" Height="408" Visibility="{x:Bind ViewModel.PreviewImageVisibility, Mode=OneWay}">
+                                                <Ellipse Width="20" Height="20" Canvas.Left="{x:Bind ViewModel.PreviewMarkerLeft, Mode=OneWay}" Canvas.Top="{x:Bind ViewModel.PreviewMarkerTop, Mode=OneWay}" Fill="#FFFF6B6B" Stroke="White" StrokeThickness="2" Visibility="{x:Bind ViewModel.PreviewMarkerVisibility, Mode=OneWay}" />
+                                            </Canvas>
+                                            <Canvas Width="608" Height="408" Visibility="{x:Bind ViewModel.PreviewPlaceholderVisibility, Mode=OneWay}">
+                                                <Line X1="0" Y1="204" X2="608" Y2="204" Stroke="{ThemeResource PreviewGridBrush}" StrokeThickness="1" />
+                                                <Line X1="304" Y1="0" X2="304" Y2="408" Stroke="{ThemeResource PreviewGridBrush}" StrokeThickness="1" />
+                                                <TextBlock Canvas.Left="24" Canvas.Top="24" Foreground="{ThemeResource PreviewSecondaryTextBrush}" FontSize="22" FontWeight="SemiBold" Text="Waiting for TrackIR preview" />
+                                            </Canvas>
+                                        </Grid>
                                         <TextBlock HorizontalAlignment="Right" Foreground="{ThemeResource PreviewSecondaryTextBrush}" Text="{x:Bind ViewModel.PacketTypeLabel, Mode=OneWay}" />
                                     </Grid>
                                 </Border>
