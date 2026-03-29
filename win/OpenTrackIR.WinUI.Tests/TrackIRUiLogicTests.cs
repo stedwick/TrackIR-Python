@@ -111,6 +111,8 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.Equal("3", TrackIRUiLogic.MouseSmoothingValueLabel(3.4));
             Assert.Equal("0.04", TrackIRUiLogic.MouseDeadzoneValueLabel(0.04));
             Assert.Equal("270°", TrackIRUiLogic.VideoRotationValueLabel(-90));
+            Assert.Equal(-1.0, TrackIRUiLogic.PreviewAxisScale(isFlipped: true));
+            Assert.Equal(1.0, TrackIRUiLogic.PreviewAxisScale(isFlipped: false));
             Assert.Equal("No Pedal", TrackIRUiLogic.XKeysIndicatorLabel(XKeysIndicatorState.NotDetected));
             Assert.Equal("#FFB020", TrackIRUiLogic.XKeysIndicatorColorHex(XKeysIndicatorState.NotDetected));
             Assert.Equal("Visible", TrackIRUiLogic.ToggleStateLabel(true, "Visible", "Hidden"));
@@ -184,6 +186,25 @@ namespace OpenTrackIR.WinUI.Tests
         {
             Assert.True(TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(isDisposed: false));
             Assert.False(TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(isDisposed: true));
+        }
+
+        [Fact]
+        public void TrackIRRuntimeLogic_schedules_timeout_and_disables_runtime_controls_on_expiry()
+        {
+            TrackIRControlState defaults = TrackIRUiLogic.CreateDefaultControlState();
+
+            Assert.True(TrackIRRuntimeLogic.ShouldScheduleTimeout(defaults));
+            Assert.False(
+                TrackIRRuntimeLogic.ShouldScheduleTimeout(
+                    defaults with { IsTimeoutEnabled = false }
+                )
+            );
+
+            TrackIRControlState timedOut = TrackIRRuntimeLogic.TimedOutControlState(defaults);
+
+            Assert.False(timedOut.IsTrackIREnabled);
+            Assert.False(timedOut.IsVideoEnabled);
+            Assert.False(timedOut.IsMouseMovementEnabled);
         }
 
         [Fact]

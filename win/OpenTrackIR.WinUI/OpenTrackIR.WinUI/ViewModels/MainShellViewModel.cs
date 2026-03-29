@@ -23,6 +23,7 @@ namespace OpenTrackIR.WinUI.ViewModels
         private bool _isAdvancedExpanded;
         private bool _showDetectedBlobCenter = true;
         private bool _isDisposed;
+        private CancellationTokenSource? _timeoutCancellationSource;
 
         public MainShellViewModel()
             : this(new LocalSettingsStore(), new NativeTrackIRRuntimeController(), AppServices.TrayService)
@@ -265,6 +266,12 @@ namespace OpenTrackIR.WinUI.ViewModels
         public Visibility TimeoutDurationVisibility =>
             IsTimeoutEnabled ? Visibility.Visible : Visibility.Collapsed;
 
+        public double PreviewScaleX => TrackIRUiLogic.PreviewAxisScale(IsVideoFlipHorizontalEnabled);
+
+        public double PreviewScaleY => TrackIRUiLogic.PreviewAxisScale(IsVideoFlipVerticalEnabled);
+
+        public double PreviewRotationDegrees => TrackIRUiLogic.NormalizeRotationDegrees(VideoRotationDegrees);
+
         public double PreviewMarkerLeft =>
             Math.Clamp((_snapshot.CentroidX ?? 0) - 10, 0, TrackIRUiLogic.FrameWidth - 20);
 
@@ -286,6 +293,9 @@ namespace OpenTrackIR.WinUI.ViewModels
             _isDisposed = true;
             _runtimeController.SnapshotChanged -= OnRuntimeSnapshotChanged;
             _runtimeController.PreviewFrameChanged -= OnRuntimePreviewFrameChanged;
+            _timeoutCancellationSource?.Cancel();
+            _timeoutCancellationSource?.Dispose();
+            _timeoutCancellationSource = null;
             if (_runtimeController is IDisposable disposableRuntimeController)
             {
                 disposableRuntimeController.Dispose();
@@ -313,6 +323,7 @@ namespace OpenTrackIR.WinUI.ViewModels
 
             _trayService.UpdateState(_controlState.IsTrackIREnabled, _controlState.IsMouseMovementEnabled);
             _runtimeController.UpdateControlState(_controlState);
+            SyncTimeoutTask();
             OnControlStateChanged();
         }
 
@@ -386,6 +397,9 @@ namespace OpenTrackIR.WinUI.ViewModels
             OnPropertyChanged(nameof(VideoRotationDegrees));
             OnPropertyChanged(nameof(VideoFramesPerSecond));
             OnPropertyChanged(nameof(MouseToggleHotkeyText));
+            OnPropertyChanged(nameof(PreviewScaleX));
+            OnPropertyChanged(nameof(PreviewScaleY));
+            OnPropertyChanged(nameof(PreviewRotationDegrees));
             OnPropertyChanged(nameof(TrackIRStatusText));
             OnPropertyChanged(nameof(TrackIRStatusValue));
             OnPropertyChanged(nameof(TrackIRStatusBrush));
@@ -421,6 +435,60 @@ namespace OpenTrackIR.WinUI.ViewModels
             OnPropertyChanged(nameof(PreviewMarkerVisibility));
             OnPropertyChanged(nameof(PreviewMarkerLeft));
             OnPropertyChanged(nameof(PreviewMarkerTop));
+        }
+
+        private void SyncTimeoutTask()
+        {
+            _timeoutCancellationSource?.Cancel();
+            _timeoutCancellationSource?.Dispose();
+            _timeoutCancellationSource = null;
+
+            if (!TrackIRRuntimeLogic.ShouldScheduleTimeout(_controlState))
+            {
+                return;
+            }
+
+            CancellationTokenSource cancellationSource = new();
+            _timeoutCancellationSource = cancellationSource;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(_controlState.TimeoutSeconds), cancellationSource.Token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                if (cancellationSource.IsCancellationRequested ||
+                    !TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed)) {
+                    return;
+                }
+
+                if (_dispatcherQueue is null)
+                {
+                    ApplyTimeout();
+                    return;
+                }
+
+                _dispatcherQueue.TryEnqueue(() =>
+                {
+                    if (cancellationSource.IsCancellationRequested ||
+                        !TrackIRRuntimeLogic.ShouldApplyRuntimeUpdate(_isDisposed))
+                    {
+                        return;
+                    }
+
+                    ApplyTimeout();
+                });
+            });
+        }
+
+        private void ApplyTimeout()
+        {
+            UpdateControlState(TrackIRRuntimeLogic.TimedOutControlState(_controlState));
         }
 
         private static SolidColorBrush CreateBrush(string hexColor)

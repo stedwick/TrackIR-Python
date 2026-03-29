@@ -47,6 +47,12 @@ namespace OpenTrackIR.WinUI.Runtime
         [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "otir_trackir_session_set_video_enabled")]
         internal static extern void TrackIRSessionSetVideoEnabled(nint session, [MarshalAs(UnmanagedType.I1)] bool enabled);
 
+        [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "otir_trackir_session_set_minimum_blob_area_points")]
+        internal static extern void TrackIRSessionSetMinimumBlobAreaPoints(nint session, int minimumBlobAreaPoints);
+
+        [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "otir_trackir_session_set_centroid_mode")]
+        internal static extern void TrackIRSessionSetCentroidMode(nint session, int centroidMode);
+
         [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "otir_trackir_session_set_low_power_mode_enabled")]
         internal static extern void TrackIRSessionSetLowPowerModeEnabled(nint session, [MarshalAs(UnmanagedType.I1)] bool enabled);
 

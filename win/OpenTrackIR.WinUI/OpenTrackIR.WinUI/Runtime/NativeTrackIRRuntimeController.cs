@@ -100,6 +100,14 @@ namespace OpenTrackIR.WinUI.Runtime
                     controlState.VideoFramesPerSecond
                 );
                 TrackIRNativeMethods.TrackIRSessionSetVideoEnabled(_session, controlState.IsVideoEnabled);
+                TrackIRNativeMethods.TrackIRSessionSetMinimumBlobAreaPoints(
+                    _session,
+                    controlState.MinimumBlobAreaPoints
+                );
+                TrackIRNativeMethods.TrackIRSessionSetCentroidMode(
+                    _session,
+                    TrackIRRuntimeLogic.RegularizedBinaryCentroidMode
+                );
                 TrackIRNativeMethods.TrackIRSessionSetLowPowerModeEnabled(
                     _session,
                     !_presentationState.IsWindowVisible || !_presentationState.IsAppActive

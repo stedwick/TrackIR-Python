@@ -241,6 +241,11 @@ namespace OpenTrackIR.WinUI.Models
             return isEnabled ? "#31C48D" : "#7A8797";
         }
 
+        public static double PreviewAxisScale(bool isFlipped)
+        {
+            return isFlipped ? -1.0 : 1.0;
+        }
+
         public static DashboardLayoutMode DashboardLayoutForWidth(double width)
         {
             if (width >= 960)

@@ -4,6 +4,7 @@ namespace OpenTrackIR.WinUI.Models
     {
         public const double VisiblePreviewFramesPerSecond = 30.0;
         public const int BackgroundPollIntervalMilliseconds = 250;
+        public const int RegularizedBinaryCentroidMode = 5;
         public const string MissingNativeRuntimeMessage =
             "OpenTrackIR native runtime is unavailable. Build opentrackir.dll and place it next to the app.";
 
@@ -39,6 +40,23 @@ namespace OpenTrackIR.WinUI.Models
         public static bool ShouldApplyRuntimeUpdate(bool isDisposed)
         {
             return !isDisposed;
+        }
+
+        public static bool ShouldScheduleTimeout(TrackIRControlState controlState)
+        {
+            return controlState.IsTrackIREnabled &&
+                controlState.IsTimeoutEnabled &&
+                controlState.TimeoutSeconds > 0;
+        }
+
+        public static TrackIRControlState TimedOutControlState(TrackIRControlState controlState)
+        {
+            return controlState with
+            {
+                IsTrackIREnabled = false,
+                IsVideoEnabled = false,
+                IsMouseMovementEnabled = false,
+            };
         }
 
         public static TrackIRSnapshot MissingNativeRuntimeSnapshot(TrackIRControlState controlState)
