@@ -12,6 +12,7 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.True(state.IsVideoEnabled);
             Assert.True(state.IsTrackIREnabled);
             Assert.True(state.IsMouseMovementEnabled);
+            Assert.False(state.IsWindowsAbsoluteMousePositioningEnabled);
             Assert.Equal(2.0, state.MouseMovementSpeed);
             Assert.Equal(3, state.MouseSmoothing);
             Assert.Equal(0.04, state.MouseDeadzone);
@@ -32,6 +33,7 @@ namespace OpenTrackIR.WinUI.Tests
                 IsVideoEnabled: true,
                 IsTrackIREnabled: true,
                 IsMouseMovementEnabled: true,
+                IsWindowsAbsoluteMousePositioningEnabled: false,
                 MouseMovementSpeed: 0.05,
                 IsXKeysFastMouseEnabled: false,
                 MouseSmoothing: 99,
@@ -156,6 +158,11 @@ namespace OpenTrackIR.WinUI.Tests
         public void TrackIRRuntimeLogic_uses_preview_visibility_and_background_rules()
         {
             TrackIRControlState state = TrackIRUiLogic.CreateDefaultControlState();
+            TrackIRSnapshot activeSnapshot = TrackIRUiLogic.BuildMockSnapshot(
+                state,
+                new TrackIRPresentationState(true, true),
+                1
+            );
 
             Assert.True(
                 TrackIRRuntimeLogic.ShouldPublishPreview(
@@ -216,8 +223,69 @@ namespace OpenTrackIR.WinUI.Tests
             );
             Assert.False(
                 TrackIRRuntimeLogic.ShouldPublishSnapshot(
-                    TrackIRUiLogic.BuildMockSnapshot(state, new TrackIRPresentationState(true, true), 1),
+                    activeSnapshot,
                     TrackIRUiLogic.BuildMockSnapshot(state, new TrackIRPresentationState(true, true), 1)
+                )
+            );
+            Assert.True(
+                TrackIRRuntimeLogic.ShouldReadSnapshot(
+                    state with { IsMouseMovementEnabled = false },
+                    new TrackIRPresentationState(true, true)
+                )
+            );
+            Assert.False(
+                TrackIRRuntimeLogic.ShouldReadSnapshot(
+                    state with { IsMouseMovementEnabled = false },
+                    new TrackIRPresentationState(false, false)
+                )
+            );
+            Assert.True(
+                TrackIRRuntimeLogic.ShouldReadSnapshot(
+                    state with { IsMouseMovementEnabled = true },
+                    new TrackIRPresentationState(false, false)
+                )
+            );
+            Assert.True(
+                TrackIRRuntimeLogic.ShouldPublishTelemetry(
+                    shouldPublishUi: true,
+                    currentSnapshot: activeSnapshot with { FrameIndex = activeSnapshot.FrameIndex + 1 },
+                    lastPublishedSnapshot: activeSnapshot,
+                    elapsedTimeSinceLastPublish: TimeSpan.FromMilliseconds(120),
+                    maximumFramesPerSecond: TrackIRRuntimeLogic.VisibleTelemetryFramesPerSecond
+                )
+            );
+            Assert.False(
+                TrackIRRuntimeLogic.ShouldPublishTelemetry(
+                    shouldPublishUi: true,
+                    currentSnapshot: activeSnapshot with { FrameIndex = activeSnapshot.FrameIndex + 1 },
+                    lastPublishedSnapshot: activeSnapshot,
+                    elapsedTimeSinceLastPublish: TimeSpan.FromMilliseconds(50),
+                    maximumFramesPerSecond: TrackIRRuntimeLogic.VisibleTelemetryFramesPerSecond
+                )
+            );
+            Assert.True(
+                TrackIRRuntimeLogic.ShouldPublishTelemetry(
+                    shouldPublishUi: true,
+                    currentSnapshot: activeSnapshot with { Phase = TrackIRRuntimePhase.Failed },
+                    lastPublishedSnapshot: activeSnapshot,
+                    elapsedTimeSinceLastPublish: TimeSpan.Zero,
+                    maximumFramesPerSecond: TrackIRRuntimeLogic.VisibleTelemetryFramesPerSecond
+                )
+            );
+            Assert.Equal(
+                new TrackIRPresentationState(false, false),
+                TrackIRRuntimeLogic.PresentationState(
+                    isWindowVisible: true,
+                    isWindowMinimized: true,
+                    isWindowFocused: true
+                )
+            );
+            Assert.Equal(
+                new TrackIRPresentationState(true, false),
+                TrackIRRuntimeLogic.PresentationState(
+                    isWindowVisible: true,
+                    isWindowMinimized: false,
+                    isWindowFocused: false
                 )
             );
         }
@@ -248,6 +316,18 @@ namespace OpenTrackIR.WinUI.Tests
                     defaults with { IsMouseMovementEnabled = true, KeepAwakeSeconds = 5 },
                     TimeSpan.FromSeconds(10)
                 )
+            );
+            Assert.Equal(
+                new KeepAwakeNudge(TrackIRMouseRuntimeLogic.KeepAwakeNudgePixels, 0),
+                TrackIRMouseRuntimeLogic.KeepAwakeNudgeForIndex(0)
+            );
+            Assert.Equal(
+                new KeepAwakeNudge(0, -TrackIRMouseRuntimeLogic.KeepAwakeNudgePixels),
+                TrackIRMouseRuntimeLogic.KeepAwakeNudgeForIndex(3)
+            );
+            Assert.Equal(
+                new AbsoluteCursorTarget(104, 193),
+                TrackIRMouseRuntimeLogic.AbsoluteCursorTargetForDelta(100, 200, 4, -7)
             );
 
             RelativeMouseDispatch dispatch = TrackIRMouseRuntimeLogic.ConsumeRelativeDelta(1.75, -0.4);

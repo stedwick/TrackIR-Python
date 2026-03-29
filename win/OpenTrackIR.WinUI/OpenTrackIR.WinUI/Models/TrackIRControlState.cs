@@ -4,6 +4,7 @@ namespace OpenTrackIR.WinUI.Models
         bool IsVideoEnabled,
         bool IsTrackIREnabled,
         bool IsMouseMovementEnabled,
+        bool IsWindowsAbsoluteMousePositioningEnabled,
         double MouseMovementSpeed,
         bool IsXKeysFastMouseEnabled,
         int MouseSmoothing,

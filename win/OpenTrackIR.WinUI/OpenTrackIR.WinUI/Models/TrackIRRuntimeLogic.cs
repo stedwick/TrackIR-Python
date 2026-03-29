@@ -3,6 +3,7 @@ namespace OpenTrackIR.WinUI.Models
     public static class TrackIRRuntimeLogic
     {
         public const double VisiblePreviewFramesPerSecond = 30.0;
+        public const double VisibleTelemetryFramesPerSecond = 10.0;
         public const int BackgroundPollIntervalMilliseconds = 250;
         public const int RegularizedBinaryCentroidMode = 5;
         public const string MissingNativeRuntimeMessage =
@@ -59,6 +60,26 @@ namespace OpenTrackIR.WinUI.Models
             return !isDisposed;
         }
 
+        public static bool ShouldReadSnapshot(
+            TrackIRControlState controlState,
+            TrackIRPresentationState presentationState
+        )
+        {
+            return presentationState.IsAppActive || controlState.IsMouseMovementEnabled;
+        }
+
+        public static TrackIRPresentationState PresentationState(
+            bool isWindowVisible,
+            bool isWindowMinimized,
+            bool isWindowFocused
+        )
+        {
+            return new TrackIRPresentationState(
+                IsWindowVisible: isWindowVisible && !isWindowMinimized,
+                IsAppActive: isWindowVisible && !isWindowMinimized && isWindowFocused
+            );
+        }
+
         public static bool ShouldQueuePreviewApply(bool isDisposed, bool isPreviewApplyQueued)
         {
             return !isDisposed && !isPreviewApplyQueued;
@@ -67,6 +88,39 @@ namespace OpenTrackIR.WinUI.Models
         public static bool ShouldPublishSnapshot(TrackIRSnapshot previousSnapshot, TrackIRSnapshot nextSnapshot)
         {
             return previousSnapshot != nextSnapshot;
+        }
+
+        public static bool ShouldPublishTelemetry(
+            bool shouldPublishUi,
+            TrackIRSnapshot currentSnapshot,
+            TrackIRSnapshot? lastPublishedSnapshot,
+            TimeSpan? elapsedTimeSinceLastPublish,
+            double maximumFramesPerSecond
+        )
+        {
+            if (!shouldPublishUi)
+            {
+                return false;
+            }
+
+            if (lastPublishedSnapshot?.Phase != currentSnapshot.Phase ||
+                lastPublishedSnapshot?.ErrorDescription != currentSnapshot.ErrorDescription)
+            {
+                return true;
+            }
+
+            if (maximumFramesPerSecond <= 0)
+            {
+                return true;
+            }
+
+            if (!elapsedTimeSinceLastPublish.HasValue)
+            {
+                return true;
+            }
+
+            return elapsedTimeSinceLastPublish.Value >=
+                TimeSpan.FromSeconds(1.0 / maximumFramesPerSecond);
         }
 
         public static bool ShouldScheduleTimeout(TrackIRControlState controlState)

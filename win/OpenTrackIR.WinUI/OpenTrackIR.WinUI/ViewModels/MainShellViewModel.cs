@@ -76,6 +76,8 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         public string AdvancedDescription => "Advanced tuning for blob detection, smoothing, keep-awake, and timeout.";
 
+        public string MouseOutputModeDescription => "Use absolute cursor positioning to bypass Windows mouse acceleration. This takes more direct control of the pointer.";
+
         public string HotkeyHelperText => "Click the field and press a shortcut. It stays active while OpenTrackIR is running, even when the window is hidden.";
 
         public string BlobDetectionDescription => "Filter tiny blobs and keep the previous-regularized centroid mode for steadier results.";
@@ -126,6 +128,12 @@ namespace OpenTrackIR.WinUI.ViewModels
         {
             get => _controlState.MouseMovementSpeed;
             set => UpdateControlState(_controlState with { MouseMovementSpeed = value });
+        }
+
+        public bool IsWindowsAbsoluteMousePositioningEnabled
+        {
+            get => _controlState.IsWindowsAbsoluteMousePositioningEnabled;
+            set => UpdateControlState(_controlState with { IsWindowsAbsoluteMousePositioningEnabled = value });
         }
 
         public bool IsXKeysFastMouseEnabled
@@ -467,6 +475,11 @@ namespace OpenTrackIR.WinUI.ViewModels
                 previousControlState.IsMouseMovementEnabled,
                 _controlState.IsMouseMovementEnabled,
                 nameof(IsMouseMovementEnabled)
+            );
+            NotifyIfChanged(
+                previousControlState.IsWindowsAbsoluteMousePositioningEnabled,
+                _controlState.IsWindowsAbsoluteMousePositioningEnabled,
+                nameof(IsWindowsAbsoluteMousePositioningEnabled)
             );
             NotifyIfChanged(
                 previousControlState.MouseMovementSpeed,

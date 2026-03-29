@@ -21,6 +21,8 @@ namespace OpenTrackIR.WinUI.Runtime
         private readonly WindowsMouseBridge _mouseBridge = new();
         private readonly XKeysFootPedalMonitor _xKeysFootPedalMonitor = new();
         private DateTimeOffset _lastMouseMovementTime = DateTimeOffset.UtcNow;
+        private DateTimeOffset? _lastTelemetryPublishTime;
+        private TrackIRSnapshot? _lastPublishedTelemetrySnapshot;
         private byte[] _previewPixels = Array.Empty<byte>();
 
         public TrackIRSnapshot CurrentSnapshot { get; private set; }
@@ -54,6 +56,10 @@ namespace OpenTrackIR.WinUI.Runtime
             }
 
             ApplyPresentationState();
+            PublishSnapshot(CurrentSnapshot with
+            {
+                IsLowPowerMode = TrackIRRuntimeLogic.ShouldEnableLowPowerMode(_controlState, _presentationState),
+            });
             if (!TrackIRRuntimeLogic.ShouldPublishPreview(_controlState, _presentationState, hasPreviewFrame: true))
             {
                 PublishPreviewFrame(null);
@@ -122,6 +128,8 @@ namespace OpenTrackIR.WinUI.Runtime
                 _mouseBridge.Reset();
                 PublishPreviewFrame(null);
                 PublishSnapshot(TrackIRRuntimeLogic.IdleSnapshot(controlState, _presentationState));
+                _lastTelemetryPublishTime = null;
+                _lastPublishedTelemetrySnapshot = null;
                 return;
             }
 
@@ -280,6 +288,8 @@ namespace OpenTrackIR.WinUI.Runtime
             TryNativeCall(() => TrackIRNativeMethods.TrackIRSessionDestroy(_session));
             _session = 0;
             _lastPreviewGeneration = 0;
+            _lastTelemetryPublishTime = null;
+            _lastPublishedTelemetrySnapshot = null;
             lock (_previewSyncRoot)
             {
                 _previewPixels = Array.Empty<byte>();
@@ -306,89 +316,113 @@ namespace OpenTrackIR.WinUI.Runtime
                     xKeysMonitorSnapshot = _xKeysMonitorSnapshot;
                 }
 
-                TrackIRNativeMethods.TrackIRSessionCopySnapshot(_session, out TrackIRNativeMethods.NativeTrackIRSessionSnapshot nativeSnapshot);
-                PublishSnapshot(MapSnapshot(nativeSnapshot));
-
                 double effectiveMouseSpeed = TrackIRMouseRuntimeLogic.EffectiveMouseSpeed(
                     controlState.MouseMovementSpeed,
                     controlState.IsXKeysFastMouseEnabled,
                     xKeysMonitorSnapshot.IsPressed
                 );
-
-                bool didMoveMouse = _mouseBridge.TryApplyTrackingDelta(
-                    nativeSnapshot.HasCentroid != 0,
-                    nativeSnapshot.CentroidX,
-                    nativeSnapshot.CentroidY,
+                DateTimeOffset now = DateTimeOffset.UtcNow;
+                bool didMoveMouse = false;
+                bool shouldReadSnapshot = TrackIRRuntimeLogic.ShouldReadSnapshot(
                     controlState,
-                    effectiveMouseSpeed
+                    presentationState
                 );
+                if (shouldReadSnapshot)
+                {
+                    TrackIRNativeMethods.TrackIRSessionCopySnapshot(
+                        _session,
+                        out TrackIRNativeMethods.NativeTrackIRSessionSnapshot nativeSnapshot
+                    );
+                    TrackIRSnapshot mappedSnapshot = MapSnapshot(nativeSnapshot);
+                    TimeSpan? elapsedSinceLastTelemetryPublish = _lastTelemetryPublishTime.HasValue
+                        ? now - _lastTelemetryPublishTime.Value
+                        : null;
+                    if (TrackIRRuntimeLogic.ShouldPublishTelemetry(
+                        presentationState.IsAppActive,
+                        mappedSnapshot,
+                        _lastPublishedTelemetrySnapshot,
+                        elapsedSinceLastTelemetryPublish,
+                        TrackIRRuntimeLogic.VisibleTelemetryFramesPerSecond
+                    ))
+                    {
+                        PublishSnapshot(mappedSnapshot);
+                        _lastPublishedTelemetrySnapshot = mappedSnapshot;
+                        _lastTelemetryPublishTime = now;
+                    }
+
+                    didMoveMouse = _mouseBridge.TryApplyTrackingDelta(
+                        nativeSnapshot.HasCentroid != 0,
+                        nativeSnapshot.CentroidX,
+                        nativeSnapshot.CentroidY,
+                        controlState,
+                        effectiveMouseSpeed
+                    );
+
+                    bool shouldPublishPreview = TrackIRRuntimeLogic.ShouldPublishPreview(
+                        controlState,
+                        presentationState,
+                        nativeSnapshot.HasPreviewFrame != 0
+                    );
+
+                    if (!shouldPublishPreview)
+                    {
+                        PublishPreviewFrame(null);
+                    }
+                    else if (nativeSnapshot.PreviewFrameGeneration != _lastPreviewGeneration)
+                    {
+                        int frameLength = TrackIRPreviewBitmapLogic.Gray8BufferLength(
+                            nativeSnapshot.PreviewWidth,
+                            nativeSnapshot.PreviewHeight
+                        );
+                        if (frameLength <= 0)
+                        {
+                            PublishPreviewFrame(null);
+                        }
+                        else
+                        {
+                            ulong generation;
+                            lock (_previewSyncRoot)
+                            {
+                                if (_previewPixels.Length != frameLength)
+                                {
+                                    _previewPixels = new byte[frameLength];
+                                }
+
+                                if (!TrackIRNativeMethods.TrackIRSessionCopyPreviewFrame(
+                                    _session,
+                                    _previewPixels,
+                                    (nuint)frameLength,
+                                    out generation
+                                ))
+                                {
+                                    PublishPreviewFrame(null);
+                                    return;
+                                }
+                            }
+
+                            _lastPreviewGeneration = generation;
+                            PublishPreviewFrame(
+                                new TrackIRPreviewFrame(
+                                    Generation: generation,
+                                    Width: nativeSnapshot.PreviewWidth,
+                                    Height: nativeSnapshot.PreviewHeight
+                                )
+                            );
+                        }
+                    }
+                }
+
                 if (didMoveMouse)
                 {
-                    _lastMouseMovementTime = DateTimeOffset.UtcNow;
+                    _lastMouseMovementTime = now;
                 }
                 else if (TrackIRMouseRuntimeLogic.ShouldFireKeepAwake(
                     controlState,
-                    DateTimeOffset.UtcNow - _lastMouseMovementTime
-                ) && _mouseBridge.TryNudge())
+                    now - _lastMouseMovementTime
+                ) && _mouseBridge.TryNudge(controlState))
                 {
-                    _lastMouseMovementTime = DateTimeOffset.UtcNow;
+                    _lastMouseMovementTime = now;
                 }
-
-                bool shouldPublishPreview = TrackIRRuntimeLogic.ShouldPublishPreview(
-                    controlState,
-                    presentationState,
-                    nativeSnapshot.HasPreviewFrame != 0
-                );
-
-                if (!shouldPublishPreview)
-                {
-                    PublishPreviewFrame(null);
-                    return;
-                }
-
-                if (nativeSnapshot.PreviewFrameGeneration == _lastPreviewGeneration)
-                {
-                    return;
-                }
-
-                int frameLength = TrackIRPreviewBitmapLogic.Gray8BufferLength(
-                    nativeSnapshot.PreviewWidth,
-                    nativeSnapshot.PreviewHeight
-                );
-                if (frameLength <= 0)
-                {
-                    PublishPreviewFrame(null);
-                    return;
-                }
-
-                ulong generation;
-                lock (_previewSyncRoot)
-                {
-                    if (_previewPixels.Length != frameLength)
-                    {
-                        _previewPixels = new byte[frameLength];
-                    }
-
-                    if (!TrackIRNativeMethods.TrackIRSessionCopyPreviewFrame(
-                        _session,
-                        _previewPixels,
-                        (nuint)frameLength,
-                        out generation
-                    ))
-                    {
-                        PublishPreviewFrame(null);
-                        return;
-                    }
-                }
-
-                _lastPreviewGeneration = generation;
-                PublishPreviewFrame(
-                    new TrackIRPreviewFrame(
-                        Generation: generation,
-                        Width: nativeSnapshot.PreviewWidth,
-                        Height: nativeSnapshot.PreviewHeight
-                    )
-                );
             }
             catch (DllNotFoundException)
             {

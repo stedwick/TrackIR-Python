@@ -1,5 +1,8 @@
 namespace OpenTrackIR.WinUI.Models
 {
+    public readonly record struct KeepAwakeNudge(int DeltaX, int DeltaY);
+    public readonly record struct AbsoluteCursorTarget(int X, int Y);
+
     public readonly record struct RelativeMouseDispatch(
         int DeltaX,
         int DeltaY,
@@ -9,6 +12,9 @@ namespace OpenTrackIR.WinUI.Models
 
     public static class TrackIRMouseRuntimeLogic
     {
+        public const int KeepAwakeDirectionCount = 4;
+        public const int KeepAwakeNudgePixels = 5;
+
         public static double EffectiveMouseSpeed(
             double baseSpeed,
             bool isXKeysFastMouseEnabled,
@@ -47,6 +53,30 @@ namespace OpenTrackIR.WinUI.Models
                 DeltaY: deltaY,
                 RemainingX: pendingX - deltaX,
                 RemainingY: pendingY - deltaY
+            );
+        }
+
+        public static KeepAwakeNudge KeepAwakeNudgeForIndex(int directionIndex)
+        {
+            return Math.Abs(directionIndex % KeepAwakeDirectionCount) switch
+            {
+                0 => new KeepAwakeNudge(KeepAwakeNudgePixels, 0),
+                1 => new KeepAwakeNudge(-KeepAwakeNudgePixels, 0),
+                2 => new KeepAwakeNudge(0, KeepAwakeNudgePixels),
+                _ => new KeepAwakeNudge(0, -KeepAwakeNudgePixels),
+            };
+        }
+
+        public static AbsoluteCursorTarget AbsoluteCursorTargetForDelta(
+            int currentCursorX,
+            int currentCursorY,
+            int deltaX,
+            int deltaY
+        )
+        {
+            return new AbsoluteCursorTarget(
+                X: currentCursorX + deltaX,
+                Y: currentCursorY + deltaY
             );
         }
     }
