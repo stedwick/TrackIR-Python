@@ -14,7 +14,7 @@ If you want to try the current Windows 11 app, download it from the [releases pa
 
 ![OpenTrackIR macOS demo](screenshots/OpenTrackIR-023-Win-11-Gif.gif)
 
-### Windows 11 USB Drivers setup
+### Windows 11 USB Driver setup
 
 On Windows, we require WinUSB drivers for the TrackIR.
 
