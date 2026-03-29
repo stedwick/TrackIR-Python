@@ -27,6 +27,10 @@ On Windows, we require WinUSB drivers for the TrackIR.
 
 ![Zadig WinUSB driver setup](screenshots/zadig-WinUSB-driver.png)
 
+## Notes on cross-platform development
+
+Philip says: I want this to be cross-platform so I can use macOS, Windows, and Linux, and by golly, I'm going to do it! But it's definitely way too much for a solo developer like me to maintain three codebases for three OSes. In hindsight, it was a mistake. I'd like to look at something like https://avaloniaui.net in the future.
+
 ## Repo outline
 
 The repo is organized by implementation target:
