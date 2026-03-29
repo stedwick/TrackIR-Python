@@ -25,16 +25,33 @@ namespace OpenTrackIR.WinUI.Models
                 hasPreviewFrame;
         }
 
+        public static bool ShouldEnableLowPowerMode(
+            TrackIRControlState controlState,
+            TrackIRPresentationState presentationState
+        )
+        {
+            return (!presentationState.IsWindowVisible || !presentationState.IsAppActive) &&
+                !controlState.IsMouseMovementEnabled;
+        }
+
         public static int PollIntervalMilliseconds(
             TrackIRControlState controlState,
             TrackIRPresentationState presentationState
         )
         {
+            if (controlState.IsTrackIREnabled && controlState.IsMouseMovementEnabled)
+            {
+                double targetFramesPerSecond = controlState.VideoFramesPerSecond > 0.0
+                    ? controlState.VideoFramesPerSecond
+                    : 60.0;
+                return Math.Max(1, (int)Math.Round(1000.0 / targetFramesPerSecond));
+            }
+
             return controlState.IsTrackIREnabled &&
                 controlState.IsVideoEnabled &&
                 presentationState.IsWindowVisible
-                ? (int)Math.Round(1000.0 / VisiblePreviewFramesPerSecond)
-                : BackgroundPollIntervalMilliseconds;
+                    ? (int)Math.Round(1000.0 / VisiblePreviewFramesPerSecond)
+                    : BackgroundPollIntervalMilliseconds;
         }
 
         public static bool ShouldApplyRuntimeUpdate(bool isDisposed)
@@ -83,7 +100,7 @@ namespace OpenTrackIR.WinUI.Models
                     ? XKeysIndicatorState.NotDetected
                     : XKeysIndicatorState.Disabled,
                 HasPreview: false,
-                IsLowPowerMode: !presentationState.IsWindowVisible || !presentationState.IsAppActive
+                IsLowPowerMode: ShouldEnableLowPowerMode(controlState, presentationState)
             );
         }
 
@@ -106,7 +123,7 @@ namespace OpenTrackIR.WinUI.Models
                     ? XKeysIndicatorState.NotDetected
                     : XKeysIndicatorState.Disabled,
                 HasPreview: false,
-                IsLowPowerMode: !presentationState.IsWindowVisible || !presentationState.IsAppActive
+                IsLowPowerMode: ShouldEnableLowPowerMode(controlState, presentationState)
             );
         }
     }

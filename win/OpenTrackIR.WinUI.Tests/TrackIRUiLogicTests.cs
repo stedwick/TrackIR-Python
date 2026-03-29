@@ -32,7 +32,7 @@ namespace OpenTrackIR.WinUI.Tests
                 IsVideoEnabled: true,
                 IsTrackIREnabled: true,
                 IsMouseMovementEnabled: true,
-                MouseMovementSpeed: 9.0,
+                MouseMovementSpeed: 0.05,
                 IsXKeysFastMouseEnabled: false,
                 MouseSmoothing: 99,
                 MouseDeadzone: -1.0,
@@ -51,7 +51,7 @@ namespace OpenTrackIR.WinUI.Tests
 
             TrackIRControlState normalized = TrackIRUiLogic.Normalize(state);
 
-            Assert.Equal(5.0, normalized.MouseMovementSpeed);
+            Assert.Equal(0.1, normalized.MouseMovementSpeed);
             Assert.Equal(10, normalized.MouseSmoothing);
             Assert.Equal(0.0, normalized.MouseDeadzone);
             Assert.Equal(1, normalized.MouseJumpThresholdPixels);
@@ -117,6 +117,8 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.Equal("#FFB020", TrackIRUiLogic.XKeysIndicatorColorHex(XKeysIndicatorState.NotDetected));
             Assert.Equal("Visible", TrackIRUiLogic.ToggleStateLabel(true, "Visible", "Hidden"));
             Assert.Equal("#7A8797", TrackIRUiLogic.ToggleStateColorHex(false));
+            Assert.False(TrackIRUiLogic.ToggledMouseMovementState(true));
+            Assert.True(TrackIRUiLogic.ToggledMouseMovementState(false));
         }
 
         [Fact]
@@ -134,6 +136,10 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.True(HotkeyCaptureLogic.IsModifierKey(16));
             Assert.Equal("A", HotkeyCaptureLogic.KeyTokenForVirtualKey(65));
             Assert.Equal("F7", HotkeyCaptureLogic.KeyTokenForVirtualKey(118));
+            Assert.True(HotkeyCaptureLogic.TryParseHotkeyText("Shift+F7", out RegisteredHotkey parsedHotkey));
+            Assert.True(parsedHotkey.IsShiftPressed);
+            Assert.Equal(118, parsedHotkey.VirtualKeyCode);
+            Assert.False(HotkeyCaptureLogic.TryParseHotkeyText("Shift", out _));
             Assert.Null(HotkeyCaptureLogic.KeyTokenForVirtualKey(17));
         }
 
@@ -168,8 +174,27 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.Equal(
                 33,
                 TrackIRRuntimeLogic.PollIntervalMilliseconds(
-                    state,
+                    state with { IsMouseMovementEnabled = false },
                     new TrackIRPresentationState(true, true)
+                )
+            );
+            Assert.True(
+                TrackIRRuntimeLogic.ShouldEnableLowPowerMode(
+                    state with { IsMouseMovementEnabled = false },
+                    new TrackIRPresentationState(false, true)
+                )
+            );
+            Assert.False(
+                TrackIRRuntimeLogic.ShouldEnableLowPowerMode(
+                    state with { IsMouseMovementEnabled = true },
+                    new TrackIRPresentationState(false, true)
+                )
+            );
+            Assert.Equal(
+                17,
+                TrackIRRuntimeLogic.PollIntervalMilliseconds(
+                    state with { IsMouseMovementEnabled = true, VideoFramesPerSecond = 60.0 },
+                    new TrackIRPresentationState(false, true)
                 )
             );
             Assert.Equal(
@@ -179,6 +204,34 @@ namespace OpenTrackIR.WinUI.Tests
                     new TrackIRPresentationState(true, true)
                 ).Phase
             );
+        }
+
+        [Fact]
+        public void TrackIRMouseRuntimeLogic_computes_backend_speed_keep_awake_and_subpixel_dispatch()
+        {
+            TrackIRControlState defaults = TrackIRUiLogic.CreateDefaultControlState();
+
+            Assert.Equal(20.0, TrackIRMouseRuntimeLogic.MouseBackendSpeed(2.0));
+            Assert.Equal(1.0, TrackIRMouseRuntimeLogic.MouseBackendSpeed(0.05));
+            Assert.True(
+                TrackIRMouseRuntimeLogic.ShouldFireKeepAwake(
+                    defaults with { IsMouseMovementEnabled = false, KeepAwakeSeconds = 5 },
+                    TimeSpan.FromSeconds(5)
+                )
+            );
+            Assert.False(
+                TrackIRMouseRuntimeLogic.ShouldFireKeepAwake(
+                    defaults with { IsMouseMovementEnabled = true, KeepAwakeSeconds = 5 },
+                    TimeSpan.FromSeconds(10)
+                )
+            );
+
+            RelativeMouseDispatch dispatch = TrackIRMouseRuntimeLogic.ConsumeRelativeDelta(1.75, -0.4);
+
+            Assert.Equal(1, dispatch.DeltaX);
+            Assert.Equal(0, dispatch.DeltaY);
+            Assert.Equal(0.75, dispatch.RemainingX, 10);
+            Assert.Equal(-0.4, dispatch.RemainingY, 10);
         }
 
         [Fact]

@@ -12,6 +12,8 @@ namespace OpenTrackIR.WinUI.Runtime
         private nint _session;
         private ulong _lastPreviewGeneration;
         private bool _nativeRuntimeUnavailable;
+        private readonly WindowsMouseBridge _mouseBridge = new();
+        private DateTimeOffset _lastMouseMovementTime = DateTimeOffset.UtcNow;
 
         public TrackIRSnapshot CurrentSnapshot { get; private set; }
         public TrackIRPreviewFrame? CurrentPreviewFrame { get; private set; }
@@ -70,6 +72,7 @@ namespace OpenTrackIR.WinUI.Runtime
             if (!TrackIRRuntimeLogic.ShouldRunSession(controlState))
             {
                 StopSession(waitForShutdown: false);
+                _mouseBridge.Reset();
                 PublishPreviewFrame(null);
                 PublishSnapshot(TrackIRRuntimeLogic.IdleSnapshot(controlState, _presentationState));
                 return;
@@ -110,7 +113,7 @@ namespace OpenTrackIR.WinUI.Runtime
                 );
                 TrackIRNativeMethods.TrackIRSessionSetLowPowerModeEnabled(
                     _session,
-                    !_presentationState.IsWindowVisible || !_presentationState.IsAppActive
+                    TrackIRRuntimeLogic.ShouldEnableLowPowerMode(controlState, _presentationState)
                 );
                 TrackIRNativeMethods.TrackIRSessionStart(_session);
             });
@@ -129,7 +132,7 @@ namespace OpenTrackIR.WinUI.Runtime
             {
                 TrackIRNativeMethods.TrackIRSessionSetLowPowerModeEnabled(
                     _session,
-                    !_presentationState.IsWindowVisible || !_presentationState.IsAppActive
+                    TrackIRRuntimeLogic.ShouldEnableLowPowerMode(_controlState, _presentationState)
                 );
             });
         }
@@ -225,6 +228,7 @@ namespace OpenTrackIR.WinUI.Runtime
             TryNativeCall(() => TrackIRNativeMethods.TrackIRSessionDestroy(_session));
             _session = 0;
             _lastPreviewGeneration = 0;
+            _mouseBridge.Reset();
         }
 
         private void PollOnce()
@@ -236,12 +240,38 @@ namespace OpenTrackIR.WinUI.Runtime
 
             try
             {
+                TrackIRControlState controlState;
+                TrackIRPresentationState presentationState;
+                lock (_syncRoot)
+                {
+                    controlState = _controlState;
+                    presentationState = _presentationState;
+                }
+
                 TrackIRNativeMethods.TrackIRSessionCopySnapshot(_session, out TrackIRNativeMethods.NativeTrackIRSessionSnapshot nativeSnapshot);
                 PublishSnapshot(MapSnapshot(nativeSnapshot));
 
+                bool didMoveMouse = _mouseBridge.TryApplyTrackingDelta(
+                    nativeSnapshot.HasCentroid != 0,
+                    nativeSnapshot.CentroidX,
+                    nativeSnapshot.CentroidY,
+                    controlState
+                );
+                if (didMoveMouse)
+                {
+                    _lastMouseMovementTime = DateTimeOffset.UtcNow;
+                }
+                else if (TrackIRMouseRuntimeLogic.ShouldFireKeepAwake(
+                    controlState,
+                    DateTimeOffset.UtcNow - _lastMouseMovementTime
+                ) && _mouseBridge.TryNudge())
+                {
+                    _lastMouseMovementTime = DateTimeOffset.UtcNow;
+                }
+
                 bool shouldPublishPreview = TrackIRRuntimeLogic.ShouldPublishPreview(
-                    _controlState,
-                    _presentationState,
+                    controlState,
+                    presentationState,
                     nativeSnapshot.HasPreviewFrame != 0
                 );
 

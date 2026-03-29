@@ -24,6 +24,7 @@
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRPreviewBitmapLogic.cs" Link="Shared\TrackIRPreviewBitmapLogic.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRPreviewFrame.cs" Link="Shared\TrackIRPreviewFrame.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRControlState.cs" Link="Shared\TrackIRControlState.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRMouseRuntimeLogic.cs" Link="Shared\TrackIRMouseRuntimeLogic.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRPresentationState.cs" Link="Shared\TrackIRPresentationState.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRRuntimePhase.cs" Link="Shared\TrackIRRuntimePhase.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRRuntimeLogic.cs" Link="Shared\TrackIRRuntimeLogic.cs" />

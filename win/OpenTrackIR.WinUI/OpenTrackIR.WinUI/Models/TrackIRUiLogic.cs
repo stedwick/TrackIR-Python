@@ -40,7 +40,7 @@ namespace OpenTrackIR.WinUI.Models
 
             return state with
             {
-                MouseMovementSpeed = Math.Clamp(state.MouseMovementSpeed, 1.0, 5.0),
+                MouseMovementSpeed = Math.Clamp(state.MouseMovementSpeed, 0.1, 5.0),
                 MouseSmoothing = Math.Clamp(state.MouseSmoothing, 1, 10),
                 MouseDeadzone = Math.Clamp(state.MouseDeadzone, 0.0, 1.0),
                 MouseJumpThresholdPixels = Math.Max(state.MouseJumpThresholdPixels, 1),
@@ -239,6 +239,11 @@ namespace OpenTrackIR.WinUI.Models
         public static string ToggleStateColorHex(bool isEnabled)
         {
             return isEnabled ? "#31C48D" : "#7A8797";
+        }
+
+        public static bool ToggledMouseMovementState(bool isEnabled)
+        {
+            return !isEnabled;
         }
 
         public static double PreviewAxisScale(bool isFlipped)

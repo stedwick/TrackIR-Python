@@ -61,7 +61,7 @@ namespace OpenTrackIR.WinUI.ViewModels
 
         public string AdvancedDescription => "Advanced tuning for blob detection, smoothing, keep-awake, and timeout.";
 
-        public string HotkeyHelperText => "Click the field and press a shortcut. It is stored locally for the future backend, but it is not registered system-wide yet.";
+        public string HotkeyHelperText => "Click the field and press a shortcut. It stays active while OpenTrackIR is running, even when the window is hidden.";
 
         public string BlobDetectionDescription => "Filter tiny blobs and keep the previous-regularized centroid mode for steadier results.";
 
@@ -281,6 +281,11 @@ namespace OpenTrackIR.WinUI.ViewModels
         public void SetPresentationState(bool isWindowVisible, bool isAppActive)
         {
             _runtimeController.UpdatePresentationState(new TrackIRPresentationState(isWindowVisible, isAppActive));
+        }
+
+        public void ToggleMouseMovement()
+        {
+            IsMouseMovementEnabled = TrackIRUiLogic.ToggledMouseMovementState(IsMouseMovementEnabled);
         }
 
         public void Dispose()

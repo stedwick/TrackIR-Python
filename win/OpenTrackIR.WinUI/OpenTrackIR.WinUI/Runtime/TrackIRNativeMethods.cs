@@ -5,6 +5,7 @@ namespace OpenTrackIR.WinUI.Runtime
     internal static class TrackIRNativeMethods
     {
         private const string LibraryName = "opentrackir";
+        internal const int MaxSmoothingWindow = 31;
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         internal struct NativeTrackIRSessionSnapshot
@@ -27,6 +28,58 @@ namespace OpenTrackIR.WinUI.Runtime
             public byte HasErrorMessage;
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 160)]
             public string ErrorMessage;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct NativeTrackIRMousePoint
+        {
+            public double X;
+            public double Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct NativeTrackIRMouseTransform
+        {
+            public double ScaleX;
+            public double ScaleY;
+            public double RotationDegrees;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct NativeTrackIRMouseTrackerConfig
+        {
+            [MarshalAs(UnmanagedType.I1)]
+            public bool IsMovementEnabled;
+            public double Speed;
+            public double Smoothing;
+            public double Deadzone;
+            [MarshalAs(UnmanagedType.I1)]
+            public bool AvoidMouseJumps;
+            public double JumpThresholdPixels;
+            public NativeTrackIRMouseTransform Transform;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct NativeTrackIRMouseTrackerState
+        {
+            [MarshalAs(UnmanagedType.I1)]
+            public bool HasPreviousCentroid;
+            public NativeTrackIRMousePoint PreviousCentroid;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = MaxSmoothingWindow)]
+            public NativeTrackIRMousePoint[] DeltaHistory;
+            public nuint DeltaHistoryCount;
+            public nuint DeltaHistoryWriteIndex;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct NativeTrackIRMouseStep
+        {
+            [MarshalAs(UnmanagedType.I1)]
+            public bool HasCursorDelta;
+            public NativeTrackIRMousePoint CursorDelta;
+            [MarshalAs(UnmanagedType.I1)]
+            public bool HasNextCentroid;
+            public NativeTrackIRMousePoint NextCentroid;
         }
 
         [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "otir_trackir_session_create")]
@@ -66,6 +119,17 @@ namespace OpenTrackIR.WinUI.Runtime
             [Out] byte[] frame,
             nuint capacity,
             out ulong generation
+        );
+
+        [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "otir_trackir_mouse_tracker_reset")]
+        internal static extern void TrackIRMouseTrackerReset(ref NativeTrackIRMouseTrackerState state);
+
+        [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "otir_trackir_mouse_tracker_update")]
+        internal static extern NativeTrackIRMouseStep TrackIRMouseTrackerUpdate(
+            ref NativeTrackIRMouseTrackerState state,
+            [MarshalAs(UnmanagedType.I1)] bool hasCurrentCentroid,
+            NativeTrackIRMousePoint currentCentroid,
+            NativeTrackIRMouseTrackerConfig config
         );
     }
 }
