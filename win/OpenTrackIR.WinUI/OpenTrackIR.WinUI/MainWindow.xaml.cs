@@ -14,7 +14,11 @@ namespace OpenTrackIR.WinUI
     {
         private const int GlobalMouseToggleHotkeyId = 0x4F544952;
         private const uint WindowMessageHotkey = 0x0312;
+        private const uint WindowMessageActivate = 0x0006;
+        private const uint WindowMessageSize = 0x0005;
+        private const uint WindowMessageShowWindow = 0x0018;
         private const int WindowLongWindowProcedure = -4;
+        private const nint SizeMinimized = 1;
         private const uint HotkeyModifierAlt = 0x0001;
         private const uint HotkeyModifierControl = 0x0002;
         private const uint HotkeyModifierShift = 0x0004;
@@ -51,6 +55,7 @@ namespace OpenTrackIR.WinUI
             RootView.ViewModel.PropertyChanged += OnRootViewModelPropertyChanged;
             UpdateMouseToggleHotkeyRegistration();
             _trayService.Initialize(ShowWindowFromTray, ExitApplication);
+            UpdateRuntimePresentationState();
         }
 
         private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
@@ -63,12 +68,14 @@ namespace OpenTrackIR.WinUI
 
             args.Cancel = true;
             sender.Hide();
+            UpdateRuntimePresentationState();
         }
 
         private void ShowWindowFromTray()
         {
             AppWindow.Show();
             Activate();
+            UpdateRuntimePresentationState();
         }
 
         private void ExitApplication()
@@ -149,7 +156,35 @@ namespace OpenTrackIR.WinUI
                 return 0;
             }
 
+            if (message == WindowMessageActivate ||
+                message == WindowMessageShowWindow ||
+                (message == WindowMessageSize && wParam == SizeMinimized))
+            {
+                _dispatcherQueue.TryEnqueue(UpdateRuntimePresentationState);
+            }
+
             return CallWindowProc(_previousWindowProcedure, windowHandle, message, wParam, lParam);
+        }
+
+        private void UpdateRuntimePresentationState()
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            bool isWindowVisible = IsWindowVisible(_windowHandle);
+            bool isWindowMinimized = IsIconic(_windowHandle);
+            bool isWindowFocused = GetForegroundWindow() == _windowHandle;
+            TrackIRPresentationState presentationState = TrackIRRuntimeLogic.PresentationState(
+                isWindowVisible,
+                isWindowMinimized,
+                isWindowFocused
+            );
+            RootView.ViewModel.SetPresentationState(
+                presentationState.IsWindowVisible,
+                presentationState.IsAppActive
+            );
         }
 
         private void DisposeWindowResources()
@@ -212,5 +247,16 @@ namespace OpenTrackIR.WinUI
             nint wParam,
             nint lParam
         );
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsWindowVisible(nint windowHandle);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsIconic(nint windowHandle);
+
+        [DllImport("user32.dll")]
+        private static extern nint GetForegroundWindow();
     }
 }

@@ -15,6 +15,8 @@ namespace OpenTrackIR.WinUI.Runtime
         private bool _nativeRuntimeUnavailable;
         private readonly WindowsMouseBridge _mouseBridge = new();
         private DateTimeOffset _lastMouseMovementTime = DateTimeOffset.UtcNow;
+        private DateTimeOffset? _lastTelemetryPublishTime;
+        private TrackIRSnapshot? _lastPublishedTelemetrySnapshot;
         private byte[] _previewPixels = Array.Empty<byte>();
 
         public TrackIRSnapshot CurrentSnapshot { get; private set; }
@@ -46,6 +48,10 @@ namespace OpenTrackIR.WinUI.Runtime
             }
 
             ApplyPresentationState();
+            PublishSnapshot(CurrentSnapshot with
+            {
+                IsLowPowerMode = TrackIRRuntimeLogic.ShouldEnableLowPowerMode(_controlState, _presentationState),
+            });
             if (!TrackIRRuntimeLogic.ShouldPublishPreview(_controlState, _presentationState, hasPreviewFrame: true))
             {
                 PublishPreviewFrame(null);
@@ -102,6 +108,8 @@ namespace OpenTrackIR.WinUI.Runtime
                 _mouseBridge.Reset();
                 PublishPreviewFrame(null);
                 PublishSnapshot(TrackIRRuntimeLogic.IdleSnapshot(controlState, _presentationState));
+                _lastTelemetryPublishTime = null;
+                _lastPublishedTelemetrySnapshot = null;
                 return;
             }
 
@@ -255,6 +263,8 @@ namespace OpenTrackIR.WinUI.Runtime
             TryNativeCall(() => TrackIRNativeMethods.TrackIRSessionDestroy(_session));
             _session = 0;
             _lastPreviewGeneration = 0;
+            _lastTelemetryPublishTime = null;
+            _lastPublishedTelemetrySnapshot = null;
             lock (_previewSyncRoot)
             {
                 _previewPixels = Array.Empty<byte>();
@@ -279,8 +289,35 @@ namespace OpenTrackIR.WinUI.Runtime
                     presentationState = _presentationState;
                 }
 
-                TrackIRNativeMethods.TrackIRSessionCopySnapshot(_session, out TrackIRNativeMethods.NativeTrackIRSessionSnapshot nativeSnapshot);
-                PublishSnapshot(MapSnapshot(nativeSnapshot));
+                bool shouldReadSnapshot = TrackIRRuntimeLogic.ShouldReadSnapshot(
+                    controlState,
+                    presentationState
+                );
+                if (!shouldReadSnapshot)
+                {
+                    return;
+                }
+
+                TrackIRNativeMethods.TrackIRSessionCopySnapshot(
+                    _session,
+                    out TrackIRNativeMethods.NativeTrackIRSessionSnapshot nativeSnapshot
+                );
+                TrackIRSnapshot mappedSnapshot = MapSnapshot(nativeSnapshot);
+                TimeSpan? elapsedSinceLastTelemetryPublish = _lastTelemetryPublishTime.HasValue
+                    ? DateTimeOffset.UtcNow - _lastTelemetryPublishTime.Value
+                    : null;
+                if (TrackIRRuntimeLogic.ShouldPublishTelemetry(
+                    presentationState.IsAppActive,
+                    mappedSnapshot,
+                    _lastPublishedTelemetrySnapshot,
+                    elapsedSinceLastTelemetryPublish,
+                    TrackIRRuntimeLogic.VisibleTelemetryFramesPerSecond
+                ))
+                {
+                    PublishSnapshot(mappedSnapshot);
+                    _lastPublishedTelemetrySnapshot = mappedSnapshot;
+                    _lastTelemetryPublishTime = DateTimeOffset.UtcNow;
+                }
 
                 bool didMoveMouse = _mouseBridge.TryApplyTrackingDelta(
                     nativeSnapshot.HasCentroid != 0,
