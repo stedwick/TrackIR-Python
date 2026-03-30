@@ -13,6 +13,7 @@ cpp/build/
 *.xcuserstate
 DerivedData/
 *.profraw
+win/OpenTrackIR.WinUI/OpenTrackIR.WinUI/OpenTrackIR.WinUI_TemporaryKey.pfx
 
 # Visual Studio Windows
 
@@ -40,3 +41,4 @@ win/**/.vs/
 win/**/bin/
 win/**/obj/
 win/**/TestResults/
+win/OpenTrackIR.WinUI/OpenTrackIR.WinUI/AppPackages/

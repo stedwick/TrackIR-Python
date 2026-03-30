@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -9,15 +9,15 @@
   IgnorableNamespaces="uap rescap systemai">
 
   <Identity
-    Name="25778bed-c47c-4cac-826e-23802835d3f2"
-    Publisher="CN=phili"
-    Version="1.0.0.0" />
+    Name="18087PhilPDX.OpenTrackIR"
+    Publisher="CN=185BEB8C-D0D8-46C6-B4D6-0062E3C7275E"
+    Version="0.1.1.0" />
 
-  <mp:PhoneIdentity PhoneProductId="25778bed-c47c-4cac-826e-23802835d3f2" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+  <mp:PhoneIdentity PhoneProductId="863751cb-14c1-4249-a2b4-477531327029" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>OpenTrackIR.WinUI</DisplayName>
-    <PublisherDisplayName>phili</PublisherDisplayName>
+    <DisplayName>OpenTrackIR</DisplayName>
+    <PublisherDisplayName>Phil PDX</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
@@ -35,7 +35,7 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="OpenTrackIR.WinUI"
+        DisplayName="OpenTrackIR"
         Description="OpenTrackIR.WinUI"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
