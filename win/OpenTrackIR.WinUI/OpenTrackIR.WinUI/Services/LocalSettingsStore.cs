@@ -1,4 +1,3 @@
-using System.Text.Json;
 using OpenTrackIR.WinUI.Models;
 using Windows.Storage;
 
@@ -13,7 +12,7 @@ namespace OpenTrackIR.WinUI.Services
             object? rawValue = ApplicationData.Current.LocalSettings.Values[ControlStateKey];
             if (rawValue is string json)
             {
-                TrackIRControlState? state = JsonSerializer.Deserialize<TrackIRControlState>(json);
+                TrackIRControlState? state = TrackIRControlStateJson.Deserialize(json);
                 if (state is not null)
                 {
                     return TrackIRUiLogic.Normalize(state);
@@ -27,7 +26,7 @@ namespace OpenTrackIR.WinUI.Services
         {
             TrackIRControlState normalizedState = TrackIRUiLogic.Normalize(controlState);
             ApplicationData.Current.LocalSettings.Values[ControlStateKey] =
-                JsonSerializer.Serialize(normalizedState);
+                TrackIRControlStateJson.Serialize(normalizedState);
         }
     }
 }

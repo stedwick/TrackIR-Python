@@ -81,8 +81,7 @@ namespace OpenTrackIR.WinUI.Services
                 0x0010
             );
 
-            NotifyIcon(NimAdd, BuildIconData(TrayUiLogic.TooltipText(false, false)));
-            _isInitialized = true;
+            _isInitialized = TryNotifyIcon(NimAdd, BuildIconData(TrayUiLogic.TooltipText(false, false)));
         }
 
         public void UpdateState(bool isTrackIREnabled, bool isMouseMovementEnabled)
@@ -92,7 +91,7 @@ namespace OpenTrackIR.WinUI.Services
                 return;
             }
 
-            NotifyIcon(NimModify, BuildIconData(TrayUiLogic.TooltipText(isTrackIREnabled, isMouseMovementEnabled)));
+            TryNotifyIcon(NimModify, BuildIconData(TrayUiLogic.TooltipText(isTrackIREnabled, isMouseMovementEnabled)));
         }
 
         public void Dispose()
@@ -102,7 +101,7 @@ namespace OpenTrackIR.WinUI.Services
                 return;
             }
 
-            NotifyIcon(NimDelete, BuildIconData(string.Empty));
+            TryNotifyIcon(NimDelete, BuildIconData(string.Empty));
 
             if (_menuHandle != nint.Zero)
             {
@@ -335,12 +334,9 @@ namespace OpenTrackIR.WinUI.Services
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool DestroyIcon(nint hIcon);
 
-        private static void NotifyIcon(uint message, NotifyIconData data)
+        private static bool TryNotifyIcon(uint message, NotifyIconData data)
         {
-            if (!Shell_NotifyIcon(message, ref data))
-            {
-                throw new InvalidOperationException("Tray icon update failed.");
-            }
+            return Shell_NotifyIcon(message, ref data);
         }
     }
 }

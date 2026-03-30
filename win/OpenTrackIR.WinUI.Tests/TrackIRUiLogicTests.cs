@@ -66,6 +66,21 @@ namespace OpenTrackIR.WinUI.Tests
         }
 
         [Fact]
+        public void TrackIRControlStateJson_round_trips_without_reflection_serialization()
+        {
+            TrackIRControlState state = TrackIRUiLogic.CreateDefaultControlState() with
+            {
+                IsXKeysFastMouseEnabled = true,
+                MouseToggleHotkeyText = "Ctrl+F8",
+            };
+
+            string json = TrackIRControlStateJson.Serialize(state);
+            TrackIRControlState? deserialized = TrackIRControlStateJson.Deserialize(json);
+
+            Assert.Equal(state, deserialized);
+        }
+
+        [Fact]
         public void BuildMockSnapshot_switches_to_low_power_when_not_visible()
         {
             TrackIRControlState state = TrackIRUiLogic.CreateDefaultControlState();

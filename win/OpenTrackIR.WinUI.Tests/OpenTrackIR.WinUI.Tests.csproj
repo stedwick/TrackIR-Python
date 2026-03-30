@@ -22,6 +22,7 @@
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\HotkeyCaptureLogic.cs" Link="Shared\HotkeyCaptureLogic.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\MainWindowLogic.cs" Link="Shared\MainWindowLogic.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\DashboardLayoutMode.cs" Link="Shared\DashboardLayoutMode.cs" />
+    <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRControlStateJson.cs" Link="Shared\TrackIRControlStateJson.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRPreviewBitmapLogic.cs" Link="Shared\TrackIRPreviewBitmapLogic.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRPreviewFrame.cs" Link="Shared\TrackIRPreviewFrame.cs" />
     <Compile Include="..\OpenTrackIR.WinUI\OpenTrackIR.WinUI\Models\TrackIRControlState.cs" Link="Shared\TrackIRControlState.cs" />
