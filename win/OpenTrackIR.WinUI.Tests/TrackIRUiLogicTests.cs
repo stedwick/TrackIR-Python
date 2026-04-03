@@ -48,7 +48,9 @@ namespace OpenTrackIR.WinUI.Tests
                 IsVideoFlipVerticalEnabled: false,
                 VideoRotationDegrees: -90.0,
                 VideoFramesPerSecond: 999,
-                MouseToggleHotkeyText: "   "
+                MouseToggleHotkeyText: "   ",
+                MouseOverrideDelayMilliseconds: 500,
+                IsMouseButtonOverrideEnabled: true
             );
 
             TrackIRControlState normalized = TrackIRUiLogic.Normalize(state);

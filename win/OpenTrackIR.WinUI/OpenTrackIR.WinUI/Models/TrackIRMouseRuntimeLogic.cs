@@ -29,7 +29,7 @@ namespace OpenTrackIR.WinUI.Models
 
         public static double MouseBackendSpeed(double controlSpeed)
         {
-            return Math.Clamp(controlSpeed, 0.1, 5.0) * 10.0;
+            return Math.Clamp(controlSpeed, 0.1, 20.0) * 10.0;
         }
 
         public static bool ShouldFireKeepAwake(

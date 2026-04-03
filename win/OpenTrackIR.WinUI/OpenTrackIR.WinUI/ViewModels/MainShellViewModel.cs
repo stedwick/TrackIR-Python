@@ -224,6 +224,18 @@ namespace OpenTrackIR.WinUI.ViewModels
             set => UpdateControlState(_controlState with { MouseToggleHotkeyText = value });
         }
 
+        public double MouseOverrideDelayMilliseconds
+        {
+            get => _controlState.MouseOverrideDelayMilliseconds;
+            set => UpdateControlState(_controlState with { MouseOverrideDelayMilliseconds = (int)Math.Round(value) });
+        }
+
+        public bool IsMouseButtonOverrideEnabled
+        {
+            get => _controlState.IsMouseButtonOverrideEnabled;
+            set => UpdateControlState(_controlState with { IsMouseButtonOverrideEnabled = value });
+        }
+
         public string TrackIRStatusText => IsTrackIREnabled ? "TrackIR On" : "TrackIR Off";
 
         public string TrackIRStatusValue => TrackIRUiLogic.ToggleStateLabel(IsTrackIREnabled, "On", "Off");
@@ -263,6 +275,10 @@ namespace OpenTrackIR.WinUI.ViewModels
         public string MouseSmoothingLabel => TrackIRUiLogic.MouseSmoothingValueLabel(MouseSmoothing);
 
         public string MouseDeadzoneLabel => TrackIRUiLogic.MouseDeadzoneValueLabel(MouseDeadzone);
+
+        public string MouseOverrideDelayLabel => TrackIRUiLogic.MouseOverrideDelayValueLabel(_controlState.MouseOverrideDelayMilliseconds);
+
+        public string MouseOverrideDelayDescription => "Pause head tracking when you move the mouse. Tracking resumes after this delay.";
 
         public string VideoRotationLabel => TrackIRUiLogic.VideoRotationValueLabel(VideoRotationDegrees);
 
@@ -559,6 +575,16 @@ namespace OpenTrackIR.WinUI.ViewModels
                 _controlState.MouseToggleHotkeyText,
                 nameof(MouseToggleHotkeyText)
             );
+            NotifyIfChanged(
+                previousControlState.MouseOverrideDelayMilliseconds,
+                _controlState.MouseOverrideDelayMilliseconds,
+                nameof(MouseOverrideDelayMilliseconds)
+            );
+            NotifyIfChanged(
+                previousControlState.IsMouseButtonOverrideEnabled,
+                _controlState.IsMouseButtonOverrideEnabled,
+                nameof(IsMouseButtonOverrideEnabled)
+            );
 
             if (previousControlState.IsTrackIREnabled != _controlState.IsTrackIREnabled)
             {
@@ -630,6 +656,11 @@ namespace OpenTrackIR.WinUI.ViewModels
             {
                 OnPropertyChanged(nameof(TrackIRFramesPerSecondLabel));
                 OnPropertyChanged(nameof(FramesPerSecondSummary));
+            }
+
+            if (previousControlState.MouseOverrideDelayMilliseconds != _controlState.MouseOverrideDelayMilliseconds)
+            {
+                OnPropertyChanged(nameof(MouseOverrideDelayLabel));
             }
         }
 

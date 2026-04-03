@@ -6,6 +6,7 @@ using System.IO;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using OpenTrackIR.WinUI.Models;
+using OpenTrackIR.WinUI.Runtime;
 using WinRT.Interop;
 
 namespace OpenTrackIR.WinUI
@@ -55,6 +56,7 @@ namespace OpenTrackIR.WinUI
             AppWindow.Closing += OnAppWindowClosing;
             RootView.ViewModel.PropertyChanged += OnRootViewModelPropertyChanged;
             UpdateMouseToggleHotkeyRegistration();
+            UserMouseMonitor.Install();
             _trayService.Initialize(ShowWindowFromTray, ExitApplication);
             UpdateRuntimePresentationState();
         }
@@ -231,6 +233,7 @@ namespace OpenTrackIR.WinUI
             _isDisposed = true;
             RootView.ViewModel.PropertyChanged -= OnRootViewModelPropertyChanged;
             UnregisterMouseToggleHotkey();
+            UserMouseMonitor.Uninstall();
             SetWindowLongPtr(_windowHandle, WindowLongWindowProcedure, _previousWindowProcedure);
             RootView.Dispose();
             _trayService.Dispose();
