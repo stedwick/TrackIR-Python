@@ -1,12 +1,13 @@
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-using OpenTrackIR.WinUI.Services;
-using System.IO;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
 using OpenTrackIR.WinUI.Models;
 using OpenTrackIR.WinUI.Runtime;
+using OpenTrackIR.WinUI.Services;
+using OpenTrackIR.WinUI.Views;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
 using WinRT.Interop;
 
 namespace OpenTrackIR.WinUI
@@ -14,6 +15,7 @@ namespace OpenTrackIR.WinUI
     public sealed partial class MainWindow : Window
     {
         private const int GlobalMouseToggleHotkeyId = 0x4F544952;
+        private const int GlobalRecenterHotkeyId = 0x4F544953;
         private const uint WindowMessageHotkey = 0x0312;
         private const uint WindowMessageActivate = 0x0006;
         private const uint WindowMessageSize = 0x0005;
@@ -36,6 +38,13 @@ namespace OpenTrackIR.WinUI
         private bool _isExitRequested;
         private bool _isDisposed;
         private RegisteredHotkey? _registeredMouseToggleHotkey;
+        private RegisteredHotkey? _registeredRecenterHotkey;
+        private RecenterOverlayWindow? _recenterOverlay;
+        private DispatcherTimer? _recenterReleaseTimer;
+        private int _recenterScreenCenterX;
+        private int _recenterScreenCenterY;
+        private int _recenterVirtualKey;
+        private bool _wasMouseMovementEnabledBeforeRecenter;
 
         private delegate nint WindowProcedure(nint windowHandle, uint message, nint wParam, nint lParam);
 
@@ -56,6 +65,7 @@ namespace OpenTrackIR.WinUI
             AppWindow.Closing += OnAppWindowClosing;
             RootView.ViewModel.PropertyChanged += OnRootViewModelPropertyChanged;
             UpdateMouseToggleHotkeyRegistration();
+            UpdateRecenterHotkeyRegistration();
             UserMouseMonitor.Install();
             _trayService.Initialize(ShowWindowFromTray, ExitApplication);
             UpdateRuntimePresentationState();
@@ -126,6 +136,11 @@ namespace OpenTrackIR.WinUI
             {
                 UpdateMouseToggleHotkeyRegistration();
             }
+
+            if (e.PropertyName == nameof(RootView.ViewModel.RecenterHotkeyText))
+            {
+                UpdateRecenterHotkeyRegistration();
+            }
         }
 
         private void UpdateMouseToggleHotkeyRegistration()
@@ -187,6 +202,12 @@ namespace OpenTrackIR.WinUI
                 return 0;
             }
 
+            if (message == WindowMessageHotkey && wParam == GlobalRecenterHotkeyId)
+            {
+                BeginRecenterHold();
+                return 0;
+            }
+
             if (message == WindowMessageActivate ||
                 message == WindowMessageShowWindow ||
                 (message == WindowMessageSize && wParam == SizeMinimized))
@@ -222,6 +243,114 @@ namespace OpenTrackIR.WinUI
             );
         }
 
+        private void UpdateRecenterHotkeyRegistration()
+        {
+            RegisteredHotkey? previousHotkey = _registeredRecenterHotkey;
+            if (!HotkeyCaptureLogic.TryParseHotkeyText(
+                    RootView.ViewModel.RecenterHotkeyText,
+                    out RegisteredHotkey nextHotkey))
+            {
+                UnregisterRecenterHotkey();
+                _registeredRecenterHotkey = null;
+                return;
+            }
+
+            if (previousHotkey.HasValue && previousHotkey.Value.Equals(nextHotkey))
+            {
+                return;
+            }
+
+            UnregisterRecenterHotkey();
+            if (TryRegisterRecenterHotkey(nextHotkey))
+            {
+                _registeredRecenterHotkey = nextHotkey;
+                return;
+            }
+
+            if (previousHotkey.HasValue && TryRegisterRecenterHotkey(previousHotkey.Value))
+            {
+                _registeredRecenterHotkey = previousHotkey.Value;
+                return;
+            }
+
+            _registeredRecenterHotkey = null;
+        }
+
+        private bool TryRegisterRecenterHotkey(RegisteredHotkey hotkey)
+        {
+            return RegisterHotKey(
+                _windowHandle,
+                GlobalRecenterHotkeyId,
+                HotkeyModifierFlags(hotkey),
+                (uint)hotkey.VirtualKeyCode
+            );
+        }
+
+        private void UnregisterRecenterHotkey()
+        {
+            if (_registeredRecenterHotkey.HasValue)
+            {
+                UnregisterHotKey(_windowHandle, GlobalRecenterHotkeyId);
+            }
+        }
+
+        private void BeginRecenterHold()
+        {
+            if (_recenterOverlay is not null || !_registeredRecenterHotkey.HasValue)
+            {
+                return;
+            }
+
+            _recenterVirtualKey = _registeredRecenterHotkey.Value.VirtualKeyCode;
+            _recenterScreenCenterX = (GetSystemMetrics(0) / 2) + 36;
+            _recenterScreenCenterY = GetSystemMetrics(1) / 2;
+
+            _wasMouseMovementEnabledBeforeRecenter = RootView.ViewModel.IsMouseMovementEnabled;
+            RootView.ViewModel.IsMouseMovementEnabled = false;
+
+            SetCursorPos(_recenterScreenCenterX, _recenterScreenCenterY);
+
+            _recenterOverlay = new RecenterOverlayWindow();
+            _recenterOverlay.Activate();
+
+            _recenterReleaseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+            _recenterReleaseTimer.Tick += OnRecenterReleaseTimerTick;
+            _recenterReleaseTimer.Start();
+        }
+
+        private void OnRecenterReleaseTimerTick(object? sender, object e)
+        {
+            // Hold cursor at screen center while key is pressed
+            SetCursorPos(_recenterScreenCenterX, _recenterScreenCenterY);
+
+            if ((GetAsyncKeyState(_recenterVirtualKey) & 0x8000) != 0)
+            {
+                return;
+            }
+
+            CommitRecenter();
+        }
+
+        private void CommitRecenter()
+        {
+            _recenterReleaseTimer?.Stop();
+            _recenterReleaseTimer = null;
+
+            // Clear calibration so the next poll frame auto-calibrates with the live centroid
+            RootView.ViewModel.RecenterCursorCommand.Execute(null);
+
+            // Pin cursor to screen center so auto-calibration anchors here
+            SetCursorPos(_recenterScreenCenterX, _recenterScreenCenterY);
+
+            if (_wasMouseMovementEnabledBeforeRecenter)
+            {
+                RootView.ViewModel.IsMouseMovementEnabled = true;
+            }
+
+            _recenterOverlay?.Close();
+            _recenterOverlay = null;
+        }
+
         private void DisposeWindowResources()
         {
             if (_isDisposed)
@@ -233,6 +362,8 @@ namespace OpenTrackIR.WinUI
             _isDisposed = true;
             RootView.ViewModel.PropertyChanged -= OnRootViewModelPropertyChanged;
             UnregisterMouseToggleHotkey();
+            UnregisterRecenterHotkey();
+            CommitRecenter();
             UserMouseMonitor.Uninstall();
             SetWindowLongPtr(_windowHandle, WindowLongWindowProcedure, _previousWindowProcedure);
             RootView.Dispose();
@@ -295,5 +426,15 @@ namespace OpenTrackIR.WinUI
 
         [DllImport("user32.dll")]
         private static extern nint GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int virtualKeyCode);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetCursorPos(int x, int y);
+
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int index);
     }
 }

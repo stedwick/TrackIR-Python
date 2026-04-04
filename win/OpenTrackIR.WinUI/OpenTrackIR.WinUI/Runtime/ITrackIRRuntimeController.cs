@@ -16,6 +16,8 @@ namespace OpenTrackIR.WinUI.Runtime
 
         void UpdatePresentationState(TrackIRPresentationState presentationState);
 
+        void RecenterCursor();
+
         void Refresh();
 
         void Stop();

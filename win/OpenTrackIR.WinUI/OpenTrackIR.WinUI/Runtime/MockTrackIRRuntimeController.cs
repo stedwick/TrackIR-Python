@@ -34,6 +34,10 @@ namespace OpenTrackIR.WinUI.Runtime
             PublishNextSnapshot();
         }
 
+        public void RecenterCursor()
+        {
+        }
+
         public void Refresh()
         {
             PublishNextSnapshot();

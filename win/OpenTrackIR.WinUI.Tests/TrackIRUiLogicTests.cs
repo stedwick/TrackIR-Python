@@ -49,6 +49,7 @@ namespace OpenTrackIR.WinUI.Tests
                 VideoRotationDegrees: -90.0,
                 VideoFramesPerSecond: 999,
                 MouseToggleHotkeyText: "   ",
+                RecenterHotkeyText: "  ",
                 MouseOverrideDelayMilliseconds: 500,
                 IsMouseButtonOverrideEnabled: true
             );
@@ -65,6 +66,8 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.Equal(270.0, normalized.VideoRotationDegrees);
             Assert.Equal(125.0, normalized.VideoFramesPerSecond);
             Assert.Equal("Shift+F7", normalized.MouseToggleHotkeyText);
+            Assert.Equal("Ctrl+Shift+8", normalized.RecenterHotkeyText);
+            Assert.Equal(500, normalized.MouseOverrideDelayMilliseconds);
         }
 
         [Fact]
@@ -381,6 +384,40 @@ namespace OpenTrackIR.WinUI.Tests
             Assert.Equal(0, dispatch.DeltaY);
             Assert.Equal(0.75, dispatch.RemainingX, 10);
             Assert.Equal(-0.4, dispatch.RemainingY, 10);
+
+            AbsoluteCenterCalibration calibration = new(
+                CentroidX: 320.0,
+                CentroidY: 240.0,
+                CursorAnchorX: 960,
+                CursorAnchorY: 540
+            );
+
+            // At center: cursor stays at anchor
+            AbsoluteCursorTarget absoluteCenter =
+                TrackIRMouseRuntimeLogic.AbsoluteCursorTargetForCentroid(
+                    320.0, 240.0, calibration, 2.0,
+                    scaleX: 1.0, scaleY: 1.0, rotationDegrees: 0.0
+                );
+            Assert.Equal(960, absoluteCenter.X);
+            Assert.Equal(540, absoluteCenter.Y);
+
+            // Blob moves right (+X) in camera = head moved left = cursor moves left (-X)
+            AbsoluteCursorTarget absoluteOffset =
+                TrackIRMouseRuntimeLogic.AbsoluteCursorTargetForCentroid(
+                    330.0, 245.0, calibration, 2.0,
+                    scaleX: 1.0, scaleY: 1.0, rotationDegrees: 0.0
+                );
+            Assert.Equal(960 - 200, absoluteOffset.X);
+            Assert.Equal(540 + 100, absoluteOffset.Y);
+
+            // Horizontal flip inverts the mirror compensation
+            AbsoluteCursorTarget absoluteFlippedH =
+                TrackIRMouseRuntimeLogic.AbsoluteCursorTargetForCentroid(
+                    330.0, 245.0, calibration, 2.0,
+                    scaleX: -1.0, scaleY: 1.0, rotationDegrees: 0.0
+                );
+            Assert.Equal(960 + 200, absoluteFlippedH.X);
+            Assert.Equal(540 + 100, absoluteFlippedH.Y);
         }
 
         [Fact]

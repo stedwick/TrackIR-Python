@@ -30,6 +30,7 @@ namespace OpenTrackIR.WinUI.Models
                 VideoRotationDegrees: 0.0,
                 VideoFramesPerSecond: 60.0,
                 MouseToggleHotkeyText: "Shift+F7",
+                RecenterHotkeyText: "Ctrl+Shift+8",
                 MouseOverrideDelayMilliseconds: 500,
                 IsMouseButtonOverrideEnabled: true
             );
@@ -40,6 +41,10 @@ namespace OpenTrackIR.WinUI.Models
             string hotkeyText = string.IsNullOrWhiteSpace(state.MouseToggleHotkeyText)
                 ? "Shift+F7"
                 : state.MouseToggleHotkeyText.Trim();
+
+            string recenterHotkeyText = string.IsNullOrWhiteSpace(state.RecenterHotkeyText)
+                ? "Ctrl+Shift+8"
+                : state.RecenterHotkeyText.Trim();
 
             return state with
             {
@@ -53,6 +58,7 @@ namespace OpenTrackIR.WinUI.Models
                 VideoRotationDegrees = NormalizeRotationDegrees(state.VideoRotationDegrees),
                 VideoFramesPerSecond = Math.Clamp(state.VideoFramesPerSecond, 0.0, 125.0),
                 MouseToggleHotkeyText = hotkeyText,
+                RecenterHotkeyText = recenterHotkeyText,
                 MouseOverrideDelayMilliseconds = Math.Clamp(state.MouseOverrideDelayMilliseconds, 0, 5000)
             };
         }

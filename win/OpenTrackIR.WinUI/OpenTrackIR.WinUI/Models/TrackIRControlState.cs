@@ -20,6 +20,7 @@ namespace OpenTrackIR.WinUI.Models
         double VideoRotationDegrees,
         double VideoFramesPerSecond,
         string MouseToggleHotkeyText,
+        string RecenterHotkeyText,
         int MouseOverrideDelayMilliseconds,
         bool IsMouseButtonOverrideEnabled
     );

@@ -32,21 +32,39 @@ namespace OpenTrackIR.WinUI.Views
 
         private void MouseToggleHotkeyCaptureBox_KeyDown(object sender, KeyRoutedEventArgs e)
         {
+            string? hotkeyText = CaptureHotkeyFromKeyDown(e);
+            if (hotkeyText is not null)
+            {
+                ViewModel.MouseToggleHotkeyText = hotkeyText;
+            }
+        }
+
+        private void RecenterHotkeyCaptureBox_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            string? hotkeyText = CaptureHotkeyFromKeyDown(e);
+            if (hotkeyText is not null)
+            {
+                ViewModel.RecenterHotkeyText = hotkeyText;
+            }
+        }
+
+        private static string? CaptureHotkeyFromKeyDown(KeyRoutedEventArgs e)
+        {
             if (e.Key == VirtualKey.Tab)
             {
-                return;
+                return null;
             }
 
             if (e.Key == VirtualKey.Escape)
             {
                 e.Handled = true;
-                return;
+                return null;
             }
 
             if (HotkeyCaptureLogic.IsModifierKey((int)e.Key))
             {
                 e.Handled = true;
-                return;
+                return null;
             }
 
             string? keyToken = HotkeyCaptureLogic.KeyTokenForVirtualKey((int)e.Key);
@@ -58,14 +76,8 @@ namespace OpenTrackIR.WinUI.Views
                 keyToken
             );
 
-            if (hotkeyText is null)
-            {
-                e.Handled = true;
-                return;
-            }
-
-            ViewModel.MouseToggleHotkeyText = hotkeyText;
             e.Handled = true;
+            return hotkeyText;
         }
 
         private static bool IsKeyDown(VirtualKey key)

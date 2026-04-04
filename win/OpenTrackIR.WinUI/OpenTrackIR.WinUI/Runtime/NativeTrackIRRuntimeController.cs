@@ -69,6 +69,16 @@ namespace OpenTrackIR.WinUI.Runtime
             }
         }
 
+        public void RecenterCursor()
+        {
+            if (_isStopped)
+            {
+                return;
+            }
+
+            _mouseBridge.ClearAbsoluteCalibration();
+        }
+
         public void Refresh()
         {
             if (_isStopped)

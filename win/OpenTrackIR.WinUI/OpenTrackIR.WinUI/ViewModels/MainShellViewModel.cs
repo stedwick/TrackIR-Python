@@ -64,6 +64,7 @@ namespace OpenTrackIR.WinUI.ViewModels
             _previewImageSource = null;
 
             RefreshCommand = new RelayCommand(Refresh);
+            RecenterCursorCommand = new RelayCommand(RecenterCursor);
             _runtimeController.SnapshotChanged += OnRuntimeSnapshotChanged;
             _runtimeController.PreviewFrameChanged += OnRuntimePreviewFrameChanged;
             ApplyControlState(_controlState, persist: false);
@@ -71,6 +72,8 @@ namespace OpenTrackIR.WinUI.ViewModels
         }
 
         public ICommand RefreshCommand { get; }
+
+        public ICommand RecenterCursorCommand { get; }
 
         public string Title => "OpenTrackIR";
 
@@ -81,6 +84,8 @@ namespace OpenTrackIR.WinUI.ViewModels
         public string AdvancedDescription => "Advanced tuning for blob detection, smoothing, keep-awake, and timeout.";
 
         public string MouseOutputModeDescription => "Use absolute cursor positioning to bypass Windows mouse acceleration. This takes more direct control of the pointer.";
+
+        public string RecenterCursorDescription => "Set the current head position as the center point for absolute cursor positioning. The cursor will return to this position when you look here again.";
 
         public string HotkeyHelperText => "Click the field and press a shortcut. It stays active while OpenTrackIR is running, even when the window is hidden.";
 
@@ -222,6 +227,12 @@ namespace OpenTrackIR.WinUI.ViewModels
         {
             get => _controlState.MouseToggleHotkeyText;
             set => UpdateControlState(_controlState with { MouseToggleHotkeyText = value });
+        }
+
+        public string RecenterHotkeyText
+        {
+            get => _controlState.RecenterHotkeyText;
+            set => UpdateControlState(_controlState with { RecenterHotkeyText = value });
         }
 
         public double MouseOverrideDelayMilliseconds
@@ -373,6 +384,11 @@ namespace OpenTrackIR.WinUI.ViewModels
         {
             ApplyControlState(_settingsStore.Load(), persist: false);
             _runtimeController.Refresh();
+        }
+
+        private void RecenterCursor()
+        {
+            _runtimeController.RecenterCursor();
         }
 
         private void UpdateControlState(TrackIRControlState controlState)
@@ -574,6 +590,11 @@ namespace OpenTrackIR.WinUI.ViewModels
                 previousControlState.MouseToggleHotkeyText,
                 _controlState.MouseToggleHotkeyText,
                 nameof(MouseToggleHotkeyText)
+            );
+            NotifyIfChanged(
+                previousControlState.RecenterHotkeyText,
+                _controlState.RecenterHotkeyText,
+                nameof(RecenterHotkeyText)
             );
             NotifyIfChanged(
                 previousControlState.MouseOverrideDelayMilliseconds,

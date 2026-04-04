@@ -2,6 +2,12 @@ namespace OpenTrackIR.WinUI.Models
 {
     public readonly record struct KeepAwakeNudge(int DeltaX, int DeltaY);
     public readonly record struct AbsoluteCursorTarget(int X, int Y);
+    public readonly record struct AbsoluteCenterCalibration(
+        double CentroidX,
+        double CentroidY,
+        int CursorAnchorX,
+        int CursorAnchorY
+    );
 
     public readonly record struct RelativeMouseDispatch(
         int DeltaX,
@@ -77,6 +83,38 @@ namespace OpenTrackIR.WinUI.Models
             return new AbsoluteCursorTarget(
                 X: currentCursorX + deltaX,
                 Y: currentCursorY + deltaY
+            );
+        }
+
+        public static AbsoluteCursorTarget AbsoluteCursorTargetForCentroid(
+            double centroidX,
+            double centroidY,
+            AbsoluteCenterCalibration calibration,
+            double effectiveMouseSpeed,
+            double scaleX,
+            double scaleY,
+            double rotationDegrees
+        )
+        {
+            double speed = Math.Clamp(effectiveMouseSpeed, 0.1, 20.0) * 10.0;
+            // Negate X to compensate for camera mirror (head left = blob right)
+            double rawOffsetX = -(centroidX - calibration.CentroidX);
+            double rawOffsetY = centroidY - calibration.CentroidY;
+
+            // Apply flip transforms
+            rawOffsetX *= scaleX;
+            rawOffsetY *= scaleY;
+
+            // Apply rotation
+            double radians = rotationDegrees * Math.PI / 180.0;
+            double cos = Math.Cos(radians);
+            double sin = Math.Sin(radians);
+            double rotatedX = rawOffsetX * cos - rawOffsetY * sin;
+            double rotatedY = rawOffsetX * sin + rawOffsetY * cos;
+
+            return new AbsoluteCursorTarget(
+                X: calibration.CursorAnchorX + (int)Math.Round(rotatedX * speed),
+                Y: calibration.CursorAnchorY + (int)Math.Round(rotatedY * speed)
             );
         }
     }
