@@ -19,6 +19,9 @@ namespace OpenTrackIR.WinUI.Models
         bool IsVideoFlipVerticalEnabled,
         double VideoRotationDegrees,
         double VideoFramesPerSecond,
-        string MouseToggleHotkeyText
+        string MouseToggleHotkeyText,
+        string RecenterHotkeyText,
+        int MouseOverrideDelayMilliseconds,
+        bool IsMouseButtonOverrideEnabled
     );
 }

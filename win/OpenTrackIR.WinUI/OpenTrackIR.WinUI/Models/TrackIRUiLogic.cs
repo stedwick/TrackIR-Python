@@ -29,7 +29,10 @@ namespace OpenTrackIR.WinUI.Models
                 IsVideoFlipVerticalEnabled: false,
                 VideoRotationDegrees: 0.0,
                 VideoFramesPerSecond: 60.0,
-                MouseToggleHotkeyText: "Shift+F7"
+                MouseToggleHotkeyText: "Shift+F7",
+                RecenterHotkeyText: "Ctrl+Shift+8",
+                MouseOverrideDelayMilliseconds: 500,
+                IsMouseButtonOverrideEnabled: true
             );
         }
 
@@ -39,9 +42,13 @@ namespace OpenTrackIR.WinUI.Models
                 ? "Shift+F7"
                 : state.MouseToggleHotkeyText.Trim();
 
+            string recenterHotkeyText = string.IsNullOrWhiteSpace(state.RecenterHotkeyText)
+                ? "Ctrl+Shift+8"
+                : state.RecenterHotkeyText.Trim();
+
             return state with
             {
-                MouseMovementSpeed = Math.Clamp(state.MouseMovementSpeed, 0.1, 5.0),
+                MouseMovementSpeed = Math.Clamp(state.MouseMovementSpeed, 0.1, 20.0),
                 MouseSmoothing = Math.Clamp(state.MouseSmoothing, 1, 10),
                 MouseDeadzone = Math.Clamp(state.MouseDeadzone, 0.0, 1.0),
                 MouseJumpThresholdPixels = Math.Max(state.MouseJumpThresholdPixels, 1),
@@ -50,7 +57,9 @@ namespace OpenTrackIR.WinUI.Models
                 TimeoutSeconds = Math.Max(state.TimeoutSeconds, 1),
                 VideoRotationDegrees = NormalizeRotationDegrees(state.VideoRotationDegrees),
                 VideoFramesPerSecond = Math.Clamp(state.VideoFramesPerSecond, 0.0, 125.0),
-                MouseToggleHotkeyText = hotkeyText
+                MouseToggleHotkeyText = hotkeyText,
+                RecenterHotkeyText = recenterHotkeyText,
+                MouseOverrideDelayMilliseconds = Math.Clamp(state.MouseOverrideDelayMilliseconds, 0, 5000)
             };
         }
 
@@ -181,6 +190,11 @@ namespace OpenTrackIR.WinUI.Models
         public static string MouseDeadzoneValueLabel(double deadzone)
         {
             return deadzone.ToString("0.00", CultureInfo.InvariantCulture);
+        }
+
+        public static string MouseOverrideDelayValueLabel(int milliseconds)
+        {
+            return milliseconds <= 0 ? "Disabled" : $"{milliseconds} ms";
         }
 
         public static string VideoRotationValueLabel(double rotationDegrees)

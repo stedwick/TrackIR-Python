@@ -20,6 +20,7 @@ namespace OpenTrackIR.WinUI.Runtime
         private bool _nativeRuntimeUnavailable;
         private readonly WindowsMouseBridge _mouseBridge = new();
         private readonly XKeysFootPedalMonitor _xKeysFootPedalMonitor = new();
+        private bool _wasUserMouseOverrideActive;
         private DateTimeOffset _lastMouseMovementTime = DateTimeOffset.UtcNow;
         private DateTimeOffset? _lastTelemetryPublishTime;
         private TrackIRSnapshot? _lastPublishedTelemetrySnapshot;
@@ -66,6 +67,16 @@ namespace OpenTrackIR.WinUI.Runtime
             {
                 PublishPreviewFrame(null);
             }
+        }
+
+        public void RecenterCursor()
+        {
+            if (_isStopped)
+            {
+                return;
+            }
+
+            _mouseBridge.ClearAbsoluteCalibration();
         }
 
         public void Refresh()
@@ -418,13 +429,31 @@ namespace OpenTrackIR.WinUI.Runtime
                         _lastTelemetryPublishTime = now;
                     }
 
-                    didMoveMouse = _mouseBridge.TryApplyTrackingDelta(
-                        nativeSnapshot.HasCentroid != 0,
-                        nativeSnapshot.CentroidX,
-                        nativeSnapshot.CentroidY,
-                        controlState,
-                        effectiveMouseSpeed
+                    bool isUserMouseOverrideActive = UserMouseMonitor.IsUserMouseOverrideActive(
+                        controlState.MouseOverrideDelayMilliseconds,
+                        controlState.IsMouseButtonOverrideEnabled
                     );
+
+                    if (isUserMouseOverrideActive)
+                    {
+                        _wasUserMouseOverrideActive = true;
+                    }
+                    else
+                    {
+                        if (_wasUserMouseOverrideActive)
+                        {
+                            _wasUserMouseOverrideActive = false;
+                            _mouseBridge.Reset();
+                        }
+
+                        didMoveMouse = _mouseBridge.TryApplyTrackingDelta(
+                            nativeSnapshot.HasCentroid != 0,
+                            nativeSnapshot.CentroidX,
+                            nativeSnapshot.CentroidY,
+                            controlState,
+                            effectiveMouseSpeed
+                        );
+                    }
 
                     bool shouldPublishPreview = TrackIRRuntimeLogic.ShouldPublishPreview(
                         controlState,

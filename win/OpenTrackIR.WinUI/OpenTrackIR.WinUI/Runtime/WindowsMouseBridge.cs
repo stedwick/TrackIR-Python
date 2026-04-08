@@ -13,6 +13,7 @@ namespace OpenTrackIR.WinUI.Runtime
         private readonly Input[] _sendInputBuffer = new Input[1];
         private double _pendingDeltaX;
         private double _pendingDeltaY;
+        private AbsoluteCenterCalibration? _absoluteCalibration;
 
         public WindowsMouseBridge()
         {
@@ -25,6 +26,22 @@ namespace OpenTrackIR.WinUI.Runtime
             TrackIRNativeMethods.TrackIRMouseTrackerReset(ref _trackerState);
             _pendingDeltaX = 0.0;
             _pendingDeltaY = 0.0;
+            _absoluteCalibration = null;
+        }
+
+        public void RecenterAbsolute(double centroidX, double centroidY)
+        {
+            if (!GetCursorPos(out Point currentCursorPosition))
+            {
+                return;
+            }
+
+            _absoluteCalibration = new AbsoluteCenterCalibration(
+                CentroidX: centroidX,
+                CentroidY: centroidY,
+                CursorAnchorX: currentCursorPosition.X,
+                CursorAnchorY: currentCursorPosition.Y
+            );
         }
 
         public bool TryApplyTrackingDelta(
@@ -35,6 +52,16 @@ namespace OpenTrackIR.WinUI.Runtime
             double effectiveMouseSpeed
         )
         {
+            if (controlState.IsWindowsAbsoluteMousePositioningEnabled && controlState.IsMouseMovementEnabled && hasCentroid)
+            {
+                return TryApplyAbsolutePosition(
+                    centroidX,
+                    centroidY,
+                    effectiveMouseSpeed,
+                    controlState
+                );
+            }
+
             TrackIRNativeMethods.NativeTrackIRMouseStep mouseStep =
                 TrackIRNativeMethods.TrackIRMouseTrackerUpdate(
                     ref _trackerState,
@@ -66,7 +93,32 @@ namespace OpenTrackIR.WinUI.Runtime
                 return false;
             }
 
-            return TryMoveCursor(dispatch.DeltaX, dispatch.DeltaY, controlState);
+            return SendRelativeMouseInput(dispatch.DeltaX, dispatch.DeltaY);
+        }
+
+        private bool TryApplyAbsolutePosition(
+            double centroidX,
+            double centroidY,
+            double effectiveMouseSpeed,
+            TrackIRControlState controlState
+        )
+        {
+            if (_absoluteCalibration is not { } calibration)
+            {
+                RecenterAbsolute(centroidX, centroidY);
+                calibration = _absoluteCalibration!.Value;
+            }
+
+            AbsoluteCursorTarget target = TrackIRMouseRuntimeLogic.AbsoluteCursorTargetForCentroid(
+                centroidX,
+                centroidY,
+                calibration,
+                effectiveMouseSpeed,
+                TrackIRUiLogic.PreviewAxisScale(controlState.IsVideoFlipHorizontalEnabled),
+                TrackIRUiLogic.PreviewAxisScale(controlState.IsVideoFlipVerticalEnabled),
+                TrackIRUiLogic.NormalizeRotationDegrees(controlState.VideoRotationDegrees)
+            );
+            return SetCursorPos(target.X, target.Y);
         }
 
         public bool TryNudge(TrackIRControlState controlState)
@@ -96,6 +148,13 @@ namespace OpenTrackIR.WinUI.Runtime
             }
 
             return SendRelativeMouseInput(deltaX, deltaY);
+        }
+
+        public bool HasAbsoluteCalibration => _absoluteCalibration is not null;
+
+        public void ClearAbsoluteCalibration()
+        {
+            _absoluteCalibration = null;
         }
 
         private static TrackIRNativeMethods.NativeTrackIRMouseTrackerState CreateTrackerState()
