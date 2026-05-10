@@ -32,6 +32,9 @@ win/OpenTrackIR.WinUI/OpenTrackIR.WinUI/OpenTrackIR.WinUI_TemporaryKey.pfx
 _ReSharper*/
 *.DotSettings.user
 
+# Claude Code per-user state
+.claude/
+
 # NuGet / package artifacts if generated locally
 packages/
 
